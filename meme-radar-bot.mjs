@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -155,21 +155,59 @@ function calcSell(tokens, price, liq) {
 }
 
 async function inspectSolanaHolders(tokenAddress) {
+  const rpc = async (method, params, id) => {
+    const response = await fetch('https://api.mainnet-beta.solana.com', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
+    });
+    if (!response.ok) throw new Error(`Solana RPC HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || 'Solana RPC error');
+    return data.result;
+  };
   try {
-    const rpc = async (method, id) => {
-      const response = await fetch('https://api.mainnet-beta.solana.com', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id, method, params: [tokenAddress, { commitment: 'confirmed' }] })
-      });
-      if (!response.ok) throw new Error(`Solana RPC HTTP ${response.status}`);
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message || 'Solana RPC error');
-      return data.result?.value;
+    const [largest, supply, mintInfo] = await Promise.all([
+      rpc('getTokenLargestAccounts', [tokenAddress, { commitment: 'confirmed' }], 1),
+      rpc('getTokenSupply', [tokenAddress, { commitment: 'confirmed' }], 2),
+      rpc('getAccountInfo', [tokenAddress, { encoding: 'jsonParsed', commitment: 'confirmed' }], 3)
+    ]);
+    const accounts = largest?.value || [];
+    const accountAddresses = accounts.map(account => account.address).filter(Boolean);
+    const ownerResponse = accountAddresses.length
+      ? await rpc('getMultipleAccounts', [accountAddresses, { encoding: 'jsonParsed', commitment: 'confirmed' }], 4)
+      : { value: [] };
+    const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);
+    const info = mintInfo?.value?.data?.parsed?.info || {};
+    const mintAuthority = info.mintAuthority || null;
+    const freezeAuthority = info.freezeAuthority || null;
+    let authoritySignatureCount = null;
+    if (mintAuthority) {
+      try {
+        const signatures = await rpc('getSignaturesForAddress', [mintAuthority, { limit: 1000, commitment: 'confirmed' }], 5);
+        authoritySignatureCount = Array.isArray(signatures) ? signatures.length : null;
+      } catch {}
+    }
+    const holderDistribution = {
+      ...calculateTopHolderConcentration(accounts, supply?.value?.amount),
+      decimals: supply?.value?.decimals ?? null,
+      source: 'Solana public RPC'
     };
-    const [accounts, supply] = await Promise.all([rpc('getTokenLargestAccounts', 1), rpc('getTokenSupply', 2)]);
-    return { ...calculateTopHolderConcentration(accounts || [], supply?.amount), decimals: supply?.decimals ?? null, source: 'Solana public RPC' };
+    let priorRows = [];
+    try {
+      const raw = await fs.readFile(CONFIG.RESEARCH_FILE, 'utf8');
+      priorRows = raw.split(/\r?\n/).filter(Boolean).slice(-5000).flatMap(line => {
+        try { return [JSON.parse(line)]; } catch { return []; }
+      });
+    } catch {}
+    const creatorSignals = analyzeCreatorSignals({
+      mintAuthority, freezeAuthority, authoritySignatureCount, holderOwners, priorAuthorityRows: priorRows
+    });
+    return { holderDistribution, creatorSignals };
   } catch (error) {
-    return { known: false, reason: error.message, source: 'Solana public RPC' };
+    return {
+      holderDistribution: { known: false, reason: error.message, source: 'Solana public RPC' },
+      creatorSignals: { known: false, warnings: [], reason: error.message }
+    };
   }
 }
 
@@ -182,7 +220,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     security: { pass: security?.pass === true, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
-    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders, decision
+    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
 }
@@ -369,8 +407,11 @@ async function pollCycle() {
       const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
       const sec = await auditSecurity(pairObj);
       const intelligence = scoreCandidate(p, sec);
-      const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address) : { known: false, reason: 'holder RPC not implemented for this chain' };
-      if (holders.known && holders.top10Pct >= 70) intelligence.reasons.push(`top 10 token accounts hold ${holders.top10Pct.toFixed(2)}% (manual review; LP/custody not excluded)`);
+      const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
+      const holderData = holders.holderDistribution;
+      const creatorData = holders.creatorSignals;
+      if (holderData?.known && holderData.top10Pct >= 70) intelligence.reasons.push(`top 10 token accounts hold ${holderData.top10Pct.toFixed(2)}% (manual review; LP/custody not excluded)`);
+      for (const warning of creatorData?.warnings || []) intelligence.reasons.push(warning);
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
