@@ -3,7 +3,7 @@ import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
-  calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, analyzeCreatorSignals
+  calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
 } from './meme-radar-v5-intelligence.mjs';
 
 const healthyPair = {
@@ -100,4 +100,24 @@ test('creator signal analysis does not invent missing authority data', () => {
   assert.equal(result.freezeAuthority, null);
   assert.equal(result.authoritySignatureCount, null);
   assert.equal(result.reusedMintAuthorityTokens, 0);
+});
+
+
+test('cross-token clusters group repeated RPC-observed authorities and owners', () => {
+  const rows = [
+    { token: 'token-A', creatorSignals: { mintAuthority: 'WalletAuthority111111111111111111111', holderOwnerAddresses: ['SharedHolder111111111111111111111'] } },
+    { token: 'token-B', creatorSignals: { mintAuthority: 'WalletAuthority111111111111111111111', holderOwnerAddresses: ['SharedHolder111111111111111111111'] } },
+    { token: 'token-C', creatorSignals: { mintAuthority: 'DifferentWallet111111111111111111111' } }
+  ];
+  const clusters = summarizeCrossTokenClusters(rows);
+  assert.equal(clusters.length, 2);
+  assert.ok(clusters.some(x => x.signalType === 'mint-authority' && x.tokenCount === 2));
+  assert.ok(clusters.some(x => x.signalType === 'holder-owner' && x.tokenCount === 2));
+});
+
+test('cross-token clustering ignores one-token and malformed observations', () => {
+  assert.deepEqual(summarizeCrossTokenClusters([
+    { token: 'only-one', creatorSignals: { mintAuthority: 'WalletAuthority111111111111111111111' } },
+    { token: null, creatorSignals: { mintAuthority: 'AnotherWallet111111111111111111111' } }
+  ]), []);
 });
