@@ -114,15 +114,25 @@ async function fetchJsonStrict(url, timeoutMs = 11000) {
 }
 
 async function sendTelegram(text) {
-  if (!CONFIG.TELEGRAM_BOT_TOKEN || !CONFIG.TELEGRAM_CHAT_ID) return;
+  if (!CONFIG.TELEGRAM_BOT_TOKEN || !CONFIG.TELEGRAM_CHAT_ID) {
+    console.error(`[${nowIso()}] Telegram not configured: missing bot token or chat ID.`);
+    return false;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: CONFIG.TELEGRAM_CHAT_ID, text, disable_web_page_preview: true })
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.description || `Telegram HTTP ${res.status}`);
+    }
+    console.log(`[${nowIso()}] Telegram message delivered (message_id: ${data.result?.message_id ?? 'accepted'}).`);
+    return true;
   } catch (e) {
-    console.error(`[${nowIso()}] Telegram error: ${e.message}`);
+    console.error(`[${nowIso()}] Telegram delivery failed: ${e.message}`);
+    return false;
   }
 }
 
@@ -329,6 +339,10 @@ async function pollCycle() {
 // GitHub Actions mode: one scan per scheduled job; portfolio state is committed by workflow.
 async function main() {
   await loadState();
+  if (process.env.TELEGRAM_TEST === 'true') {
+    const delivered = await sendTelegram('MEME.RADAR: Telegram connection test. Your bot can send notifications successfully. Paper trading only.');
+    if (!delivered) process.exitCode = 1;
+  }
   try {
     await pollCycle();
     failures = 0;
