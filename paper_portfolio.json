@@ -1,8 +1,29 @@
 {
   "autoTradeEnabled": true,
   "startingBankroll": 1000,
-  "cashUsd": 900,
+  "cashUsd": 800,
   "openPositions": [
+    {
+      "id": "pos_1795114577849",
+      "pairId": "solana:hsprhxbrgivaqdrf3tnknuzztax9juspgmfdakk6pump",
+      "chainId": "solana",
+      "pairAddress": "5E3dXLXGwmTDCokA51WYYaKttjFZBwqCoyUHBUi5gt2m",
+      "address": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump",
+      "symbol": "GATO",
+      "name": "GTA6CAT",
+      "entryTime": 1795114577849,
+      "entrySpotPrice": 0.001868,
+      "buyPrice": 0.0018686255332352709,
+      "tokens": 53354.724222023775,
+      "costUsd": 100,
+      "buyFeeAndImpactUsd": 0.33338632952702385,
+      "entryLiquidityUsd": 149312.61,
+      "lastPrice": 0.001868,
+      "lastLiquidityUsd": 149312.61,
+      "peakPrice": 0.001868,
+      "trailArmed": false,
+      "securitySummary": "RugCheck PASS (Score 1)"
+    },
     {
       "id": "pos_1795114188480",
       "pairId": "bsc:0x7d03759e5b41e36899833cb2e008455d69a24444",
@@ -18,8 +39,8 @@
       "costUsd": 100,
       "buyFeeAndImpactUsd": 0.3527197634178143,
       "entryLiquidityUsd": 94556.57,
-      "lastPrice": 0.0001709,
-      "lastLiquidityUsd": 94556.57,
+      "lastPrice": 0.0001651,
+      "lastLiquidityUsd": 92893.59,
       "peakPrice": 0.0001709,
       "trailArmed": false,
       "securitySummary": "GoPlus PASS (Tax 0.0%/0.0%)"
@@ -28,6 +49,14 @@
   "closedTrades": [],
   "cooldowns": {},
   "decisionLog": [
+    {
+      "ts": 1795114577860,
+      "timeStr": "18:56:17",
+      "action": "BOUGHT",
+      "symbol": "GATO",
+      "chainId": "solana",
+      "reason": "$100 @ $0.0018686255332352709 | Liq $149,313 | RugCheck PASS (Score 1)"
+    },
     {
       "ts": 1795114188494,
       "timeStr": "18:49:48",
