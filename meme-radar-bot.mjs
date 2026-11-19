@@ -196,6 +196,34 @@ async function auditSecurity(pair) {
   return { ts: Date.now(), pass: false, reason: 'Unsupported chain' };
 }
 
+async function syncPortfolioToCloudflare() {
+  const secret = process.env.MEMERADAR_SYNC_SECRET;
+  if (!secret) {
+    console.error(`[${nowIso()}] D1 sync skipped: MEMERADAR_SYNC_SECRET is missing.`);
+    return false;
+  }
+  try {
+    const response = await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${secret}`
+      },
+      body: JSON.stringify({ portfolio })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.success === false) {
+      throw new Error(result.error || result.message || `HTTP ${response.status}`);
+    }
+    console.log(`[${nowIso()}] D1 portfolio sync successful.`);
+    return true;
+  } catch (err) {
+    console.error(`[${nowIso()}] D1 portfolio sync failed: ${err.message}`);
+    process.exitCode = 1;
+    return false;
+  }
+}
+
 async function pollCycle() {
   // 1. Refresh Open Positions
   const byChainPos = new Map();
