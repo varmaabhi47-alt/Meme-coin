@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -223,7 +223,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
     pairAddress: pair.pairAddress || null, priceUsd: Number(pair.priceUsd || 0),
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
-    security: { pass: security?.pass === true, reason: security?.reason || 'not checked' },
+    security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
@@ -397,15 +397,14 @@ async function pollCycle() {
       if (Date.now() - (portfolio.cooldowns[key] || 0) < CONFIG.COOLDOWN_MINS * 60000) continue;
 
       const liq = Number(p.liquidity?.usd || 0);
-      const vol = Number(p.volume?.h24 || 0);
-      const fdv = Number(p.fdv || p.marketCap || 0);
-      const sells1h = Number(p.txns?.h1?.sells || 0);
-      const buys24 = Number(p.txns?.h24?.buys || 0), sells24 = Number(p.txns?.h24?.sells || 0);
-      const buyRatio = buys24 + sells24 > 0 ? (buys24 / (buys24 + sells24)) * 100 : 0;
-      const liqFdv = fdv > 0 ? (liq / fdv) * 100 : 0;
-      const tradeToLiq = liq > 0 ? (CONFIG.TRADE_SIZE_USD / liq) * 100 : 100;
-
-      if (liq < CONFIG.MIN_LIQUIDITY_USD || tradeToLiq > CONFIG.MAX_TRADE_TO_LIQ_PCT || liqFdv < CONFIG.MIN_LIQ_FDV_PCT || sells1h < CONFIG.MIN_SELLS_1H || vol < CONFIG.MIN_VOLUME_24H || buyRatio < CONFIG.MIN_BUY_RATIO_PCT) continue;
+      const prefilter = evaluateDiscoveryPrefilter(p, CONFIG);
+      if (!prefilter.pass) {
+        await recordResearch(p, { pass: false, checked: false, reason: 'Not security-audited: rejected by inexpensive discovery prefilter' },
+          { score: null, tier: 'PREFILTER_REJECT', components: {}, metrics: prefilter.metrics, reasons: prefilter.reasons },
+          'PREFILTER_REJECT');
+        logDecision('PREFILTER', p.baseToken.symbol, p.chainId, prefilter.reasons.join('; '));
+        continue;
+      }
 
       if (secChecks >= 12) break;
       secChecks++;
