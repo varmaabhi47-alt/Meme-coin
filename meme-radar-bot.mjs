@@ -181,7 +181,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
     security: { pass: security?.pass === true, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
-    components: analysis?.components || {}, metrics: analysis?.metrics || {},
+    components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
