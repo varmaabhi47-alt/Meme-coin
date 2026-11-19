@@ -3,7 +3,7 @@ import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
-  calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
+  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
 } from './meme-radar-v5-intelligence.mjs';
 
 const healthyPair = {
@@ -135,4 +135,22 @@ test('discovery prefilter passes a candidate meeting configured thresholds', () 
   const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, txns: { h1: { sells: 20 }, h24: { buys: 70, sells: 30 } } });
   assert.equal(result.pass, true);
   assert.deepEqual(result.reasons, []);
+});
+
+test('Jupiter quote-only output converts raw USDC units into paper exit proceeds', () => {
+  const result = calculateJupiterQuoteExit({
+    quote: { outAmount: '9750000', router: 'metis', transaction: null },
+    tokens: 1000, spotPrice: 0.01, outputDecimals: 6
+  });
+  assert.equal(result.netProceeds, 9.75);
+  assert.equal(result.effectivePrice, 0.00975);
+  assert.equal(result.model, 'jupiter-route-quote');
+  assert.equal(result.quoteOnly, true);
+  assert.equal(result.router, 'metis');
+});
+
+test('Jupiter quote parser fails closed on missing, malformed or zero output', () => {
+  assert.throws(() => calculateJupiterQuoteExit({ quote: {}, tokens: 100, spotPrice: 1 }));
+  assert.throws(() => calculateJupiterQuoteExit({ quote: { outAmount: 'abc' }, tokens: 100, spotPrice: 1 }));
+  assert.throws(() => calculateJupiterQuoteExit({ quote: { outAmount: '0' }, tokens: 100, spotPrice: 1 }));
 });
