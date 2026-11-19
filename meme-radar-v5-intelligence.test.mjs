@@ -78,3 +78,26 @@ test('holder concentration returns unknown for missing supply', () => {
   const { calculateTopHolderConcentration } = requireHolderModule;
   assert.equal(calculateTopHolderConcentration([], '0').known, false);
 });
+
+
+test('creator signal analysis detects authority-holder overlap and reused mint authority', () => {
+  const result = analyzeCreatorSignals({
+    mintAuthority: 'CreatorWalletAddress111111111111111111111',
+    freezeAuthority: null,
+    authoritySignatureCount: 520,
+    holderOwners: ['CreatorWalletAddress111111111111111111111', 'HolderWalletAddress222222222222222222222', 'HolderWalletAddress222222222222222222222'],
+    priorAuthorityRows: [{ token: 'old-token', creatorSignals: { mintAuthority: 'CreatorWalletAddress111111111111111111111' } }]
+  });
+  assert.equal(result.authorityHolderOverlap.length, 1);
+  assert.equal(result.reusedMintAuthorityTokens, 1);
+  assert.equal(result.repeatedHolderOwners.length, 1);
+  assert.ok(result.warnings.length >= 3);
+});
+
+test('creator signal analysis does not invent missing authority data', () => {
+  const result = analyzeCreatorSignals();
+  assert.equal(result.mintAuthority, null);
+  assert.equal(result.freezeAuthority, null);
+  assert.equal(result.authoritySignatureCount, null);
+  assert.equal(result.reusedMintAuthorityTokens, 0);
+});
