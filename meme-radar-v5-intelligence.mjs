@@ -126,6 +126,33 @@ export function calculatePaperSell(tokens, spotPrice, liquidityUsd, feeRate = 0.
   };
 }
 
+/**
+ * Converts a Jupiter quote-only /order response into paper exit proceeds.
+ * Jupiter returns outAmount in the output token's smallest unit (USDC = 6 decimals).
+ * No taker is supplied, so no transaction is assembled or executable.
+ */
+export function calculateJupiterQuoteExit({ quote, tokens, spotPrice, outputDecimals = 6 }) {
+  const qty = num(tokens), spot = num(spotPrice), decimals = Number(outputDecimals);
+  const outRaw = quote?.outAmount;
+  if (!/^\d+$/.test(String(outRaw ?? '')) || qty <= 0 || spot <= 0 ||
+      !Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
+    throw new Error('Invalid Jupiter quote exit inputs');
+  }
+  const netProceeds = Number(outRaw) / (10 ** decimals);
+  if (!Number.isFinite(netProceeds) || netProceeds <= 0) throw new Error('Jupiter quote has no usable output');
+  const grossSpotValue = qty * spot;
+  return {
+    netProceeds,
+    effectivePrice: netProceeds / qty,
+    impactUsd: Math.max(0, grossSpotValue - netProceeds),
+    impactRate: grossSpotValue > 0 ? clamp(1 - netProceeds / grossSpotValue, 0, 1) : 1,
+    feeUsd: 0,
+    model: 'jupiter-route-quote',
+    router: typeof quote.router === 'string' ? quote.router : null,
+    quoteOnly: true
+  };
+}
+
 export function detectBasicMarketWarnings(pair) {
   const warnings = [];
   const buys = num(pair?.txns?.h1?.buys), sells = num(pair?.txns?.h1?.sells);
