@@ -263,7 +263,8 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
-    narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),\n    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
+    narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),
+    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
 }
