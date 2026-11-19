@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter, calculateJupiterQuoteExit } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter, calculateJupiterQuoteExit, analyzeNarrativeFootprint, summarizePaperLearning } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -263,7 +263,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
-    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
+    narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),\n    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
 }
