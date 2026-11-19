@@ -31,7 +31,7 @@ jobs:
         run: node --check meme-radar-bot.mjs
 
       - name: Run v5 intelligence unit tests
-        run: node --test meme-radar-v5-intelligence.test.mjs
+        run: node --test meme-radar-v5-*.test.mjs
 
       - name: Run one paper-trading scan
         env:
