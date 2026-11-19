@@ -236,3 +236,43 @@ export function summarizeCrossTokenClusters(rows = [], minTokens = 2) {
     }))
     .sort((a, b) => b.tokenCount - a.tokenCount || a.signalType.localeCompare(b.signalType));
 }
+
+
+/**
+ * Explain the bot's cheap discovery gates before expensive security RPC calls.
+ * Missing metrics are explicitly flagged instead of silently treated as safe.
+ */
+export function evaluateDiscoveryPrefilter(pair, config = {}) {
+  const minLiquidity = Number(config.MIN_LIQUIDITY_USD ?? 75000);
+  const maxTradeToLiquidity = Number(config.MAX_TRADE_TO_LIQ_PCT ?? 2);
+  const minLiqFdv = Number(config.MIN_LIQ_FDV_PCT ?? 5);
+  const minSells = Number(config.MIN_SELLS_1H ?? 10);
+  const minVolume = Number(config.MIN_VOLUME_24H ?? 50000);
+  const minBuyRatio = Number(config.MIN_BUY_RATIO_PCT ?? 52);
+  const liquidity = Number(pair?.liquidity?.usd || 0);
+  const fdv = Number(pair?.fdv || pair?.marketCap || 0);
+  const tradeSize = Number(config.TRADE_SIZE_USD ?? 100);
+  const volume = Number(pair?.volume?.h24 || 0);
+  const sells1h = Number(pair?.txns?.h1?.sells || 0);
+  const buys24 = Number(pair?.txns?.h24?.buys || 0);
+  const sells24 = Number(pair?.txns?.h24?.sells || 0);
+  const buyRatio = buys24 + sells24 > 0 ? buys24 / (buys24 + sells24) * 100 : null;
+  const liqFdv = fdv > 0 ? liquidity / fdv * 100 : null;
+  const tradeToLiq = liquidity > 0 ? tradeSize / liquidity * 100 : null;
+  const reasons = [];
+  if (!liquidity) reasons.push('liquidity unavailable');
+  else if (liquidity < minLiquidity) reasons.push('liquidity below minimum');
+  if (tradeToLiq === null) reasons.push('trade-to-liquidity unavailable');
+  else if (tradeToLiq > maxTradeToLiquidity) reasons.push('paper trade size too large for liquidity');
+  if (liqFdv === null) reasons.push('liquidity/FDV unavailable');
+  else if (liqFdv < minLiqFdv) reasons.push('liquidity/FDV below minimum');
+  if (sells1h < minSells) reasons.push('1h sells below minimum');
+  if (volume < minVolume) reasons.push('24h volume below minimum');
+  if (buyRatio === null) reasons.push('24h buy ratio unavailable');
+  else if (buyRatio < minBuyRatio) reasons.push('24h buy ratio below minimum');
+  return {
+    pass: reasons.length === 0,
+    reasons,
+    metrics: { liquidityUsd: liquidity, fdvUsd: fdv || null, volume24hUsd: volume, sells1h, buyRatioPct: buyRatio, liquidityFdvPct: liqFdv, tradeToLiquidityPct: tradeToLiq }
+  };
+}
