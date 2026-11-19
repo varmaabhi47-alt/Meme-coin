@@ -1,0 +1,139 @@
+/**
+ * MEME.RADAR v5 intelligence core.
+ * Pure, deterministic functions shared by the paper bot and Node tests.
+ * This is a screening heuristic, not a prediction or guarantee of safety.
+ */
+
+export const V5_SCORE_VERSION = '5.0.0';
+
+const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
+const num = value => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export function scoreCandidate(pair, security = { pass: false }) {
+  const liq = num(pair?.liquidity?.usd);
+  const vol24 = num(pair?.volume?.h24);
+  const vol1h = num(pair?.volume?.h1);
+  const buys1h = num(pair?.txns?.h1?.buys);
+  const sells1h = num(pair?.txns?.h1?.sells);
+  const buys24 = num(pair?.txns?.h24?.buys);
+  const sells24 = num(pair?.txns?.h24?.sells);
+  const fdv = num(pair?.fdv || pair?.marketCap);
+  const buyRatio1h = buys1h + sells1h ? buys1h / (buys1h + sells1h) : 0;
+  const buyRatio24 = buys24 + sells24 ? buys24 / (buys24 + sells24) : 0;
+  const liqFdv = fdv > 0 ? liq / fdv : 0;
+  const turnover = liq > 0 ? vol24 / liq : 0;
+  const change5m = num(pair?.priceChange?.m5);
+  const change1h = num(pair?.priceChange?.h1);
+
+  // Scores deliberately reward sustained, two-window demand rather than one spike.
+  const liquidityScore = clamp((liq / 150000) * 60 + (liqFdv / 0.2) * 40);
+  const demandScore = clamp((buyRatio1h * 55 + buyRatio24 * 45) * 100);
+  const activityScore = clamp(Math.min(100, (buys1h + sells1h) * 2) * 0.6 + Math.min(100, vol1h / 1000) * 0.4);
+  const momentumScore = clamp(50 + change5m * 2 + change1h * 0.8);
+  const turnoverScore = clamp(turnover > 0 ? 100 - Math.abs(Math.log(Math.max(turnover, 0.01) / 2)) * 22 : 0);
+  const securityScore = security?.pass === true ? 100 : 0;
+
+  const score = Math.round(
+    liquidityScore * 0.20 +
+    demandScore * 0.20 +
+    activityScore * 0.15 +
+    momentumScore * 0.15 +
+    turnoverScore * 0.10 +
+    securityScore * 0.20
+  );
+
+  const hardReject = security?.pass !== true;
+  const reasons = [];
+  if (hardReject) reasons.push('security audit not passed');
+  if (liq < 75000) reasons.push('liquidity below $75k');
+  if (buys1h + sells1h < 10) reasons.push('insufficient 1h transactions');
+  if (vol24 < 50000) reasons.push('24h volume below $50k');
+  if (buyRatio1h < 0.52) reasons.push('1h buy ratio below 52%');
+  if (liqFdv < 0.05) reasons.push('liquidity/FDV below 5%');
+  if (turnover > 20) reasons.push('extreme turnover; possible churn');
+  if (change5m > 35) reasons.push('extreme 5m move; chase-risk');
+
+  return {
+    version: V5_SCORE_VERSION,
+    score,
+    tier: hardReject || reasons.length ? 'REJECT' : score >= 80 ? 'RESEARCH' : score >= 65 ? 'WATCH' : 'WEAK',
+    hardReject,
+    reasons,
+    components: {
+      liquidity: Math.round(liquidityScore),
+      demand: Math.round(demandScore),
+      activity: Math.round(activityScore),
+      momentum: Math.round(momentumScore),
+      turnover: Math.round(turnoverScore),
+      security: Math.round(securityScore)
+    },
+    metrics: { liq, vol24, vol1h, buys1h, sells1h, buyRatio1h, buyRatio24, liqFdv, turnover, change5m, change1h }
+  };
+}
+
+/**
+ * Constant-product pool approximation using quote-side reserve ~= total TVL / 2.
+ * It is intentionally more conservative than tradeUsd/(2*TVL).
+ * It is not a live route quote; production execution research should use an aggregator quote.
+ */
+export function estimateConstantProductImpact(tradeUsd, liquidityUsd) {
+  const trade = num(tradeUsd);
+  const liquidity = num(liquidityUsd);
+  if (trade <= 0 || liquidity <= 0) return { impactRate: 1, valid: false };
+  const reserveQuote = liquidity / 2;
+  const x = trade / reserveQuote;
+  const impactRate = clamp(1 - Math.log1p(x) / x, 0, 0.95);
+  return { impactRate, valid: true, model: 'constant-product-average-price-approximation' };
+}
+
+export function calculatePaperBuy(usd, spotPrice, liquidityUsd, feeRate = 0.003) {
+  const amount = num(usd), price = num(spotPrice), fee = num(feeRate);
+  if (amount <= 0 || price <= 0 || fee < 0 || fee >= 1) throw new Error('Invalid buy inputs');
+  const impact = estimateConstantProductImpact(amount, liquidityUsd);
+  if (!impact.valid) throw new Error('Cannot estimate impact without positive liquidity');
+  const feeUsd = amount * fee;
+  const netUsd = amount - feeUsd;
+  const effectivePrice = price * (1 + impact.impactRate);
+  return {
+    feeUsd,
+    impactRate: impact.impactRate,
+    impactUsd: netUsd * impact.impactRate,
+    effectivePrice,
+    tokens: netUsd / effectivePrice,
+    model: impact.model
+  };
+}
+
+export function calculatePaperSell(tokens, spotPrice, liquidityUsd, feeRate = 0.003) {
+  const qty = num(tokens), price = num(spotPrice), fee = num(feeRate);
+  if (qty <= 0 || price <= 0 || fee < 0 || fee >= 1) throw new Error('Invalid sell inputs');
+  const gross = qty * price;
+  const impact = estimateConstantProductImpact(gross, liquidityUsd);
+  if (!impact.valid) throw new Error('Cannot estimate impact without positive liquidity');
+  const effectivePrice = price * (1 - impact.impactRate);
+  const afterImpact = qty * effectivePrice;
+  const feeUsd = afterImpact * fee;
+  return {
+    effectivePrice,
+    impactRate: impact.impactRate,
+    impactUsd: gross - afterImpact,
+    feeUsd,
+    netProceeds: Math.max(0, afterImpact - feeUsd),
+    model: impact.model
+  };
+}
+
+export function detectBasicMarketWarnings(pair) {
+  const warnings = [];
+  const buys = num(pair?.txns?.h1?.buys), sells = num(pair?.txns?.h1?.sells);
+  const volume = num(pair?.volume?.h1), liquidity = num(pair?.liquidity?.usd);
+  const priceMove = num(pair?.priceChange?.m5);
+  if (buys + sells >= 20 && volume > 0 && liquidity > 0 && volume / liquidity > 5) warnings.push('high 1h turnover vs liquidity');
+  if (sells > buys * 1.8 && sells >= 10) warnings.push('sell pressure exceeds buys');
+  if (priceMove > 35) warnings.push('extreme 5m price expansion');
+  if (!pair?.pairCreatedAt) warnings.push('pair age unavailable');
+  return warnings;
+}
