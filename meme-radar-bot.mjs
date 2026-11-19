@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -154,7 +154,26 @@ function calcSell(tokens, price, liq) {
   return { effPrice: result.effectivePrice, impactUsd: result.impactUsd, impactRate: result.impactRate, feeUsd: result.feeUsd, netProceeds: result.netProceeds, model: result.model };
 }
 
-async function recordResearch(pair, security, analysis, decision) {
+async function inspectSolanaHolders(tokenAddress) {
+  try {
+    const rpc = async (method, id) => {
+      const response = await fetch('https://api.mainnet-beta.solana.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params: [tokenAddress, { commitment: 'confirmed' }] })
+      });
+      if (!response.ok) throw new Error(`Solana RPC HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || 'Solana RPC error');
+      return data.result?.value;
+    };
+    const [accounts, supply] = await Promise.all([rpc('getTokenLargestAccounts', 1), rpc('getTokenSupply', 2)]);
+    return { ...calculateTopHolderConcentration(accounts || [], supply?.amount), decimals: supply?.decimals ?? null, source: 'Solana public RPC' };
+  } catch (error) {
+    return { known: false, reason: error.message, source: 'Solana public RPC' };
+  }
+}
+
+async function recordResearch(pair, security, analysis, decision, holders = null) {
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -163,7 +182,7 @@ async function recordResearch(pair, security, analysis, decision) {
     security: { pass: security?.pass === true, reason: security?.reason || 'not checked' },
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {},
-    warnings: detectBasicMarketWarnings(pair), decision
+    warnings: detectBasicMarketWarnings(pair), holderDistribution: holders, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
 }
@@ -253,7 +272,8 @@ async function pollCycle() {
   for (let i = portfolio.openPositions.length - 1; i >= 0; i--) {
     const pos = portfolio.openPositions[i];
     const lp = livePosMap.get(pos.pairAddress.toLowerCase());
-    if (!lp || !Number(lp.priceUsd) || !Number(lp.liquidity?.usd)) {\n      pos.dataStale = true;\n      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';\n      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);\n      continue;\n    }\n    pos.dataStale = false;\n    pos.dataStaleReason = '';
+    if (!lp || !Number(lp.priceUsd) || !Number(lp.liquidity?.usd)) {
+      pos.dataStale = true;\n      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';\n      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);\n      continue;\n    }\n    pos.dataStale = false;\n    pos.dataStaleReason = '';
     pos.lastPrice = Number(lp.priceUsd);
     pos.lastLiquidityUsd = Number(lp.liquidity?.usd || 0);
     if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
@@ -343,7 +363,9 @@ async function pollCycle() {
       const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
       const sec = await auditSecurity(pairObj);
       const intelligence = scoreCandidate(p, sec);
-      await recordResearch(p, sec, intelligence, intelligence.tier);
+      const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address) : { known: false, reason: 'holder RPC not implemented for this chain' };
+      if (holders.known && holders.top10Pct >= 70) intelligence.reasons.push(`top 10 token accounts hold ${holders.top10Pct.toFixed(2)}% (manual review; LP/custody not excluded)`);
+      await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
