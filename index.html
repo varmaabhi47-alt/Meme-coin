@@ -2950,13 +2950,15 @@ main();
       pollAndExecuteCycle();
     });
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
+      await syncPortfolioFromCloudflare();
       loadConfigToInputs();
       renderAutoTraderView();
       renderLedger();
       renderBotGenerator();
       renderTelemetryTable();
       pollAndExecuteCycle();
+      setInterval(syncPortfolioFromCloudflare, 60000);
     });
   </script>
 </body>
