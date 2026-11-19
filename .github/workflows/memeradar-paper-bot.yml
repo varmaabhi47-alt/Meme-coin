@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Run v5 intelligence unit tests
+        run: node --test meme-radar-v5-intelligence.test.mjs
+
       - name: Run one paper-trading scan
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -42,6 +45,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ -f paper_portfolio.json ]; then git add -f paper_portfolio.json; fi
           if [ -f paper_trades.csv ]; then git add -f paper_trades.csv; fi
+          if [ -f paper_research.jsonl ]; then git add -f paper_research.jsonl; fi
           if git diff --cached --quiet; then
             echo "No portfolio changes to save."
           else
