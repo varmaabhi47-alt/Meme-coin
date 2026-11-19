@@ -57,7 +57,8 @@ export function backtestSnapshots(rows, options = {}) {
   };
 }
 
-export async function readJsonlSnapshots(filePath, fsModule = await import('node:fs/promises')) {
+export async function readJsonlSnapshots(filePath, fsModule) {
+  if (!fsModule) fsModule = await import('node:fs/promises');
   const content = await fsModule.readFile(filePath, 'utf8').catch(error => {
     if (error.code === 'ENOENT') return '';
     throw error;
