@@ -3038,7 +3038,7 @@ main();
     });
   </script>
 </body>
-</html> + Number(row.liquidityUsd || 0).toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td class="p-2.5 font-mono text-slate-300">' + holder + '</td><td class="p-2.5 text-slate-400 max-w-xs">' + escapeHtml(warnings || '—') + '</td></tr>';
+</html> + Number(row.liquidityUsd || 0).toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td class="p-2.5 font-mono text-slate-300">' + holder + '</td><td class="p-2.5 text-slate-300 max-w-xs">' + escapeHtml(creator) + '</td><td class="p-2.5 text-slate-400 max-w-xs">' + escapeHtml(warnings || '—') + '</td></tr>';
       }).join('');
       empty.classList.toggle('hidden', rows.length > 0);
     }
