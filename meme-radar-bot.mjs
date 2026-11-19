@@ -13,9 +13,10 @@
  */
 
 import fs from 'node:fs/promises';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
-  FEED_URL: "https://api.dexscreener.com/token-boosts/latest/v1",
+  FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
   CHAIN_FILTER: "all",
   SUPPORTED_CHAINS: ['solana', 'base', 'ethereum', 'bsc', 'arbitrum'],
   EVM_CHAIN_IDS: { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' },
@@ -44,7 +45,8 @@ const CONFIG = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || "",
   PORTFOLIO_FILE: 'paper_portfolio.json',
-  CSV_FILE: 'paper_trades.csv'
+  CSV_FILE: 'paper_trades.csv',
+  RESEARCH_FILE: 'paper_research.jsonl'
 };
 
 const secCache = new Map();
@@ -143,20 +145,27 @@ function logDecision(action, symbol, chainId, reason) {
 }
 
 function calcBuy(usd, price, liq) {
-  const feeUsd = usd * CONFIG.DEX_FEE_RATE;
-  const impactRate = liq > 0 ? Math.min(0.25, usd / (2 * liq)) : 0.05;
-  const effPrice = price * (1 + impactRate);
-  const net = usd - feeUsd;
-  return { feeUsd, impactUsd: net * impactRate, effPrice, tokens: net / effPrice };
+  const result = calculatePaperBuy(usd, price, liq, CONFIG.DEX_FEE_RATE);
+  return { feeUsd: result.feeUsd, impactUsd: result.impactUsd, impactRate: result.impactRate, effPrice: result.effectivePrice, tokens: result.tokens, model: result.model };
 }
 
 function calcSell(tokens, price, liq) {
-  const gross = tokens * price;
-  const impactRate = liq > 0 ? Math.min(0.50, gross / (2 * liq)) : 0.10;
-  const effPrice = price * (1 - impactRate);
-  const afterImp = tokens * effPrice;
-  const feeUsd = afterImp * CONFIG.DEX_FEE_RATE;
-  return { effPrice, impactUsd: gross - afterImp, feeUsd, netProceeds: Math.max(0, afterImp - feeUsd) };
+  const result = calculatePaperSell(tokens, price, liq, CONFIG.DEX_FEE_RATE);
+  return { effPrice: result.effectivePrice, impactUsd: result.impactUsd, impactRate: result.impactRate, feeUsd: result.feeUsd, netProceeds: result.netProceeds, model: result.model };
+}
+
+async function recordResearch(pair, security, analysis, decision) {
+  const row = {
+    schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
+    symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
+    pairAddress: pair.pairAddress || null, priceUsd: Number(pair.priceUsd || 0),
+    liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
+    security: { pass: security?.pass === true, reason: security?.reason || 'not checked' },
+    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
+    components: analysis?.components || {}, metrics: analysis?.metrics || {},
+    warnings: detectBasicMarketWarnings(pair), decision
+  };
+  await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\\n', 'utf8');
 }
 
 async function auditSecurity(pair) {
@@ -244,7 +253,7 @@ async function pollCycle() {
   for (let i = portfolio.openPositions.length - 1; i >= 0; i--) {
     const pos = portfolio.openPositions[i];
     const lp = livePosMap.get(pos.pairAddress.toLowerCase());
-    if (!lp) continue;
+    if (!lp || !Number(lp.priceUsd) || !Number(lp.liquidity?.usd)) {\n      pos.dataStale = true;\n      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';\n      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);\n      continue;\n    }\n    pos.dataStale = false;\n    pos.dataStaleReason = '';
     pos.lastPrice = Number(lp.priceUsd);
     pos.lastLiquidityUsd = Number(lp.liquidity?.usd || 0);
     if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
@@ -328,13 +337,16 @@ async function pollCycle() {
 
       if (liq < CONFIG.MIN_LIQUIDITY_USD || tradeToLiq > CONFIG.MAX_TRADE_TO_LIQ_PCT || liqFdv < CONFIG.MIN_LIQ_FDV_PCT || sells1h < CONFIG.MIN_SELLS_1H || vol < CONFIG.MIN_VOLUME_24H || buyRatio < CONFIG.MIN_BUY_RATIO_PCT) continue;
 
-      if (secChecks >= 4) break;
+      if (secChecks >= 12) break;
       secChecks++;
       await sleep(250);
       const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
       const sec = await auditSecurity(pairObj);
-      if (!sec.pass) {
-        logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId, sec.reason);
+      const intelligence = scoreCandidate(p, sec);
+      await recordResearch(p, sec, intelligence, intelligence.tier);
+      if (!sec.pass || intelligence.tier !== 'RESEARCH') {
+        logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
+          `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
       }
 
