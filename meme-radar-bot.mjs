@@ -157,7 +157,7 @@ function calcBuy(usd, price, liq) {
 async function calcPaperExit(pos, price, liq) {
   const fallback = () => ({ ...calcSell(pos.tokens, price, liq), quoteSource: 'constant-product-fallback' });
   if (!CONFIG.JUPITER_QUOTE_ENABLED || pos.chainId !== 'solana' ||
-      !pos.address || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
+      !pos.address || pos.tokenDecimals == null || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
   const decimals = Number(pos.tokenDecimals);
   if (decimals < 0 || decimals > 18) return fallback();
   const cacheKey = String(pos.address);
