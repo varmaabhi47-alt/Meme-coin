@@ -1,0 +1,28 @@
+name: MEME.RADAR V5 Live API Smoke Checks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  live-readonly-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check smoke-test script syntax
+        run: node --check scripts/v5-live-readonly-smoke.mjs
+
+      - name: Run live read-only API checks
+        run: node scripts/v5-live-readonly-smoke.mjs
