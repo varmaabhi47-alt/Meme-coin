@@ -1,0 +1,2930 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEME.RADAR v4 // AUTO-TRADER — Zero-Simulation Live Terminal</title>
+
+  <!-- Fonts: Inter for UI, JetBrains Mono for tabular financial precision -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            term: {
+              bg: '#090d16',
+              panel: '#0f1624',
+              card: '#111827',
+              hover: '#172235',
+              border: '#1e293b',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #090d16;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    @keyframes flashUp {
+      0% { background-color: rgba(16, 185, 129, 0.22); }
+      100% { background-color: transparent; }
+    }
+    @keyframes flashDown {
+      0% { background-color: rgba(244, 63, 94, 0.22); }
+      100% { background-color: transparent; }
+    }
+    .row-flash-up { animation: flashUp 1.3s ease-out; }
+    .row-flash-down { animation: flashDown 1.3s ease-out; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-term-bg text-slate-200 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+
+  <!-- ==================== TOP HUD & MASTER AUTO-TRADER BAR ==================== -->
+  <header class="sticky top-0 z-30 border-b border-term-border bg-term-bg/95 backdrop-blur-md">
+    <div class="max-w-[1640px] mx-auto px-3 sm:px-5 py-2.5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5">
+
+      <!-- Left: Brand, API Health, Uptime/RPM/Countdown -->
+      <div class="flex flex-wrap items-center justify-between xl:justify-start gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" class="opacity-30"></circle>
+              <circle cx="12" cy="12" r="5" class="opacity-60"></circle>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 12l5.5-5.5M12 3v2"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                MEME<span class="text-emerald-400">.RADAR</span>
+                <span class="text-slate-500 font-mono font-normal">v4</span>
+                <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-mono text-[10px] font-bold">AUTO-TRADER</span>
+              </h1>
+              <span id="hud-health-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
+                <span id="hud-health-dot" class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>
+                <span id="hud-health-text">BOOTING</span>
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 hidden sm:block">Zero-Simulation Live Scanner • Strict Liquidity &amp; Security Gates • Autonomous Paper Execution</p>
+          </div>
+        </div>
+
+        <!-- Telemetry Strip -->
+        <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-term-panel border border-term-border font-mono text-[11px] tabular-nums">
+          <div title="Session Uptime">
+            <span class="text-slate-500">UP:</span>
+            <span id="hud-uptime" class="text-slate-200 font-semibold">00:00:00</span>
+          </div>
+          <span class="text-term-border">|</span>
+          <div title="Rolling 60s Live API Requests">
+            <span class="text-slate-500">RPM:</span>
+            <span id="hud-rpm" class="text-emerald-400 font-bold">0</span><span class="text-slate-500">/60</span>
+          </div>
+          <span class="text-term-border">|</span>
+          <div class="flex items-center gap-1.5" title="Countdown to next live poll or backoff retry">
+            <span id="hud-countdown" class="text-cyan-400 font-semibold w-9">30s</span>
+            <div class="w-11 h-1.5 rounded-full bg-term-bg border border-term-border overflow-hidden">
+              <div id="hud-progress-bar" class="h-full bg-cyan-400 transition-all duration-500" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Master AUTO-PAPER-TRADE Toggle + Poll + Device Controls -->
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <!-- MASTER AUTO-PAPER-TRADE SWITCH -->
+        <button id="master-auto-btn" onclick="toggleAutoPaperTrade()" class="px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition shadow-lg bg-slate-800/80 border-slate-600 text-slate-300 hover:border-emerald-500/50">
+          <span id="master-auto-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+          <span id="master-auto-label">AUTO-PAPER-TRADE: OFF</span>
+        </button>
+
+        <!-- Poll Interval -->
+        <div class="flex items-center rounded-xl bg-term-panel border border-term-border overflow-hidden">
+          <span class="px-2 py-1.5 text-[10px] font-mono uppercase text-slate-400 border-r border-term-border">POLL</span>
+          <select id="hud-poll-select" onchange="onPollChange()" class="bg-transparent px-2 py-1.5 text-xs font-mono font-semibold text-emerald-400 focus:outline-none cursor-pointer">
+            <option value="15" class="bg-term-panel text-slate-200">15s</option>
+            <option value="30" selected class="bg-term-panel text-slate-200">30s</option>
+            <option value="60" class="bg-term-panel text-slate-200">60s</option>
+            <option value="0" class="bg-term-panel text-slate-200">Manual</option>
+          </select>
+        </div>
+
+        <!-- Force Refresh -->
+        <button onclick="forceRefreshNow()" class="px-2.5 py-1.5 rounded-xl bg-term-card hover:bg-term-hover border border-term-border text-xs font-medium text-slate-200 hover:border-emerald-500/50 transition flex items-center gap-1.5">
+          <svg id="hud-refresh-icon" class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span class="hidden sm:inline">Refresh</span>
+        </button>
+
+        <!-- Wake Lock -->
+        <button id="btn-wakelock" onclick="toggleWakeLock()" class="px-2.5 py-1.5 rounded-xl bg-term-panel border border-term-border text-xs font-mono text-slate-300 hover:text-white transition flex items-center gap-1.5" title="Prevent screen from sleeping">
+          <span id="dot-wakelock" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span>Wake</span>
+        </button>
+
+        <!-- Audio Alerts -->
+        <button id="btn-audio" onclick="toggleAudioAlerts()" class="px-2.5 py-1.5 rounded-xl bg-term-panel border border-term-border text-xs font-mono text-slate-300 hover:text-white transition flex items-center gap-1.5" title="Sound chime on auto-buy/sell">
+          <span id="dot-audio" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span>Audio</span>
+        </button>
+
+        <!-- Browser Notifications -->
+        <button id="btn-notify" onclick="toggleBrowserNotif()" class="px-2.5 py-1.5 rounded-xl bg-term-panel border border-term-border text-xs font-mono text-slate-300 hover:text-white transition flex items-center gap-1.5" title="Browser notifications">
+          <span id="dot-notify" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span>Notify</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Primary 5-Tab Navigation -->
+    <nav class="max-w-[1640px] mx-auto px-3 sm:px-5 flex items-center gap-1 overflow-x-auto border-t border-term-border/80">
+      <button onclick="switchTab('radar')" id="tab-btn-radar" class="px-3.5 py-2.5 text-xs sm:text-sm font-semibold border-b-2 border-emerald-400 text-emerald-400 whitespace-nowrap transition">
+        Live Radar
+      </button>
+      <button onclick="switchTab('autotrader')" id="tab-btn-autotrader" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+        <span>Auto-Trader &amp; Positions</span>
+        <span id="badge-open-pos" class="px-1.5 py-0.5 rounded-md bg-term-card border border-term-border text-[10px] font-mono text-emerald-300">0</span>
+      </button>
+      <button onclick="switchTab('ledger')" id="tab-btn-ledger" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+        <span>Trade Ledger</span>
+        <span id="badge-ledger-count" class="px-1.5 py-0.5 rounded-md bg-term-card border border-term-border text-[10px] font-mono text-slate-300">0</span>
+      </button>
+      <button onclick="switchTab('bot')" id="tab-btn-bot" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+        <span>24/7 Cloud Auto-Bot</span>
+      </button>
+      <button onclick="switchTab('telemetry')" id="tab-btn-telemetry" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+        <span>API Telemetry</span>
+        <span id="badge-err-count" class="hidden px-1.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-[10px] font-mono font-bold text-rose-300">0 ERR</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ==================== HONEST GLOBAL ERROR / BACKOFF BANNER ==================== -->
+  <div id="global-error-banner" class="hidden border-b border-rose-500/40 bg-rose-950/80 backdrop-blur-sm">
+    <div class="max-w-[1640px] mx-auto px-3 sm:px-5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+      <div class="flex items-start sm:items-center gap-2.5">
+        <span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-rose-500 text-white shrink-0">API OFFLINE</span>
+        <div class="text-rose-100">
+          <span id="global-error-msg" class="font-medium">DexScreener API unreachable. Auto-Trading paused safely.</span>
+          <span id="global-error-backoff" class="font-mono text-amber-300 ml-1.5"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="switchTab('telemetry')" class="px-2.5 py-1 rounded-lg bg-rose-900/80 hover:bg-rose-800 border border-rose-500/40 text-rose-100 font-mono text-[11px] transition">
+          Inspect Telemetry
+        </button>
+        <button onclick="forceRefreshNow()" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-mono text-[11px] transition">
+          Retry Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN WORKSPACE ==================== -->
+  <main class="flex-1 max-w-[1640px] w-full mx-auto px-3 sm:px-5 py-4">
+
+    <!-- ====================================================================== -->
+    <!-- TAB 1: LIVE RADAR (SCREENER)                                           -->
+    <!-- ====================================================================== -->
+    <section id="view-radar" class="space-y-3.5">
+
+      <!-- Feed, Search & Chain Controls -->
+      <div class="p-3.5 rounded-2xl bg-term-panel border border-term-border space-y-3">
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="selectFeed('latest-boosts')" data-feed="latest-boosts" class="feed-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 transition">Latest Boosts</button>
+            <button onclick="selectFeed('top-boosts')" data-feed="top-boosts" class="feed-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Top Boosts</button>
+            <button onclick="selectFeed('profiles')" data-feed="profiles" class="feed-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Latest Profiles</button>
+            <button onclick="selectFeed('search')" data-feed="search" class="feed-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Live Search</button>
+          </div>
+
+          <form onsubmit="handleSearchSubmit(event)" class="relative flex-1 xl:max-w-lg">
+            <input id="radar-search-input" type="text" placeholder="Live DexScreener Search: ticker, name, or contract address..." class="w-full pl-3.5 pr-24 py-2 rounded-xl bg-term-bg border border-term-border text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 transition" />
+            <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition">Search API</button>
+          </form>
+        </div>
+
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2.5 border-t border-term-border/80">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] font-mono uppercase text-slate-500 mr-1">CHAIN:</span>
+            <button onclick="selectChain('all')" data-chain="all" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 transition">All</button>
+            <button onclick="selectChain('solana')" data-chain="solana" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Solana</button>
+            <button onclick="selectChain('base')" data-chain="base" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Base</button>
+            <button onclick="selectChain('ethereum')" data-chain="ethereum" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Ethereum</button>
+            <button onclick="selectChain('bsc')" data-chain="bsc" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">BSC</button>
+            <button onclick="selectChain('arbitrum')" data-chain="arbitrum" class="chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition">Arbitrum</button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <label class="inline-flex items-center gap-1.5 text-slate-300 cursor-pointer select-none">
+              <input id="radar-only-passing" type="checkbox" onchange="renderRadarTable()" class="rounded border-term-border bg-term-bg text-emerald-500 focus:ring-0" />
+              <span class="text-[11px]">Show only Liquidity-Gate Passing</span>
+            </label>
+            <span class="text-term-border">|</span>
+            <span id="radar-count-summary" class="text-slate-400 text-[11px]">0 pairs</span>
+            <span id="radar-sync-status" class="text-slate-500 text-[11px] hidden sm:inline">Waiting for live API...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screener Table -->
+      <div class="rounded-2xl bg-term-panel border border-term-border overflow-hidden shadow-2xl shadow-black/40">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-term-border bg-term-card/90 text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400 select-none">
+                <th class="py-3 px-3.5 cursor-pointer hover:text-white" onclick="toggleSort('age')">Token / Age <span class="sort-ind" data-col="age"></span></th>
+                <th class="py-3 px-2.5 text-right cursor-pointer hover:text-white" onclick="toggleSort('price')">Price USD <span class="sort-ind" data-col="price"></span></th>
+                <th class="py-3 px-2 text-right cursor-pointer hover:text-white" onclick="toggleSort('m5')">5m % <span class="sort-ind" data-col="m5"></span></th>
+                <th class="py-3 px-2 text-right cursor-pointer hover:text-white" onclick="toggleSort('h1')">1h % <span class="sort-ind" data-col="h1"></span></th>
+                <th class="py-3 px-2.5 text-right cursor-pointer hover:text-white" onclick="toggleSort('liq')">Liquidity <span class="sort-ind" data-col="liq"></span></th>
+                <th class="py-3 px-2 text-right cursor-pointer hover:text-white" onclick="toggleSort('liqFdv')">Liq/FDV <span class="sort-ind" data-col="liqFdv"></span></th>
+                <th class="py-3 px-2.5 text-right cursor-pointer hover:text-white" onclick="toggleSort('vol')">24h Vol <span class="sort-ind" data-col="vol"></span></th>
+                <th class="py-3 px-2 text-right cursor-pointer hover:text-white" onclick="toggleSort('sells1h')" title="1-hour on-chain sell transactions (sellability proof)">1h Sells <span class="sort-ind" data-col="sells1h"></span></th>
+                <th class="py-3 px-2.5 text-center cursor-pointer hover:text-white" onclick="toggleSort('buyRatio')">Buy Ratio <span class="sort-ind" data-col="buyRatio"></span></th>
+                <th class="py-3 px-2 text-center">Gate</th>
+                <th class="py-3 px-2 text-right cursor-pointer hover:text-white" onclick="toggleSort('alpha')">Alpha <span class="sort-ind" data-col="alpha">▼</span></th>
+                <th class="py-3 px-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="radar-tbody" class="divide-y divide-term-border/70 text-xs"></tbody>
+          </table>
+        </div>
+
+        <div id="radar-state-panel" class="py-14 px-4 text-center">
+          <div id="radar-state-title" class="text-sm font-semibold text-slate-200">Connecting to live DexScreener API...</div>
+          <div id="radar-state-sub" class="text-xs font-mono text-slate-500 mt-1">Zero mock tokens or simulated prices will ever be generated.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================== -->
+    <!-- TAB 2: AUTO-TRADER & OPEN POSITIONS                                    -->
+    <!-- ====================================================================== -->
+    <section id="view-autotrader" class="hidden space-y-4">
+
+      <!-- Portfolio Stale Banner -->
+      <div id="pos-stale-banner" class="hidden p-3 rounded-2xl bg-rose-950/80 border border-rose-500/40 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+        <div class="flex items-center gap-2 text-rose-200">
+          <span class="px-2 py-0.5 rounded bg-rose-500 text-white font-bold text-[10px]">STALE (API OFFLINE)</span>
+          <span id="pos-stale-msg">Live price refresh failed. Auto-Trading is safely paused until API recovers.</span>
+        </div>
+        <button onclick="forceRefreshNow()" class="px-3 py-1 rounded-lg bg-rose-900 hover:bg-rose-800 border border-rose-500/40 text-rose-100">Retry Sync</button>
+      </div>
+
+      <!-- Bankroll & Equity KPI Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Available Cash (USDC)</div>
+          <div id="at-cash" class="mt-1 font-mono text-lg sm:text-xl font-bold text-white tabular-nums">$1,000.00</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Deployed in Open Coins</div>
+          <div id="at-deployed" class="mt-1 font-mono text-lg sm:text-xl font-bold text-cyan-300 tabular-nums">$0.00</div>
+          <div id="at-slots" class="text-[10px] font-mono text-slate-500 mt-0.5">0 / 5 slots used</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Total Account Equity</div>
+          <div id="at-equity" class="mt-1 font-mono text-lg sm:text-xl font-bold text-white tabular-nums">$1,000.00</div>
+          <div id="at-equity-roi" class="text-[10px] font-mono text-slate-400 tabular-nums">0.00% vs start</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Open Unrealized PnL</div>
+          <div id="at-unr-pnl" class="mt-1 font-mono text-lg sm:text-xl font-bold text-slate-300 tabular-nums">$0.00</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Realized Net PnL</div>
+          <div id="at-real-pnl" class="mt-1 font-mono text-lg sm:text-xl font-bold text-slate-300 tabular-nums">$0.00</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Auto-Trader Status</div>
+          <div id="at-status-text" class="mt-1 font-mono text-sm font-bold text-slate-400">PAUSED (OFF)</div>
+          <div id="at-last-sync" class="text-[10px] font-mono text-slate-500 mt-0.5">Never synced</div>
+        </div>
+      </div>
+
+      <!-- Strategy + Strict Liquidity & Sellability Gate Config -->
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <!-- Strategy Panel -->
+        <div class="p-4 rounded-2xl bg-term-panel border border-term-border space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-sm font-bold text-white">Auto-Trader Execution Rules</h2>
+              <p class="text-[11px] text-slate-400">Applies realistic AMM impact + 0.30% DEX fee on every buy &amp; sell.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-reset-bankroll" onclick="handleResetBankrollClick()" class="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-[11px] font-mono text-rose-300 transition">
+                Reset Bankroll
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Start Bankroll ($)</label>
+              <input id="cfg-bankroll" type="number" min="100" step="100" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Trade Size ($)</label>
+              <input id="cfg-size" type="number" min="5" step="5" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Max Open Pos</label>
+              <input id="cfg-max-pos" type="number" min="1" max="20" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-emerald-400 mb-1">Take Profit (+%)</label>
+              <input id="cfg-tp" type="number" min="5" step="5" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-rose-400 mb-1">Stop Loss (-%)</label>
+              <input id="cfg-sl" type="number" min="2" max="95" step="1" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-rose-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Max Hold (hrs)</label>
+              <input id="cfg-max-hold" type="number" min="1" step="1" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-cyan-400 mb-1">Trail Arm (+%)</label>
+              <input id="cfg-trail-arm" type="number" min="0" step="5" title="Arm trailing stop after position reaches this +% gain (0 disables)" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-cyan-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-cyan-400 mb-1">Trail Drop (-%)</label>
+              <input id="cfg-trail-drop" type="number" min="1" max="50" step="1" title="Sell if price drops this % from peak after armed" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-cyan-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Cooldown (min)</label>
+              <input id="cfg-cooldown" type="number" min="5" step="5" title="Never re-buy a coin sold within this many minutes" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Strict Liquidity & Sellability Gate Panel -->
+        <div class="p-4 rounded-2xl bg-term-panel border border-emerald-500/25 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-bold text-white">Strict Liquidity &amp; Sellability Gate</h2>
+              <p class="text-[11px] text-slate-400">Blocks thin pools, honeypots &amp; unsellable tokens. Mandatory live RugCheck / GoPlus audit.</p>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 font-mono text-[10px] font-bold text-emerald-300">FAIL-SAFE</span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Min Pool Liq ($)</label>
+              <input id="cfg-min-liq" type="number" min="1000" step="5000" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Max Trade/Liq (%)</label>
+              <input id="cfg-max-trade-liq" type="number" min="0.05" max="10" step="0.1" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Min Liq/FDV (%)</label>
+              <input id="cfg-min-liq-fdv" type="number" min="0" max="100" step="1" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Min 1h Sells</label>
+              <input id="cfg-min-sells1h" type="number" min="0" step="1" title="Proves other traders can actually sell on-chain" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-cyan-300 focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Min 24h Vol ($)</label>
+              <input id="cfg-min-vol" type="number" min="0" step="5000" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Min Buy Ratio (%)</label>
+              <input id="cfg-min-buy" type="number" min="0" max="100" step="1" oninput="onConfigChange()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+            </div>
+          </div>
+
+          <div class="text-[11px] font-mono text-slate-400 bg-term-bg p-2 rounded-lg border border-term-border">
+            Security Rules: <span class="text-emerald-300">Solana RugCheck</span> (reject rugged / score &gt; 2000 / any danger) • <span class="text-cyan-300">EVM GoPlus</span> (reject honeypot / cannot_sell_all / tax &gt; 5%) • <span class="text-amber-300">Emergency Exit</span> if pool liquidity drops &gt;60%.
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Open Positions Table -->
+      <div class="rounded-2xl bg-term-panel border border-term-border overflow-hidden">
+        <div class="px-4 py-3 border-b border-term-border bg-term-card/80 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold text-white">Active Open Paper Positions (Live DexScreener Pairs API)</h2>
+            <p class="text-[11px] text-slate-400">Shows exact token quantity, entry vs live price, peak gain, current pool liquidity, and live net unrealized PnL (after estimated sell impact &amp; 0.30% fee).</p>
+          </div>
+          <button onclick="runAutoCycleNow()" class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-xs font-semibold transition">
+            Run Auto-Scan Now
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-term-border text-[10px] font-mono uppercase text-slate-400 bg-term-card/40">
+                <th class="py-2.5 px-4">Coin / Entry Time</th>
+                <th class="py-2.5 px-2.5 text-right">Buy Price</th>
+                <th class="py-2.5 px-2.5 text-right">Live Price</th>
+                <th class="py-2.5 px-2.5 text-right">Tokens Held</th>
+                <th class="py-2.5 px-2.5 text-right">Cost → Net Value</th>
+                <th class="py-2.5 px-2.5 text-right">Live Pool Liq</th>
+                <th class="py-2.5 px-2.5 text-right">Unrealized PnL</th>
+                <th class="py-2.5 px-2.5">Exit Triggers</th>
+                <th class="py-2.5 px-4 text-right">Manual Exit</th>
+              </tr>
+            </thead>
+            <tbody id="open-pos-tbody" class="divide-y divide-term-border/60 text-xs font-mono tabular-nums"></tbody>
+          </table>
+        </div>
+        <div id="open-pos-empty" class="py-10 text-center text-xs text-slate-400">
+          No open positions. Turn on <strong class="text-emerald-400">AUTO-PAPER-TRADE: ON</strong> above or manually buy any live coin from the Radar.
+        </div>
+      </div>
+
+      <!-- Auto-Decision Log -->
+      <div class="rounded-2xl bg-term-panel border border-term-border overflow-hidden">
+        <div class="px-4 py-3 border-b border-term-border bg-term-card/70 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white">Auto-Decision Audit Log (Why Every Coin Was BOUGHT or SKIPPED)</h2>
+            <p class="text-[11px] text-slate-400">Complete transparency into every liquidity gate check, security API audit, and autonomous execution.</p>
+          </div>
+          <button onclick="clearDecisionLog()" class="px-2.5 py-1 rounded-lg bg-term-bg border border-term-border text-[11px] font-mono text-slate-400 hover:text-white transition">Clear Log</button>
+        </div>
+        <div id="decision-log-list" class="max-h-72 overflow-y-auto divide-y divide-term-border/60 font-mono text-[11px]"></div>
+        <div id="decision-log-empty" class="py-8 text-center text-xs font-mono text-slate-500">No auto-trader decisions logged yet.</div>
+      </div>
+    </section>
+
+    <!-- ====================================================================== -->
+    <!-- TAB 3: TRADE LEDGER (BUY/SELL HISTORY)                                 -->
+    <!-- ====================================================================== -->
+    <section id="view-ledger" class="hidden space-y-4">
+
+      <!-- Ledger KPI Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Total Realized PnL</div>
+          <div id="ldg-realized" class="mt-1 font-mono text-lg sm:text-xl font-bold text-slate-300 tabular-nums">$0.00</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Win Rate</div>
+          <div id="ldg-winrate" class="mt-1 font-mono text-lg sm:text-xl font-bold text-cyan-400 tabular-nums">--%</div>
+          <div id="ldg-wl-counts" class="text-[10px] font-mono text-slate-500">0W / 0L</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Profit Factor</div>
+          <div id="ldg-pf" class="mt-1 font-mono text-lg sm:text-xl font-bold text-white tabular-nums">--</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Best Trade</div>
+          <div id="ldg-best" class="mt-1 font-mono text-sm sm:text-base font-bold text-emerald-400 tabular-nums">--</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Worst Trade</div>
+          <div id="ldg-worst" class="mt-1 font-mono text-sm sm:text-base font-bold text-rose-400 tabular-nums">--</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-term-card border border-term-border">
+          <div class="text-[10px] font-mono uppercase text-slate-400">Total Fees &amp; Impact</div>
+          <div id="ldg-fees" class="mt-1 font-mono text-lg sm:text-xl font-bold text-amber-300 tabular-nums">$0.00</div>
+        </div>
+      </div>
+
+      <!-- Ledger Controls + Import Bot JSON / Export CSV & JSON -->
+      <div class="p-3.5 rounded-2xl bg-term-panel border border-term-border flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 flex-1">
+          <input id="ldg-search" type="text" placeholder="Filter by coin symbol or chain..." oninput="renderLedger()" class="w-full sm:w-64 px-3 py-1.5 rounded-xl bg-term-bg border border-term-border text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
+          <select id="ldg-outcome-filter" onchange="renderLedger()" class="px-2.5 py-1.5 rounded-xl bg-term-bg border border-term-border font-mono text-xs text-slate-200 focus:outline-none">
+            <option value="all">All Trades</option>
+            <option value="win">Profits Only</option>
+            <option value="loss">Losses Only</option>
+          </select>
+          <select id="ldg-reason-filter" onchange="renderLedger()" class="px-2.5 py-1.5 rounded-xl bg-term-bg border border-term-border font-mono text-xs text-slate-200 focus:outline-none">
+            <option value="all">All Exit Reasons</option>
+            <option value="TP">Take Profit (TP)</option>
+            <option value="SL">Stop Loss (SL)</option>
+            <option value="TRAILING">Trailing Stop</option>
+            <option value="MAX_HOLD">Max Hold Time</option>
+            <option value="LIQ_DROP">Liq Drop Emergency</option>
+            <option value="MANUAL">Manual Sell</option>
+          </select>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Import paper_portfolio.json from 24/7 Server Bot -->
+          <input id="import-bot-file" type="file" accept=".json,application/json" onchange="handleImportBotJson(event)" class="hidden" />
+          <button onclick="document.getElementById('import-bot-file').click()" class="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-semibold transition" title="Load paper_portfolio.json from your 24/7 Node.js server">
+            Import Bot JSON
+          </button>
+          <button onclick="exportLedgerCsv()" class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-semibold transition">
+            Export CSV
+          </button>
+          <button onclick="exportFullStateJson()" class="px-3 py-1.5 rounded-xl bg-term-card hover:bg-term-hover border border-term-border text-slate-200 font-mono text-xs transition">
+            Export JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- Full Buy/Sell Trade Ledger Table -->
+      <div class="rounded-2xl bg-term-panel border border-term-border overflow-hidden shadow-xl shadow-black/40">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-term-border bg-term-card/90 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                <th class="py-3 px-3.5">Coin / Chain</th>
+                <th class="py-3 px-2.5">Entry Time</th>
+                <th class="py-3 px-2.5 text-right">Buy Price</th>
+                <th class="py-3 px-2.5 text-right">Tokens Bought</th>
+                <th class="py-3 px-2.5 text-right">Cost ($)</th>
+                <th class="py-3 px-2.5 text-right">Entry Liq</th>
+                <th class="py-3 px-2.5">Exit Time</th>
+                <th class="py-3 px-2.5 text-right">Sell Price</th>
+                <th class="py-3 px-2.5 text-right">Exit Value ($)</th>
+                <th class="py-3 px-2.5 text-right">Fees/Impact</th>
+                <th class="py-3 px-2.5 text-right">Net PnL ($ &amp; %)</th>
+                <th class="py-3 px-3.5 text-right">Exit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-tbody" class="divide-y divide-term-border/60 font-mono text-[11px] tabular-nums"></tbody>
+          </table>
+        </div>
+        <div id="ledger-empty" class="py-12 text-center text-xs text-slate-400">
+          No closed paper trades yet. When the Auto-Trader (or manual sell) closes a position, the complete Buy/Sell receipt appears here.
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================== -->
+    <!-- TAB 4: 24/7 CLOUD AUTO-BOT GENERATOR                                   -->
+    <!-- ====================================================================== -->
+    <section id="view-bot" class="hidden space-y-4">
+      <div class="p-4 sm:p-5 rounded-2xl bg-term-panel border border-cyan-500/30 space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+          <div class="space-y-1.5 max-w-3xl">
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium">
+              True 24/7 Execution: Runs non-stop on Railway, Render, VPS, or Termux with a built-in Live Web Dashboard &amp; Telegram Receipts.
+            </div>
+            <h2 class="text-lg font-bold text-white pt-1">24/7 Autonomous Paper-Trading Node.js Bot (<span class="font-mono text-cyan-400">meme-radar-autobot-24-7.mjs</span>)</h2>
+            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Automatically synced with your exact Strategy Rules and Strict Liquidity/Sellability Gates. Zero npm dependencies (Node.js 18+ native <code class="font-mono text-emerald-300">fetch</code>, <code class="font-mono text-emerald-300">fs</code>, <code class="font-mono text-emerald-300">http</code>). Saves persistent state to <code class="font-mono text-cyan-300">paper_portfolio.json</code> (importable directly into the Trade Ledger tab!) and appends every closed trade to <code class="font-mono text-cyan-300">paper_trades.csv</code>. Serves a live dark-mode dashboard at <code class="font-mono text-emerald-300">http://localhost:3000</code> (or your Railway/Render URL).
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button id="btn-copy-bot" onclick="copyBotScript()" class="px-4 py-2.5 rounded-xl bg-term-card hover:bg-term-hover border border-term-border text-xs font-semibold text-white transition">
+              Copy Code
+            </button>
+            <button onclick="downloadBotScript()" class="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-950/50 transition">
+              Download meme-radar-autobot-24-7.mjs
+            </button>
+          </div>
+        </div>
+
+        <!-- Optional Bot Env Inputs -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 rounded-xl bg-term-bg border border-term-border">
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Telegram Bot Token (Optional)</label>
+            <input id="bot-tg-token" type="text" placeholder="Leave blank to use env TELEGRAM_BOT_TOKEN" oninput="renderBotGenerator()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-panel border border-term-border font-mono text-xs text-white focus:outline-none focus:border-cyan-500" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Telegram Chat ID (Optional)</label>
+            <input id="bot-tg-chat" type="text" placeholder="Leave blank to use env TELEGRAM_CHAT_ID" oninput="renderBotGenerator()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-panel border border-term-border font-mono text-xs text-white focus:outline-none focus:border-cyan-500" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-400 mb-1">Dashboard HTTP Port</label>
+            <input id="bot-port" type="number" value="3000" oninput="renderBotGenerator()" class="w-full px-2.5 py-1.5 rounded-lg bg-term-panel border border-term-border font-mono text-xs text-white focus:outline-none focus:border-cyan-500" />
+          </div>
+        </div>
+
+        <!-- Active Synced Parameters -->
+        <div id="bot-config-pills" class="flex flex-wrap gap-1.5 text-[11px] font-mono"></div>
+
+        <!-- Step-by-step Deploy Guides -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-term-bg border border-term-border space-y-1.5">
+            <div class="font-mono font-bold text-emerald-400">1. Railway / Render (Easiest 24/7 Web Service)</div>
+            <pre class="text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed"># Push meme-radar-autobot-24-7.mjs to GitHub
+# Create Web Service (Node 18+)
+# Start Command: node meme-radar-autobot-24-7.mjs
+# Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Open your public URL to view live dashboard!</pre>
+          </div>
+          <div class="p-3.5 rounded-xl bg-term-bg border border-term-border space-y-1.5">
+            <div class="font-mono font-bold text-cyan-400">2. Linux VPS with PM2</div>
+            <pre class="text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed">npm i -g pm2
+TELEGRAM_BOT_TOKEN="xxx" TELEGRAM_CHAT_ID="yyy" \
+pm2 start meme-radar-autobot-24-7.mjs --name memebot
+pm2 save && pm2 startup
+# Dashboard live on http://YOUR_VPS_IP:3000</pre>
+          </div>
+          <div class="p-3.5 rounded-xl bg-term-bg border border-term-border space-y-1.5">
+            <div class="font-mono font-bold text-amber-400">3. Android Termux</div>
+            <pre class="text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed">pkg update && pkg install nodejs
+termux-wake-lock
+TELEGRAM_BOT_TOKEN="xxx" TELEGRAM_CHAT_ID="yyy" \
+node meme-radar-autobot-24-7.mjs
+# View dashboard at http://localhost:3000</pre>
+          </div>
+        </div>
+
+        <!-- Live Generated Script -->
+        <div class="rounded-xl bg-[#05080f] border border-term-border overflow-hidden">
+          <div class="px-3.5 py-2 border-b border-term-border bg-term-card/70 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <span>meme-radar-autobot-24-7.mjs</span>
+            <span>Pure Node.js 18+ ESM • Built-in Dashboard + JSON/CSV Persistence + Telegram</span>
+          </div>
+          <pre id="bot-code-preview" class="p-4 text-[11px] font-mono text-slate-300 overflow-x-auto max-h-[500px] overflow-y-auto leading-relaxed"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================== -->
+    <!-- TAB 5: API TELEMETRY CONSOLE                                           -->
+    <!-- ====================================================================== -->
+    <section id="view-telemetry" class="hidden space-y-3.5">
+      <div class="p-3.5 rounded-2xl bg-term-panel border border-term-border flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-bold text-white font-mono">API TELEMETRY &amp; DIAGNOSTICS</h2>
+          <p class="text-xs text-slate-400">Exact HTTP status, latency, endpoint URL, and raw failure messages for every DexScreener, RugCheck, and GoPlus call.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="tel-btn-all" onclick="setTelemetryFilter('all')" class="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-semibold">All</button>
+          <button id="tel-btn-err" onclick="setTelemetryFilter('errors')" class="px-3 py-1.5 rounded-lg bg-term-bg border border-term-border text-slate-400 hover:text-white font-mono text-xs">Errors Only</button>
+          <button onclick="exportTelemetryJson()" class="px-3 py-1.5 rounded-lg bg-term-bg hover:bg-term-hover border border-term-border text-cyan-400 font-mono text-xs">Export JSON</button>
+          <button onclick="clearTelemetryLogs()" class="px-3 py-1.5 rounded-lg bg-term-bg hover:bg-rose-950/60 border border-term-border text-slate-400 hover:text-rose-300 font-mono text-xs">Clear</button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-term-panel border border-term-border overflow-hidden">
+        <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 z-10 bg-term-card border-b border-term-border text-[10px] font-mono uppercase text-slate-400">
+              <tr>
+                <th class="py-2.5 px-3.5">Time</th>
+                <th class="py-2.5 px-3">Status</th>
+                <th class="py-2.5 px-3">Context</th>
+                <th class="py-2.5 px-3 text-right">Latency</th>
+                <th class="py-2.5 px-3">Endpoint</th>
+                <th class="py-2.5 px-3.5">Result / Raw Error</th>
+              </tr>
+            </thead>
+            <tbody id="telemetry-tbody" class="divide-y divide-term-border/60 font-mono text-[11px] tabular-nums"></tbody>
+          </table>
+        </div>
+        <div id="telemetry-empty" class="py-12 text-center text-xs font-mono text-slate-500">No requests logged yet.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="mt-auto border-t border-term-border bg-term-panel/40">
+    <div class="max-w-[1640px] mx-auto px-3 sm:px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
+      <div>
+        <strong class="text-slate-300">Zero-Simulation Guarantee:</strong> Every price, liquidity pool, sell count, and security audit comes live from DexScreener, RugCheck &amp; GoPlus. Paper trades include realistic AMM impact + 0.30% DEX fee.
+      </div>
+      <div class="font-mono text-slate-500 shrink-0">MEME.RADAR v4 // AUTO-TRADER</div>
+    </div>
+  </footer>
+
+  <!-- ==================== SLIDE-OVER COIN INSPECTOR DRAWER ==================== -->
+  <div id="inspector-overlay" onclick="closeInspector()" class="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200"></div>
+
+  <aside id="inspector-drawer" class="fixed top-0 right-0 z-50 h-full w-full sm:w-[540px] bg-term-panel border-l border-term-border shadow-2xl transform translate-x-full transition-transform duration-200 flex flex-col">
+    <div class="p-4 border-b border-term-border bg-term-card/90 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div id="insp-avatar" class="w-10 h-10 rounded-xl bg-term-bg border border-term-border flex items-center justify-center font-mono text-sm font-bold text-emerald-400 shrink-0 overflow-hidden"></div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h3 id="insp-symbol" class="text-base font-bold text-white truncate">---</h3>
+            <span id="insp-chain" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border">---</span>
+            <span id="insp-alpha" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border">ALPHA --</span>
+          </div>
+          <p id="insp-name" class="text-xs text-slate-400 truncate">---</p>
+        </div>
+      </div>
+      <button onclick="closeInspector()" class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-term-hover transition" aria-label="Close">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+      <!-- Contract & Quick Links -->
+      <div class="p-3 rounded-xl bg-term-bg border border-term-border space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-[10px] font-mono uppercase text-slate-500">Contract Address</div>
+            <div id="insp-ca" class="font-mono text-xs text-slate-200 truncate">---</div>
+          </div>
+          <button onclick="copySelectedCa()" class="px-3 py-1.5 rounded-lg bg-term-card hover:bg-term-hover border border-term-border text-xs font-mono text-slate-200 shrink-0 transition">Copy CA</button>
+        </div>
+        <div id="insp-ext-links" class="grid grid-cols-3 gap-2"></div>
+      </div>
+
+      <!-- Live Metrics -->
+      <div class="p-3.5 rounded-2xl bg-term-bg border border-term-border space-y-3">
+        <div class="flex items-end justify-between">
+          <div>
+            <div class="text-[10px] font-mono uppercase text-slate-500">Live DexScreener Price</div>
+            <div id="insp-price" class="font-mono text-2xl font-bold text-white tabular-nums">$0.00</div>
+          </div>
+          <div class="text-right font-mono text-xs text-slate-300">
+            <div class="text-[10px] uppercase text-slate-500">Age / 1h Sells</div>
+            <div><span id="insp-age">--</span> • <span id="insp-sells1h" class="text-cyan-300">-- sells</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-4 gap-2 pt-2 border-t border-term-border text-center font-mono text-xs tabular-nums">
+          <div><div class="text-[10px] text-slate-500">Liquidity</div><div id="insp-liq" class="font-bold text-white">--</div></div>
+          <div><div class="text-[10px] text-slate-500">Liq/FDV</div><div id="insp-liqfdv" class="font-bold text-cyan-300">--</div></div>
+          <div><div class="text-[10px] text-slate-500">24h Vol</div><div id="insp-vol" class="font-bold text-white">--</div></div>
+          <div><div class="text-[10px] text-slate-500">Buy %</div><div id="insp-buyratio" class="font-bold text-emerald-400">--</div></div>
+        </div>
+      </div>
+
+      <!-- Embedded Live Chart Toggle -->
+      <div class="rounded-2xl bg-term-bg border border-term-border overflow-hidden">
+        <div class="px-3.5 py-2.5 flex items-center justify-between border-b border-term-border/60">
+          <span class="text-xs font-bold text-white">DexScreener Live Chart</span>
+          <button id="btn-toggle-chart" onclick="toggleEmbeddedChart()" class="px-2.5 py-1 rounded-lg bg-term-card hover:bg-term-hover border border-term-border text-[11px] font-mono text-cyan-400 transition">Show Chart</button>
+        </div>
+        <div id="insp-chart-box" class="hidden h-[340px] w-full bg-black"></div>
+      </div>
+
+      <!-- Live Security Audit Status -->
+      <div class="p-3.5 rounded-2xl bg-term-bg border border-term-border space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-white font-mono">LIVE SECURITY &amp; SELLABILITY AUDIT</span>
+          <button onclick="runInspectorAudit(true)" class="text-[11px] font-mono text-cyan-400 hover:underline">Force Re-Check</button>
+        </div>
+        <div id="insp-gate-verdict" class="text-xs font-mono"></div>
+        <div id="insp-sec-box" class="text-xs text-slate-300 font-mono"></div>
+      </div>
+
+      <!-- Direct DEX Links -->
+      <div id="insp-dex-btns" class="grid grid-cols-2 gap-2"></div>
+
+      <!-- Manual Paper Buy Box -->
+      <div class="p-4 rounded-2xl bg-term-card border border-emerald-500/30 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-bold text-white">Manual Paper Buy (Live Price + AMM Impact)</h4>
+          <span id="insp-avail-cash" class="font-mono text-xs text-emerald-400">Cash: $1,000.00</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="manual-buy-usd" type="number" min="5" step="5" value="100" oninput="updateManualBuyPreview()" class="flex-1 px-3 py-2 rounded-xl bg-term-bg border border-term-border font-mono text-xs text-white focus:outline-none focus:border-emerald-500 tabular-nums" />
+          <button onclick="executeManualPaperBuy()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">Paper Buy</button>
+        </div>
+        <div id="manual-buy-preview" class="text-[11px] font-mono text-slate-400"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==================== TOAST CONTAINER ==================== -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- ==================== CORE ENGINE (STRICT ZERO-SIMULATION) ==================== -->
+  <script>
+    /*************************************************************************
+     * 1. CONSTANTS, DEFAULTS & STATE
+     *************************************************************************/
+    const SUPPORTED_CHAINS = ['solana', 'base', 'ethereum', 'bsc', 'arbitrum'];
+    const EVM_CHAIN_IDS = { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' };
+    const BACKOFF_STEPS = [10, 20, 40, 60];
+    const DEX_FEE_RATE = 0.003; // 0.30% realistic DEX swap fee
+    const SECURITY_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+    const STORE_KEYS = {
+      STATE: 'meme_radar_v4_portfolio_state',
+      CONFIG: 'meme_radar_v4_autotrader_config'
+    };
+
+    const DEFAULT_CONFIG = {
+      startingBankroll: 1000,
+      tradeSizeUsd: 100,
+      maxOpenPositions: 5,
+      tpPct: 40,
+      slPct: 18,
+      trailArmPct: 20,
+      trailDropPct: 12,
+      maxHoldHours: 24,
+      cooldownMins: 60,
+      minLiquidityUsd: 75000,
+      maxTradeToLiqPct: 0.5,
+      minLiqFdvPct: 5,
+      minSells1h: 10,
+      minVolume24h: 50000,
+      minBuyRatioPct: 55
+    };
+
+    function loadJson(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function saveJson(key, val) {
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+      } catch (e) {
+        addTelemetry('ERROR', 'STORAGE', 0, 0, key, `localStorage write error: ${e.message}`);
+      }
+    }
+
+    const savedCfg = { ...DEFAULT_CONFIG, ...loadJson(STORE_KEYS.CONFIG, {}) };
+    const savedPort = loadJson(STORE_KEYS.STATE, null);
+
+    const state = {
+      activeTab: 'radar',
+      feed: 'latest-boosts',
+      chain: 'all',
+      searchQuery: '',
+      sortCol: 'alpha',
+      sortDir: 'desc',
+
+      // Live Data
+      pairs: [],
+      prevPrices: new Map(),
+      priceFlashes: new Map(),
+      securityCache: new Map(), // key: "chain:addr" -> { ts, pass, reason, summary, provider }
+
+      // Auto-Trader & Portfolio (Persisted)
+      autoTradeEnabled: savedPort?.autoTradeEnabled ?? false,
+      config: savedCfg,
+      cashUsd: savedPort?.cashUsd ?? savedCfg.startingBankroll,
+      openPositions: Array.isArray(savedPort?.openPositions) ? savedPort.openPositions : [],
+      closedTrades: Array.isArray(savedPort?.closedTrades) ? savedPort.closedTrades : [],
+      cooldowns: savedPort?.cooldowns || {}, // pairId -> soldTimestampMs
+      decisionLog: Array.isArray(savedPort?.decisionLog) ? savedPort.decisionLog : [],
+
+      // Polling & Health
+      sessionStartMs: Date.now(),
+      pollIntervalSec: 30,
+      countdownSec: 30,
+      isFetching: false,
+      consecutiveFailures: 0,
+      inBackoff: false,
+      apiHealth: 'BOOTING', // 'LIVE' | 'BACKOFF' | 'OFFLINE'
+      lastRadarSyncMs: null,
+      lastPosSyncMs: null,
+      positionsStale: false,
+      positionsStaleReason: '',
+      requestTimestamps: [],
+
+      // Telemetry
+      telemetry: [],
+      telemetryFilter: 'all',
+      errorCount: 0,
+
+      // Device
+      wakeLock: null,
+      audioEnabled: false,
+      notifyEnabled: false,
+
+      // Inspector
+      selectedPair: null,
+      chartVisible: false,
+      resetConfirmPending: false
+    };
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function persistPortfolio() {
+      saveJson(STORE_KEYS.STATE, {
+        autoTradeEnabled: state.autoTradeEnabled,
+        cashUsd: state.cashUsd,
+        openPositions: state.openPositions,
+        closedTrades: state.closedTrades,
+        cooldowns: state.cooldowns,
+        decisionLog: state.decisionLog.slice(0, 150)
+      });
+    }
+
+    function persistConfig() {
+      saveJson(STORE_KEYS.CONFIG, state.config);
+    }
+
+    /*************************************************************************
+     * 2. TELEMETRY, RPM PACER & STRICT ZERO-SIMULATION FETCH
+     *************************************************************************/
+    function pruneRpm() {
+      const cutoff = Date.now() - 60000;
+      state.requestTimestamps = state.requestTimestamps.filter(t => t > cutoff);
+      const rpm = state.requestTimestamps.length;
+      const el = document.getElementById('hud-rpm');
+      if (el) {
+        el.textContent = rpm;
+        el.className = rpm >= 52 ? 'text-rose-400 font-bold' : rpm >= 36 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold';
+      }
+    }
+
+    function addTelemetry(level, context, status, latencyMs, url, detail) {
+      state.telemetry.unshift({
+        ts: new Date().toISOString(),
+        timeStr: new Date().toLocaleTimeString([], { hour12: false }),
+        level, context, status, latencyMs, url, detail
+      });
+      if (state.telemetry.length > 250) state.telemetry.pop();
+
+      if (level === 'ERROR') {
+        state.errorCount++;
+        const b = document.getElementById('badge-err-count');
+        b.textContent = `${state.errorCount} ERR`;
+        b.classList.remove('hidden');
+      }
+      renderTelemetryTable();
+    }
+
+    async function strictFetchJson(url, context = 'API', timeoutMs = 11000) {
+      if (!navigator.onLine) {
+        const msg = 'Network Offline (navigator.onLine === false)';
+        addTelemetry('ERROR', context, 0, 0, url, msg);
+        throw new Error(msg);
+      }
+      pruneRpm();
+      if (state.requestTimestamps.length >= 56) await sleep(1100);
+
+      state.requestTimestamps.push(Date.now());
+      pruneRpm();
+
+      const t0 = performance.now();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(timer);
+        const ms = Math.round(performance.now() - t0);
+
+        if (!res.ok) {
+          let errText = `HTTP ${res.status} ${res.statusText || ''}`.trim();
+          if (res.status === 429) errText += ' (Rate Limited)';          addTelemetry('ERROR', context, res.status, ms, url, errText);
+          const err = new Error(errText);
+          err.httpStatus = res.status;
+          throw err;
+        }
+
+        const data = await res.json();
+        const desc = Array.isArray(data)
+          ? `OK (${data.length} items)`
+          : (Array.isArray(data?.pairs) ? `OK (${data.pairs.length} pairs)` : 'OK (JSON)');
+        addTelemetry('OK', context, res.status, ms, url, desc);
+        return data;
+      } catch (err) {
+        clearTimeout(timer);
+        const ms = Math.round(performance.now() - t0);
+        if (!err.httpStatus) {
+          const reason = err.name === 'AbortError'
+            ? `Timeout after ${timeoutMs}ms`
+            : `Network/CORS Error: ${err.message}`;
+          addTelemetry('ERROR', context, 0, ms, url, reason);
+          throw new Error(reason);
+        }
+        throw err;
+      }
+    }
+
+    function setApiHealth(status, errMsg = '') {
+      state.apiHealth = status;
+      const pill = document.getElementById('hud-health-pill');
+      const dot = document.getElementById('hud-health-dot');
+      const txt = document.getElementById('hud-health-text');
+      const banner = document.getElementById('global-error-banner');
+
+      if (status === 'LIVE') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
+        txt.textContent = 'LIVE';
+        banner.classList.add('hidden');
+      } else if (status === 'BACKOFF') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+        txt.textContent = 'BACKOFF';
+        banner.classList.remove('hidden');
+        document.getElementById('global-error-msg').textContent = errMsg || 'API error — backing off. Auto-Trading paused safely.';
+      } else {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+        txt.textContent = 'OFFLINE';
+        banner.classList.remove('hidden');
+        document.getElementById('global-error-msg').textContent = errMsg || 'API unreachable. Auto-Trading paused safely.';
+      }
+      renderAutoTraderHeaderStatus();
+    }
+
+    /*************************************************************************
+     * 3. NORMALIZATION, ALPHA SCORE & STRICT LIQUIDITY/SELLABILITY GATE
+     *************************************************************************/
+    function computeAlphaScore(p) {
+      let sLiq = p.liquidityUsd >= 250000 ? 25 : p.liquidityUsd >= 100000 ? 20 : p.liquidityUsd >= 75000 ? 16 : p.liquidityUsd >= 25000 ? 8 : 2;
+      let sVel = p.volLiq >= 4 ? 25 : p.volLiq >= 2 ? 20 : p.volLiq >= 1 ? 14 : p.volLiq >= 0.5 ? 8 : 3;
+      let sBuy = p.buyRatio >= 65 ? 20 : p.buyRatio >= 58 ? 16 : p.buyRatio >= 55 ? 12 : p.buyRatio >= 48 ? 6 : 0;
+      let sMom = (p.priceChange.m5 > 0 && p.priceChange.h1 > 0) ? 15 : (p.priceChange.m5 > 0 || p.priceChange.h1 > 0) ? 7 : 0;
+      let sSell = p.sells1h >= 25 ? 15 : p.sells1h >= 10 ? 10 : p.sells1h >= 3 ? 4 : 0;
+      return sLiq + sVel + sBuy + sMom + sSell;
+    }
+
+    function normalizePairs(rawPairs, chainFilter = 'all', iconMap = new Map()) {
+      const best = new Map();
+      for (const p of rawPairs) {
+        const chainId = (p.chainId || '').toLowerCase();
+        if (!SUPPORTED_CHAINS.includes(chainId)) continue;
+        if (chainFilter !== 'all' && chainId !== chainFilter) continue;
+        if (!p.baseToken?.address) continue;
+
+        const price = Number(p.priceUsd);
+        if (!Number.isFinite(price) || price <= 0) continue;
+
+        const liq = Number(p.liquidity?.usd || 0);
+        const key = `${chainId}:${p.baseToken.address.toLowerCase()}`;
+        const existing = best.get(key);
+
+        if (!existing || liq > existing.liquidityUsd) {
+          const vol = Number(p.volume?.h24 || 0);
+          const fdv = Number(p.fdv || p.marketCap || 0);
+          const buys24 = Number(p.txns?.h24?.buys || 0);
+          const sells24 = Number(p.txns?.h24?.sells || 0);
+          const buys1h = Number(p.txns?.h1?.buys || 0);
+          const sells1h = Number(p.txns?.h1?.sells || 0);
+          const total24 = buys24 + sells24;
+          const buyRatio = total24 > 0 ? (buys24 / total24) * 100 : 0;
+          const volLiq = liq > 0 ? vol / liq : 0;
+          const liqFdvPct = fdv > 0 ? (liq / fdv) * 100 : 0;
+
+          const item = {
+            id: key,
+            chainId,
+            dexId: p.dexId || 'unknown',
+            pairAddress: p.pairAddress || '',
+            address: p.baseToken.address,
+            symbol: (p.baseToken.symbol || '???').toUpperCase(),
+            name: p.baseToken.name || p.baseToken.symbol || 'Unknown',
+            priceUsd: price,
+            priceChange: {
+              m5: Number(p.priceChange?.m5 ?? 0),
+              h1: Number(p.priceChange?.h1 ?? 0),
+              h6: Number(p.priceChange?.h6 ?? 0),
+              h24: Number(p.priceChange?.h24 ?? 0)
+            },
+            liquidityUsd: liq,
+            volume24h: vol,
+            volLiq,
+            fdv,
+            liqFdvPct,
+            buys24,
+            sells24,
+            buys1h,
+            sells1h,
+            buyRatio,
+            pairCreatedAt: p.pairCreatedAt ? Number(p.pairCreatedAt) : null,
+            url: p.url || `https://dexscreener.com/${chainId}/${p.pairAddress || p.baseToken.address}`,
+            icon: p.info?.imageUrl || iconMap.get(key) || ''
+          };
+          item.alphaScore = computeAlphaScore(item);
+          best.set(key, item);
+        }
+      }
+      return Array.from(best.values());
+    }
+
+    /**
+     * Evaluates deterministic Liquidity & Sellability metrics BEFORE calling external security APIs.
+     */
+    function checkLiquidityGate(pair) {
+      const c = state.config;
+      if (pair.liquidityUsd < c.minLiquidityUsd) {
+        return { ok: false, reason: `Liquidity ${formatUsd(pair.liquidityUsd)} < min ${formatUsd(c.minLiquidityUsd)}` };
+      }
+      const tradeToLiqPct = pair.liquidityUsd > 0 ? (c.tradeSizeUsd / pair.liquidityUsd) * 100 : 100;
+      if (tradeToLiqPct > c.maxTradeToLiqPct) {
+        return { ok: false, reason: `Trade/Liq ${tradeToLiqPct.toFixed(2)}% > max ${c.maxTradeToLiqPct}%` };
+      }
+      if (c.minLiqFdvPct > 0 && pair.liqFdvPct < c.minLiqFdvPct) {
+        return { ok: false, reason: `Liq/FDV ${pair.liqFdvPct.toFixed(1)}% < min ${c.minLiqFdvPct}%` };
+      }
+      if (pair.sells1h < c.minSells1h) {
+        return { ok: false, reason: `1h Sells ${pair.sells1h} < min ${c.minSells1h} (unproven sellability)` };
+      }
+      if (pair.volume24h < c.minVolume24h) {
+        return { ok: false, reason: `24h Vol ${formatUsd(pair.volume24h)} < min ${formatUsd(c.minVolume24h)}` };
+      }
+      if (pair.buyRatio < c.minBuyRatioPct) {
+        return { ok: false, reason: `Buy Ratio ${pair.buyRatio.toFixed(0)}% < min ${c.minBuyRatioPct}%` };
+      }
+      return { ok: true, reason: 'Liquidity & Sellability Gate Passed' };
+    }
+
+    /**
+     * Mandatory Live Security Audit with 15-minute cache & strict fail-safe rejection.
+     */
+    async function runMandatorySecurityAudit(pair, forceRefresh = false) {
+      const cacheKey = pair.id;
+      const cached = state.securityCache.get(cacheKey);
+      if (!forceRefresh && cached && (Date.now() - cached.ts < SECURITY_CACHE_TTL_MS)) {
+        return cached;
+      }
+
+      if (pair.chainId === 'solana') {
+        const url = `https://api.rugcheck.xyz/v1/tokens/${encodeURIComponent(pair.address)}/report/summary`;
+        try {
+          const r = await strictFetchJson(url, 'SEC/RUGCHECK', 9000);
+          const rugged = Boolean(r.rugged);
+          const score = typeof r.score === 'number' ? r.score : (typeof r.score_normalised === 'number' ? r.score_normalised : 0);
+          const risks = Array.isArray(r.risks) ? r.risks : [];
+          const dangerRisk = risks.find(x => (x.level || '').toLowerCase() === 'danger');
+
+          let pass = true;
+          let reason = `RugCheck PASS (Score ${score}, 0 danger flags)`;
+          if (rugged) { pass = false; reason = 'RugCheck REJECT: Token marked RUGGED'; }
+          else if (score > 2000) { pass = false; reason = `RugCheck REJECT: Risk score ${score} > 2000`; }
+          else if (dangerRisk) { pass = false; reason = `RugCheck REJECT: Danger flag (${dangerRisk.name || 'Critical'})`; }
+
+          const result = { ts: Date.now(), pass, reason, provider: 'RugCheck', score, risks };
+          state.securityCache.set(cacheKey, result);
+          return result;
+        } catch (err) {
+          return { ts: Date.now(), pass: false, reason: `Security API unreachable (RugCheck: ${err.message})`, provider: 'RugCheck', apiError: true };
+        }
+      } else if (EVM_CHAIN_IDS[pair.chainId]) {
+        const evmId = EVM_CHAIN_IDS[pair.chainId];
+        const url = `https://api.gopluslabs.io/api/v1/token_security/${evmId}?contract_addresses=${encodeURIComponent(pair.address)}`;
+        try {
+          const gp = await strictFetchJson(url, `SEC/GOPLUS-${evmId}`, 9000);
+          const d = gp?.result?.[pair.address.toLowerCase()];
+          if (!d) {
+            return { ts: Date.now(), pass: false, reason: 'GoPlus REJECT: Contract unindexed / empty report', provider: 'GoPlus' };
+          }
+          const honeypot = d.is_honeypot === '1';
+          const cantSellAll = d.cannot_sell_all === '1';
+          const buyTax = d.buy_tax !== '' && d.buy_tax !== undefined ? Number(d.buy_tax) : 0;
+          const sellTax = d.sell_tax !== '' && d.sell_tax !== undefined ? Number(d.sell_tax) : 0;
+
+          let pass = true;
+          let reason = `GoPlus PASS (Tax ${(buyTax*100).toFixed(1)}%/${(sellTax*100).toFixed(1)}%, No Honeypot)`;
+          if (honeypot) { pass = false; reason = 'GoPlus REJECT: Honeypot detected'; }
+          else if (cantSellAll) { pass = false; reason = 'GoPlus REJECT: Cannot sell all tokens'; }
+          else if (sellTax > 0.05) { pass = false; reason = `GoPlus REJECT: Sell tax ${(sellTax*100).toFixed(1)}% > 5%`; }
+          else if (buyTax > 0.05) { pass = false; reason = `GoPlus REJECT: Buy tax ${(buyTax*100).toFixed(1)}% > 5%`; }
+
+          const result = { ts: Date.now(), pass, reason, provider: 'GoPlus', buyTax, sellTax, data: d };
+          state.securityCache.set(cacheKey, result);
+          return result;
+        } catch (err) {
+          return { ts: Date.now(), pass: false, reason: `Security API unreachable (GoPlus: ${err.message})`, provider: 'GoPlus', apiError: true };
+        }
+      }
+
+      return { ts: Date.now(), pass: false, reason: `Unsupported security chain: ${pair.chainId}`, provider: 'None' };
+    }
+
+    /*************************************************************************
+     * 4. REALISTIC AMM PAPER EXECUTION (BUY & SELL WITH IMPACT + 0.30% FEE)
+     *************************************************************************/
+    function calcBuyExecution(tradeUsd, priceUsd, liquidityUsd) {
+      const feeUsd = tradeUsd * DEX_FEE_RATE;
+      const impactRate = liquidityUsd > 0 ? Math.min(0.25, tradeUsd / (2 * liquidityUsd)) : 0.05;
+      const effectiveBuyPrice = priceUsd * (1 + impactRate);
+      const netCapital = Math.max(0, tradeUsd - feeUsd);
+      const tokensBought = netCapital / effectiveBuyPrice;
+      const impactUsd = netCapital * impactRate;
+      return { feeUsd, impactRate, impactUsd, effectiveBuyPrice, tokensBought };
+    }
+
+    function calcSellExecution(tokensQty, livePriceUsd, liveLiquidityUsd) {
+      const grossValueUsd = tokensQty * livePriceUsd;
+      const impactRate = liveLiquidityUsd > 0 ? Math.min(0.50, grossValueUsd / (2 * liveLiquidityUsd)) : 0.10;
+      const effectiveSellPrice = livePriceUsd * (1 - impactRate);
+      const afterImpactUsd = tokensQty * effectiveSellPrice;
+      const impactUsd = grossValueUsd - afterImpactUsd;
+      const feeUsd = afterImpactUsd * DEX_FEE_RATE;
+      const netProceedsUsd = Math.max(0, afterImpactUsd - feeUsd);
+      return { grossValueUsd, impactRate, impactUsd, feeUsd, effectiveSellPrice, netProceedsUsd };
+    }
+
+    function executePaperBuy(pair, tradeUsd, modeLabel, securitySummary) {
+      if (tradeUsd <= 0 || tradeUsd > state.cashUsd) return false;
+      const exec = calcBuyExecution(tradeUsd, pair.priceUsd, pair.liquidityUsd);
+
+      state.cashUsd -= tradeUsd;
+      const pos = {
+        id: 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        pairId: pair.id,
+        chainId: pair.chainId,
+        pairAddress: pair.pairAddress,
+        address: pair.address,
+        symbol: pair.symbol,
+        name: pair.name,
+        entryTime: Date.now(),
+        entrySpotPrice: pair.priceUsd,
+        buyPrice: exec.effectiveBuyPrice,
+        tokens: exec.tokensBought,
+        costUsd: tradeUsd,
+        buyFeeAndImpactUsd: exec.feeUsd + exec.impactUsd,
+        entryLiquidityUsd: pair.liquidityUsd,
+        lastPrice: pair.priceUsd,
+        lastLiquidityUsd: pair.liquidityUsd,
+        peakPrice: pair.priceUsd,
+        trailArmed: false,
+        lastSyncMs: Date.now(),
+        stale: false,
+        securitySummary: securitySummary || modeLabel
+      };
+
+      state.openPositions.unshift(pos);
+      persistPortfolio();
+
+      logDecision('BOUGHT', pair.symbol, pair.chainId, `${modeLabel} $${tradeUsd.toFixed(2)} → ${formatTokens(exec.tokensBought)} @ ${formatPrice(exec.effectiveBuyPrice)} | Liq ${formatUsd(pair.liquidityUsd)} | ${securitySummary}`);
+      showToast(`BOUGHT ${pair.symbol}: $${tradeUsd.toFixed(2)} @ ${formatPrice(exec.effectiveBuyPrice)}`, 'success');
+      if (state.audioEnabled) playChime(880, 0.14);
+      sendBrowserNotif(`AUTO-BUY: ${pair.symbol}`, `$${tradeUsd.toFixed(2)} (${formatTokens(exec.tokensBought)} tokens) @ ${formatPrice(exec.effectiveBuyPrice)}`);
+      return true;
+    }
+
+    function executePaperSell(posId, fraction, exitReason) {
+      const idx = state.openPositions.findIndex(p => p.id === posId);
+      if (idx === -1) return false;
+      const pos = state.openPositions[idx];
+      const frac = Math.min(1, Math.max(0.01, fraction));
+
+      const sellTokens = pos.tokens * frac;
+      const closedCost = pos.costUsd * frac;
+      const buyFeesPortion = pos.buyFeeAndImpactUsd * frac;
+      const exec = calcSellExecution(sellTokens, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
+
+      const totalFeesImpact = buyFeesPortion + exec.feeUsd + exec.impactUsd;
+      const netPnlUsd = exec.netProceedsUsd - closedCost;
+      const netPnlPct = closedCost > 0 ? (netPnlUsd / closedCost) * 100 : 0;
+
+      state.cashUsd += exec.netProceedsUsd;
+
+      const record = {
+        id: 'tr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+        symbol: pos.symbol,
+        chainId: pos.chainId,
+        address: pos.address,
+        entryTime: pos.entryTime,
+        buyPrice: pos.buyPrice,
+        tokensBought: sellTokens,
+        costUsd: closedCost,
+        entryLiquidityUsd: pos.entryLiquidityUsd,
+        exitTime: Date.now(),
+        sellPrice: exec.effectiveSellPrice,
+        exitValueUsd: exec.netProceedsUsd,
+        feesImpactUsd: totalFeesImpact,
+        netPnlUsd,
+        netPnlPct,
+        exitReason: frac < 0.999 ? `${exitReason} (50%)` : exitReason
+      };
+
+      state.closedTrades.unshift(record);
+      state.cooldowns[pos.pairId] = Date.now();
+
+      if (frac >= 0.999) {
+        state.openPositions.splice(idx, 1);
+      } else {
+        pos.tokens -= sellTokens;
+        pos.costUsd -= closedCost;
+        pos.buyFeeAndImpactUsd -= buyFeesPortion;
+      }
+
+      persistPortfolio();
+      renderAutoTraderView();
+      renderLedger();
+
+      const sign = netPnlUsd >= 0 ? '+' : '-';
+      logDecision('SOLD', pos.symbol, pos.chainId, `[${record.exitReason}] ${formatPrice(pos.buyPrice)} → ${formatPrice(exec.effectiveSellPrice)} | Net ${sign}$${Math.abs(netPnlUsd).toFixed(2)} (${formatPct(netPnlPct)})`);
+      showToast(`SOLD ${pos.symbol} (${record.exitReason}): ${sign}$${Math.abs(netPnlUsd).toFixed(2)}`, netPnlUsd >= 0 ? 'success' : 'warn');
+      if (state.audioEnabled) playChime(netPnlUsd >= 0 ? 1046 : 330, 0.2);
+      sendBrowserNotif(`AUTO-SELL ${pos.symbol} (${record.exitReason})`, `Net PnL: ${sign}$${Math.abs(netPnlUsd).toFixed(2)} (${formatPct(netPnlPct)})`);
+      return true;
+    }
+
+    function logDecision(action, symbol, chainId, reason) {
+      state.decisionLog.unshift({
+        ts: Date.now(),
+        timeStr: new Date().toLocaleTimeString([], { hour12: false }),
+        action, // 'BOUGHT' | 'SOLD' | 'SKIPPED'
+        symbol,
+        chainId,
+        reason
+      });
+      if (state.decisionLog.length > 150) state.decisionLog.pop();
+      persistPortfolio();
+      renderDecisionLog();
+    }
+
+    /*************************************************************************
+     * 5. LIVE AUTONOMOUS EXECUTION LOOP (POLL -> REFRESH POS -> EXIT -> BUY)
+     *************************************************************************/
+    async function pollAndExecuteCycle() {
+      if (state.isFetching) return;
+      state.isFetching = true;
+      document.getElementById('hud-refresh-icon')?.classList.add('animate-spin');
+
+      let feedOk = false;
+      try {
+        await fetchRadarFeed();
+        feedOk = true;
+        state.consecutiveFailures = 0;
+        state.inBackoff = false;
+        state.countdownSec = state.pollIntervalSec || 30;
+        setApiHealth('LIVE');
+      } catch (err) {
+        state.consecutiveFailures++;
+        state.inBackoff = true;
+        const backoffSec = BACKOFF_STEPS[Math.min(state.consecutiveFailures - 1, BACKOFF_STEPS.length - 1)];
+        state.countdownSec = backoffSec;
+        setApiHealth(state.consecutiveFailures >= 3 ? 'OFFLINE' : 'BACKOFF', `DexScreener error: ${err.message}. Auto-Trading paused safely.`);
+        document.getElementById('global-error-backoff').textContent = `Exponential backoff retry #${state.consecutiveFailures} in ${backoffSec}s.`;
+
+        if (state.pairs.length === 0) {
+          setRadarStatePanel(`Live API Error: ${err.message}`, `Zero mock coins displayed. Retrying in ${backoffSec}s.`);
+        }
+      }
+
+      // Step 1: Refresh open positions strictly via /latest/dex/pairs/{chainId}/{pairs}
+      const posOk = await refreshOpenPositionsLive();
+
+      // Step 2: If API is healthy and Auto-Paper-Trade is ON, run exits then buys
+      if (feedOk && posOk && state.autoTradeEnabled) {
+        evaluateAutoExits();
+        await evaluateAutoBuys();
+      }
+
+      renderAutoTraderView();
+      renderLedger();
+
+      state.isFetching = false;
+      document.getElementById('hud-refresh-icon')?.classList.remove('animate-spin');
+    }
+
+    async function fetchRadarFeed() {
+      let livePairs = [];
+
+      if (state.feed === 'search') {
+        const q = state.searchQuery.trim();
+        if (!q) {
+          state.pairs = [];
+          renderRadarTable();
+          setRadarStatePanel('Live DexScreener Search', 'Enter a symbol or contract address above and click Search API.');
+          return;
+        }
+        const data = await strictFetchJson(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(q)}`, 'RADAR/SEARCH');
+        if (!Array.isArray(data?.pairs)) throw new Error('Malformed search payload');
+        livePairs = normalizePairs(data.pairs, state.chain);
+      } else {
+        const urls = {
+          'latest-boosts': 'https://api.dexscreener.com/token-boosts/latest/v1',
+          'top-boosts': 'https://api.dexscreener.com/token-boosts/top/v1',
+          'profiles': 'https://api.dexscreener.com/token-profiles/latest/v1'
+        };
+        const items = await strictFetchJson(urls[state.feed], `RADAR/${state.feed.toUpperCase()}`);
+        if (!Array.isArray(items) || !items.length) throw new Error('DexScreener feed returned empty array');
+
+        const byChain = new Map();
+        const iconMap = new Map();
+        for (const it of items) {
+          const c = (it.chainId || '').toLowerCase();
+          if (!SUPPORTED_CHAINS.includes(c)) continue;
+          if (state.chain !== 'all' && c !== state.chain) continue;
+          if (!it.tokenAddress) continue;
+          if (!byChain.has(c)) byChain.set(c, new Set());
+          byChain.get(c).add(it.tokenAddress);
+          if (it.icon) iconMap.set(`${c}:${it.tokenAddress.toLowerCase()}`, it.icon);
+        }
+
+        const rawPairs = [];
+        let batchIdx = 0;
+        for (const [chainId, set] of byChain.entries()) {
+          const addrs = Array.from(set);
+          for (let i = 0; i < addrs.length; i += 30) {
+            if (batchIdx > 0) await sleep(230);
+            batchIdx++;
+            const chunk = addrs.slice(i, i + 30);
+            const batchData = await strictFetchJson(`https://api.dexscreener.com/tokens/v1/${encodeURIComponent(chainId)}/${chunk.join(',')}`, `ENRICH/${chainId.toUpperCase()}`);
+            if (Array.isArray(batchData)) rawPairs.push(...batchData);
+          }
+        }
+        livePairs = normalizePairs(rawPairs, state.chain, iconMap);
+      }
+
+      state.priceFlashes.clear();
+      for (const p of livePairs) {
+        const prev = state.prevPrices.get(p.id);
+        if (prev !== undefined && prev !== p.priceUsd) {
+          state.priceFlashes.set(p.id, p.priceUsd > prev ? 'up' : 'down');
+        }
+        state.prevPrices.set(p.id, p.priceUsd);
+      }
+
+      state.pairs = livePairs;
+      state.lastRadarSyncMs = Date.now();
+      document.getElementById('radar-sync-status').textContent = `Synced ${formatTime(state.lastRadarSyncMs)}`;
+      renderRadarTable();
+
+      if (state.selectedPair) {
+        const fresh = livePairs.find(p => p.id === state.selectedPair.id);
+        if (fresh) {
+          state.selectedPair = fresh;
+          populateInspector(fresh);
+        }
+      }
+    }
+
+    async function refreshOpenPositionsLive() {
+      if (state.openPositions.length === 0) {
+        state.positionsStale = false;
+        state.lastPosSyncMs = Date.now();
+        return true;
+      }
+
+      const byChain = new Map();
+      state.openPositions.forEach(p => {
+        if (!p.pairAddress) return;
+        if (!byChain.has(p.chainId)) byChain.set(p.chainId, new Set());
+        byChain.get(p.chainId).add(p.pairAddress);
+      });
+
+      const liveMap = new Map();
+      let hadError = false;
+      let errMsg = '';
+
+      for (const [chainId, set] of byChain.entries()) {
+        const list = Array.from(set);
+        for (let i = 0; i < list.length; i += 30) {
+          try {
+            await sleep(200);
+            const url = `https://api.dexscreener.com/latest/dex/pairs/${encodeURIComponent(chainId)}/${list.slice(i, i + 30).join(',')}`;
+            const res = await strictFetchJson(url, `POSITIONS/${chainId.toUpperCase()}`);
+            const arr = Array.isArray(res?.pairs) ? res.pairs : (res?.pair ? [res.pair] : []);
+            const norm = normalizePairs(arr, chainId);
+            norm.forEach(np => {
+              liveMap.set(np.pairAddress.toLowerCase(), np);
+              liveMap.set(np.id, np);
+            });
+          } catch (err) {
+            hadError = true;
+            errMsg = err.message;
+          }
+        }
+      }
+
+      const now = Date.now();
+      state.positionsStale = hadError;
+      state.positionsStaleReason = errMsg;
+      if (!hadError) state.lastPosSyncMs = now;
+
+      for (const pos of state.openPositions) {
+        const live = liveMap.get((pos.pairAddress || '').toLowerCase()) || liveMap.get(pos.pairId);
+        if (live) {
+          pos.lastPrice = live.priceUsd;
+          pos.lastLiquidityUsd = live.liquidityUsd;
+          if (live.priceUsd > (pos.peakPrice || pos.entrySpotPrice)) {
+            pos.peakPrice = live.priceUsd;
+          }
+          const peakGainPct = ((pos.peakPrice - pos.buyPrice) / pos.buyPrice) * 100;
+          if (state.config.trailArmPct > 0 && peakGainPct >= state.config.trailArmPct) {
+            pos.trailArmed = true;
+          }
+          pos.lastSyncMs = now;
+          pos.stale = false;
+        } else if (hadError) {
+          pos.stale = true;
+        }
+      }
+
+      persistPortfolio();
+      return !hadError;
+    }
+
+    function evaluateAutoExits() {
+      const c = state.config;
+      const toExit = [];
+
+      for (const pos of state.openPositions) {
+        if (pos.stale) continue;
+        const exec = calcSellExecution(pos.tokens, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
+        const netPnlPct = ((exec.netProceedsUsd - pos.costUsd) / pos.costUsd) * 100;
+        const holdHours = (Date.now() - pos.entryTime) / 3600000;
+        const dropFromPeakPct = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
+        const liqDropPct = pos.entryLiquidityUsd > 0 ? ((pos.entryLiquidityUsd - pos.lastLiquidityUsd) / pos.entryLiquidityUsd) * 100 : 0;
+
+        if (liqDropPct > 60) {
+          toExit.push({ id: pos.id, reason: 'LIQ_DROP' });
+        } else if (netPnlPct >= c.tpPct) {
+          toExit.push({ id: pos.id, reason: 'TP' });
+        } else if (netPnlPct <= -c.slPct) {
+          toExit.push({ id: pos.id, reason: 'SL' });
+        } else if (pos.trailArmed && c.trailDropPct > 0 && dropFromPeakPct >= c.trailDropPct) {
+          toExit.push({ id: pos.id, reason: 'TRAILING' });
+        } else if (c.maxHoldHours > 0 && holdHours >= c.maxHoldHours) {
+          toExit.push({ id: pos.id, reason: 'MAX_HOLD' });
+        }
+      }
+
+      for (const ex of toExit) {
+        executePaperSell(ex.id, 1, ex.reason);
+      }
+    }
+
+    async function evaluateAutoBuys() {
+      const c = state.config;
+      if (state.openPositions.length >= c.maxOpenPositions) return;
+      if (state.cashUsd < c.tradeSizeUsd) return;
+      if (!state.pairs.length) return;
+
+      const heldIds = new Set(state.openPositions.map(p => p.pairId));
+      const now = Date.now();
+      const cooldownMs = c.cooldownMins * 60000;
+
+      // Rank live pairs by Alpha Score descending
+      const ranked = [...state.pairs].sort((a, b) => b.alphaScore - a.alphaScore);
+
+      let secChecksThisCycle = 0; // Respect rate limits: max 4 fresh security calls per poll cycle
+
+      for (const pair of ranked) {
+        if (state.openPositions.length >= c.maxOpenPositions || state.cashUsd < c.tradeSizeUsd) break;
+        if (heldIds.has(pair.id)) continue;
+
+        const lastSold = state.cooldowns[pair.id] || 0;
+        if (now - lastSold < cooldownMs) continue;
+
+        // 1) Deterministic Liquidity & Sellability Gate
+        const gate = checkLiquidityGate(pair);
+        if (!gate.ok) {
+          // Log top candidates that failed gate so user sees why
+          if (secChecksThisCycle < 2 && pair.liquidityUsd >= c.minLiquidityUsd * 0.2) {
+            logDecision('SKIPPED', pair.symbol, pair.chainId, gate.reason);
+          }
+          continue;
+        }
+
+        // 2) Mandatory Live Security Audit (RugCheck / GoPlus)
+        const cached = state.securityCache.get(pair.id);
+        const needsFreshCall = !cached || (now - cached.ts >= SECURITY_CACHE_TTL_MS);
+        if (needsFreshCall) {
+          if (secChecksThisCycle >= 4) break;
+          secChecksThisCycle++;
+          await sleep(250);
+        }
+
+        const sec = await runMandatorySecurityAudit(pair, false);
+        if (!sec.pass) {
+          logDecision('SKIPPED', pair.symbol, pair.chainId, sec.reason);
+          continue;
+        }
+
+        // 3) All checks passed -> Execute Autonomous Paper Buy
+        const bought = executePaperBuy(pair, c.tradeSizeUsd, 'AUTO-BUY', sec.reason);
+        if (bought) heldIds.add(pair.id);
+      }
+    }
+
+    /*************************************************************************
+     * 6. UI RENDERERS: RADAR, AUTO-TRADER, LEDGER, TELEMETRY, INSPECTOR
+     *************************************************************************/
+    function renderRadarTable() {
+      const tbody = document.getElementById('radar-tbody');
+      const panel = document.getElementById('radar-state-panel');
+      const onlyPassing = document.getElementById('radar-only-passing').checked;
+
+      let rows = state.pairs.map(p => ({ p, gate: checkLiquidityGate(p) }));
+      if (onlyPassing) rows = rows.filter(x => x.gate.ok);
+
+      const mul = state.sortDir === 'desc' ? -1 : 1;
+      rows.sort((a, b) => {
+        const pa = a.p, pb = b.p;
+        let va = 0, vb = 0;
+        switch (state.sortCol) {
+          case 'age': va = pa.pairCreatedAt || 0; vb = pb.pairCreatedAt || 0; break;
+          case 'price': va = pa.priceUsd; vb = pb.priceUsd; break;
+          case 'm5': va = pa.priceChange.m5; vb = pb.priceChange.m5; break;
+          case 'h1': va = pa.priceChange.h1; vb = pb.priceChange.h1; break;
+          case 'liq': va = pa.liquidityUsd; vb = pb.liquidityUsd; break;
+          case 'liqFdv': va = pa.liqFdvPct; vb = pb.liqFdvPct; break;
+          case 'vol': va = pa.volume24h; vb = pb.volume24h; break;
+          case 'sells1h': va = pa.sells1h; vb = pb.sells1h; break;
+          case 'buyRatio': va = pa.buyRatio; vb = pb.buyRatio; break;
+          case 'alpha': default: va = pa.alphaScore; vb = pb.alphaScore; break;
+        }
+        return (va - vb) * mul;
+      });
+
+      document.getElementById('radar-count-summary').textContent = `${rows.length} / ${state.pairs.length} live pairs`;
+
+      if (!rows.length) {
+        tbody.innerHTML = '';
+        if (state.pairs.length > 0) {
+          setRadarStatePanel('0 live pairs currently pass your Strict Liquidity & Sellability Gate.', 'Uncheck "Show only Liquidity-Gate Passing" or adjust thresholds in Auto-Trader & Positions.');
+        }
+        return;
+      }
+
+      panel.classList.add('hidden');
+      tbody.innerHTML = rows.map(({ p, gate }) => {
+        const ch = getChainMeta(p.chainId);
+        const flash = state.priceFlashes.get(p.id);
+        const flashCls = flash === 'up' ? 'row-flash-up' : flash === 'down' ? 'row-flash-down' : '';
+        const buyPct = Math.round(p.buyRatio);
+        const gateBadge = gate.ok
+          ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Passes Liquidity & Sellability Gate">PASS</span>`
+          : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700" title="${esc(gate.reason)}">FAIL</span>`;
+        const avatar = p.icon
+          ? `<img src="${esc(p.icon)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0">${esc(p.symbol.slice(0,2))}</div>`
+          : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0">${esc(p.symbol.slice(0,2))}</div>`;
+
+        return `
+          <tr onclick="openInspectorById('${esc(p.id)}')" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
+            <td class="py-2.5 px-3.5">
+              <div class="flex items-center gap-2.5 min-w-[175px]">
+                ${avatar}
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-white truncate max-w-[95px]">${esc(p.symbol)}</span>
+                    <span class="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${ch.cls}">${ch.label}</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 truncate max-w-[150px]">${esc(p.name)} • <span class="font-mono text-[10px] text-slate-500">${formatAge(p.pairCreatedAt)}</span></div>
+                </div>
+              </div>
+            </td>
+            <td class="py-2.5 px-2.5 text-right font-mono font-semibold text-white whitespace-nowrap tabular-nums">${formatPrice(p.priceUsd)}</td>
+            <td class="py-2.5 px-2 text-right font-mono whitespace-nowrap tabular-nums ${pctColor(p.priceChange.m5)}">${formatPct(p.priceChange.m5)}</td>
+            <td class="py-2.5 px-2 text-right font-mono font-semibold whitespace-nowrap tabular-nums ${pctColor(p.priceChange.h1)}">${formatPct(p.priceChange.h1)}</td>
+            <td class="py-2.5 px-2.5 text-right font-mono text-slate-200 whitespace-nowrap tabular-nums">${formatUsd(p.liquidityUsd)}</td>
+            <td class="py-2.5 px-2 text-right font-mono whitespace-nowrap tabular-nums ${p.liqFdvPct >= state.config.minLiqFdvPct ? 'text-cyan-300' : 'text-slate-500'}">${p.liqFdvPct.toFixed(1)}%</td>
+            <td class="py-2.5 px-2.5 text-right font-mono text-slate-200 whitespace-nowrap tabular-nums">${formatUsd(p.volume24h)}</td>
+            <td class="py-2.5 px-2 text-right font-mono whitespace-nowrap tabular-nums ${p.sells1h >= state.config.minSells1h ? 'text-emerald-400' : 'text-amber-400'}">${p.sells1h}</td>
+            <td class="py-2.5 px-2.5">
+              <div class="w-20 mx-auto">
+                <div class="text-[10px] font-mono text-center text-slate-300 mb-0.5">${buyPct}%</div>
+                <div class="h-1.5 w-full rounded-full bg-rose-500/40 overflow-hidden"><div class="h-full bg-emerald-400" style="width:${buyPct}%"></div></div>
+              </div>
+            </td>
+            <td class="py-2.5 px-2 text-center">${gateBadge}</td>
+            <td class="py-2.5 px-2 text-right font-mono font-bold text-white tabular-nums">${p.alphaScore}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="event.stopPropagation(); openInspectorById('${esc(p.id)}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-semibold">Inspect</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function setRadarStatePanel(title, sub) {
+      const p = document.getElementById('radar-state-panel');
+      p.classList.remove('hidden');
+      document.getElementById('radar-state-title').textContent = title;
+      document.getElementById('radar-state-sub').textContent = sub;
+    }
+
+    function renderAutoTraderHeaderStatus() {
+      const btn = document.getElementById('master-auto-btn');
+      const dot = document.getElementById('master-auto-dot');
+      const lbl = document.getElementById('master-auto-label');
+      const statusTxt = document.getElementById('at-status-text');
+
+      if (state.autoTradeEnabled) {
+        if (state.apiHealth === 'LIVE') {
+          btn.className = 'px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition shadow-lg bg-emerald-500/20 border-emerald-500/60 text-emerald-300';
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+          lbl.textContent = 'AUTO-PAPER-TRADE: ON';
+          if (statusTxt) { statusTxt.textContent = 'ACTIVE (LIVE)'; statusTxt.className = 'mt-1 font-mono text-sm font-bold text-emerald-400'; }
+        } else {
+          btn.className = 'px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition shadow-lg bg-amber-500/20 border-amber-500/60 text-amber-300';
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+          lbl.textContent = 'AUTO-PAPER-TRADE: PAUSED';
+          if (statusTxt) { statusTxt.textContent = 'PAUSED (API OFFLINE)'; statusTxt.className = 'mt-1 font-mono text-sm font-bold text-amber-400'; }
+        }
+      } else {
+        btn.className = 'px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition bg-slate-800/80 border-slate-600 text-slate-300 hover:border-emerald-500/50';
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+        lbl.textContent = 'AUTO-PAPER-TRADE: OFF';
+        if (statusTxt) { statusTxt.textContent = 'PAUSED (OFF)'; statusTxt.className = 'mt-1 font-mono text-sm font-bold text-slate-400'; }
+      }
+    }
+
+    function renderAutoTraderView() {
+      document.getElementById('badge-open-pos').textContent = state.openPositions.length;
+      renderAutoTraderHeaderStatus();
+
+      // Stale banner
+      const staleEl = document.getElementById('pos-stale-banner');
+      if (state.positionsStale && state.openPositions.length > 0) {
+        staleEl.classList.remove('hidden');
+        document.getElementById('pos-stale-msg').textContent = `Open position sync failed (${state.positionsStaleReason}). Positions flagged STALE (API OFFLINE).`;
+      } else {
+        staleEl.classList.add('hidden');
+      }
+
+      // Compute KPIs
+      let deployed = 0;
+      let netOpenVal = 0;
+      let anyStale = false;
+      state.openPositions.forEach(p => {
+        deployed += p.costUsd;
+        const est = calcSellExecution(p.tokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
+        netOpenVal += est.netProceedsUsd;
+        if (p.stale) anyStale = true;
+      });
+      const equity = state.cashUsd + netOpenVal;
+      const unrPnl = netOpenVal - deployed;
+      const realPnl = state.closedTrades.reduce((a, t) => a + t.netPnlUsd, 0);
+      const eqRoi = state.config.startingBankroll > 0 ? ((equity - state.config.startingBankroll) / state.config.startingBankroll) * 100 : 0;
+
+      document.getElementById('at-cash').textContent = `$${state.cashUsd.toFixed(2)}`;
+      document.getElementById('at-deployed').textContent = `$${deployed.toFixed(2)}`;
+      document.getElementById('at-slots').textContent = `${state.openPositions.length} / ${state.config.maxOpenPositions} slots used`;
+      document.getElementById('at-equity').textContent = `$${equity.toFixed(2)}`;
+      const roiEl = document.getElementById('at-equity-roi');
+      roiEl.textContent = `${formatPct(eqRoi)} vs $${state.config.startingBankroll}`;
+      roiEl.className = `text-[10px] font-mono tabular-nums ${pctColor(eqRoi)}`;
+
+      const unrEl = document.getElementById('at-unr-pnl');
+      if (anyStale) {
+        unrEl.textContent = 'STALE';
+        unrEl.className = 'mt-1 font-mono text-lg sm:text-xl font-bold text-amber-400';
+      } else {
+        unrEl.textContent = `${unrPnl >= 0 ? '+' : '-'}$${Math.abs(unrPnl).toFixed(2)}`;
+        unrEl.className = `mt-1 font-mono text-lg sm:text-xl font-bold tabular-nums ${pctColor(unrPnl)}`;
+      }
+
+      const realEl = document.getElementById('at-real-pnl');
+      realEl.textContent = `${realPnl >= 0 ? '+' : '-'}$${Math.abs(realPnl).toFixed(2)}`;
+      realEl.className = `mt-1 font-mono text-lg sm:text-xl font-bold tabular-nums ${pctColor(realPnl)}`;
+      document.getElementById('at-last-sync').textContent = state.lastPosSyncMs ? `Synced ${formatTime(state.lastPosSyncMs)}` : 'Waiting...';
+
+      // Open Positions Table
+      const tbody = document.getElementById('open-pos-tbody');
+      const empty = document.getElementById('open-pos-empty');
+      if (!state.openPositions.length) {
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+      } else {
+        empty.classList.add('hidden');
+        tbody.innerHTML = state.openPositions.map(p => {
+          const est = calcSellExecution(p.tokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
+          const pnl = est.netProceedsUsd - p.costUsd;
+          const pnlPct = p.costUsd > 0 ? (pnl / p.costUsd) * 100 : 0;
+          const ch = getChainMeta(p.chainId);
+          return `
+            <tr class="hover:bg-term-hover/40">
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-white">${esc(p.symbol)}</span>
+                  <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${ch.cls}">${ch.label}</span>
+                  ${p.stale ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40">STALE</span>' : ''}
+                </div>
+                <div class="text-[10px] text-slate-500">${formatDateTime(p.entryTime)}</div>
+              </td>
+              <td class="py-3 px-2.5 text-right text-slate-300">${formatPrice(p.buyPrice)}</td>
+              <td class="py-3 px-2.5 text-right text-white font-semibold">${formatPrice(p.lastPrice)}</td>
+              <td class="py-3 px-2.5 text-right text-slate-200">${formatTokens(p.tokens)}</td>
+              <td class="py-3 px-2.5 text-right text-slate-200">$${p.costUsd.toFixed(2)} → $${est.netProceedsUsd.toFixed(2)}</td>
+              <td class="py-3 px-2.5 text-right text-cyan-300">${formatUsd(p.lastLiquidityUsd || p.entryLiquidityUsd)}</td>
+              <td class="py-3 px-2.5 text-right font-bold ${p.stale ? 'text-amber-400' : pctColor(pnl)}">
+                ${p.stale ? 'STALE (OFFLINE)' : `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)} (${formatPct(pnlPct)})`}
+              </td>
+              <td class="py-3 px-2.5 text-[10px] text-slate-400">
+                <div>TP +${state.config.tpPct}% / SL -${state.config.slPct}%</div>
+                <div class="${p.trailArmed ? 'text-cyan-300 font-bold' : 'text-slate-500'}">${p.trailArmed ? `TRAIL ARMED (-${state.config.trailDropPct}%)` : `Peak ${formatPrice(p.peakPrice)}`}</div>
+              </td>
+              <td class="py-3 px-4 text-right whitespace-nowrap">
+                <button onclick="executePaperSell('${p.id}', 0.5, 'MANUAL')" class="px-2 py-1 rounded-lg bg-term-card hover:bg-term-hover border border-term-border text-[11px] text-amber-300 mr-1">Sell 50%</button>
+                <button onclick="executePaperSell('${p.id}', 1, 'MANUAL')" class="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[11px] text-rose-300">Sell 100%</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      renderDecisionLog();
+    }
+
+    function renderDecisionLog() {
+      const list = document.getElementById('decision-log-list');
+      const empty = document.getElementById('decision-log-empty');
+      if (!state.decisionLog.length) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      list.innerHTML = state.decisionLog.map(d => {
+        const cls = d.action === 'BOUGHT'
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+          : d.action === 'SOLD'
+            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+            : 'bg-slate-800 text-slate-400 border-slate-700';
+        return `
+          <div class="px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-term-hover/30">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${d.action}</span>
+              <span class="font-bold text-white shrink-0">${esc(d.symbol)}</span>
+              <span class="text-slate-500 shrink-0">[${esc((d.chainId || '').toUpperCase())}]</span>
+              <span class="text-slate-300 truncate">${esc(d.reason)}</span>
+            </div>
+            <span class="text-slate-500 shrink-0">${d.timeStr}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderLedger() {
+      document.getElementById('badge-ledger-count').textContent = state.closedTrades.length;
+
+      // KPIs
+      const trades = state.closedTrades;
+      const totalReal = trades.reduce((a, t) => a + t.netPnlUsd, 0);
+      const totalFees = trades.reduce((a, t) => a + (t.feesImpactUsd || 0), 0);
+      const wins = trades.filter(t => t.netPnlUsd > 0);
+      const losses = trades.filter(t => t.netPnlUsd <= 0);
+      const winRate = trades.length ? (wins.length / trades.length) * 100 : null;
+      const grossWin = wins.reduce((a, t) => a + t.netPnlUsd, 0);
+      const grossLoss = Math.abs(losses.reduce((a, t) => a + t.netPnlUsd, 0));
+      const pf = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? '∞' : '--');
+
+      const best = trades.length ? trades.reduce((b, t) => t.netPnlUsd > b.netPnlUsd ? t : b, trades[0]) : null;
+      const worst = trades.length ? trades.reduce((w, t) => t.netPnlUsd < w.netPnlUsd ? t : w, trades[0]) : null;
+
+      const rEl = document.getElementById('ldg-realized');
+      rEl.textContent = `${totalReal >= 0 ? '+' : '-'}$${Math.abs(totalReal).toFixed(2)}`;
+      rEl.className = `mt-1 font-mono text-lg sm:text-xl font-bold tabular-nums ${pctColor(totalReal)}`;
+
+      document.getElementById('ldg-winrate').textContent = winRate === null ? '--%' : `${winRate.toFixed(1)}%`;
+      document.getElementById('ldg-wl-counts').textContent = `${wins.length}W / ${losses.length}L (${trades.length})`;
+      document.getElementById('ldg-pf').textContent = pf;
+      document.getElementById('ldg-best').textContent = best ? `${best.symbol} +$${best.netPnlUsd.toFixed(2)}` : '--';
+      document.getElementById('ldg-worst').textContent = worst ? `${worst.symbol} ${worst.netPnlUsd >= 0 ? '+' : '-'}$${Math.abs(worst.netPnlUsd).toFixed(2)}` : '--';
+      document.getElementById('ldg-fees').textContent = `$${totalFees.toFixed(2)}`;
+
+      // Filter Ledger Rows
+      const q = (document.getElementById('ldg-search')?.value || '').trim().toLowerCase();
+      const outF = document.getElementById('ldg-outcome-filter')?.value || 'all';
+      const rsnF = document.getElementById('ldg-reason-filter')?.value || 'all';
+
+      const filtered = trades.filter(t => {
+        if (q && !t.symbol.toLowerCase().includes(q) && !t.chainId.toLowerCase().includes(q)) return false;
+        if (outF === 'win' && t.netPnlUsd <= 0) return false;
+        if (outF === 'loss' && t.netPnlUsd > 0) return false;
+        if (rsnF !== 'all' && !(t.exitReason || '').startsWith(rsnF)) return false;
+        return true;
+      });
+
+      const tbody = document.getElementById('ledger-tbody');
+      const empty = document.getElementById('ledger-empty');
+      if (!filtered.length) {
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      tbody.innerHTML = filtered.map(t => {
+        const ch = getChainMeta(t.chainId);
+        const sign = t.netPnlUsd >= 0 ? '+' : '-';
+        const reasonCls = (t.exitReason || '').startsWith('TP') || (t.exitReason || '').startsWith('TRAILING')
+          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+          : (t.exitReason || '').startsWith('SL') || (t.exitReason || '').startsWith('LIQ')
+            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+            : 'bg-slate-800 text-slate-300 border-slate-700';
+
+        return `
+          <tr class="hover:bg-term-hover/40">
+            <td class="py-2.5 px-3.5 whitespace-nowrap">
+              <span class="font-bold text-white">${esc(t.symbol)}</span>
+              <span class="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold border ${ch.cls}">${ch.label}</span>
+            </td>
+            <td class="py-2.5 px-2.5 text-slate-400 whitespace-nowrap">${formatDateTime(t.entryTime)}</td>
+            <td class="py-2.5 px-2.5 text-right text-slate-300 whitespace-nowrap">${formatPrice(t.buyPrice)}</td>
+            <td class="py-2.5 px-2.5 text-right text-slate-200 whitespace-nowrap">${formatTokens(t.tokensBought)}</td>
+            <td class="py-2.5 px-2.5 text-right text-slate-200 whitespace-nowrap">$${t.costUsd.toFixed(2)}</td>
+            <td class="py-2.5 px-2.5 text-right text-cyan-300 whitespace-nowrap">${formatUsd(t.entryLiquidityUsd)}</td>
+            <td class="py-2.5 px-2.5 text-slate-400 whitespace-nowrap">${formatDateTime(t.exitTime)}</td>
+            <td class="py-2.5 px-2.5 text-right text-white whitespace-nowrap">${formatPrice(t.sellPrice)}</td>
+            <td class="py-2.5 px-2.5 text-right text-white font-semibold whitespace-nowrap">$${t.exitValueUsd.toFixed(2)}</td>
+            <td class="py-2.5 px-2.5 text-right text-amber-300 whitespace-nowrap">$${(t.feesImpactUsd || 0).toFixed(2)}</td>
+            <td class="py-2.5 px-2.5 text-right font-bold whitespace-nowrap ${pctColor(t.netPnlUsd)}">
+              ${sign}$${Math.abs(t.netPnlUsd).toFixed(2)} (${formatPct(t.netPnlPct)})
+            </td>
+            <td class="py-2.5 px-3.5 text-right whitespace-nowrap">
+              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${reasonCls}">${esc(t.exitReason)}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderTelemetryTable() {
+      const tbody = document.getElementById('telemetry-tbody');
+      const empty = document.getElementById('telemetry-empty');
+      if (!tbody) return;
+      const list = state.telemetryFilter === 'errors' ? state.telemetry.filter(e => e.level === 'ERROR') : state.telemetry;
+      if (!list.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+      tbody.innerHTML = list.map(e => {
+        const pill = e.level === 'OK' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+        return `
+          <tr class="hover:bg-term-hover/40">
+            <td class="py-2 px-3.5 text-slate-400 whitespace-nowrap">${e.timeStr}</td>
+            <td class="py-2 px-3 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${pill}">${e.status || e.level}</span></td>
+            <td class="py-2 px-3 text-cyan-300 whitespace-nowrap">${esc(e.context)}</td>
+            <td class="py-2 px-3 text-right text-slate-400 whitespace-nowrap">${e.latencyMs}ms</td>
+            <td class="py-2 px-3 text-slate-300 break-all max-w-[340px]">${esc(e.url)}</td>
+            <td class="py-2 px-3.5 ${e.level === 'ERROR' ? 'text-rose-300 font-semibold' : 'text-slate-300'}">${esc(e.detail)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /*************************************************************************
+     * 7. SLIDE-OVER INSPECTOR & MANUAL PAPER BUY
+     *************************************************************************/
+    function openInspectorById(pairId) {
+      const pair = state.pairs.find(p => p.id === pairId);
+      if (!pair) return;
+      state.selectedPair = pair;
+      state.chartVisible = false;
+      document.getElementById('insp-chart-box').classList.add('hidden');
+      document.getElementById('insp-chart-box').innerHTML = '';
+      document.getElementById('btn-toggle-chart').textContent = 'Show Chart';
+
+      populateInspector(pair);
+      updateManualBuyPreview();
+
+      const ov = document.getElementById('inspector-overlay');
+      const dr = document.getElementById('inspector-drawer');
+      ov.classList.remove('hidden');
+      requestAnimationFrame(() => { ov.classList.remove('opacity-0'); dr.classList.remove('translate-x-full'); });
+
+      runInspectorAudit(false);
+    }
+
+    function closeInspector() {      const ov = document.getElementById('inspector-overlay');
+      const dr = document.getElementById('inspector-drawer');
+      ov.classList.add('opacity-0');
+      dr.classList.add('translate-x-full');
+      setTimeout(() => {
+        ov.classList.add('hidden');
+        document.getElementById('insp-chart-box').innerHTML = '';
+        state.selectedPair = null;
+      }, 200);
+    }
+
+    function populateInspector(p) {
+      const ch = getChainMeta(p.chainId);
+      const av = document.getElementById('insp-avatar');
+      av.innerHTML = p.icon ? `<img src="${esc(p.icon)}" class="w-full h-full object-cover" onerror="this.parentElement.textContent='${esc(p.symbol.slice(0,2))}'" />` : esc(p.symbol.slice(0,2));
+      document.getElementById('insp-symbol').textContent = p.symbol;
+      document.getElementById('insp-name').textContent = p.name;
+      const chEl = document.getElementById('insp-chain');
+      chEl.textContent = ch.label;
+      chEl.className = `px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${ch.cls}`;
+      const alEl = document.getElementById('insp-alpha');
+      alEl.textContent = `ALPHA ${p.alphaScore}`;
+      alEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border bg-cyan-500/15 text-cyan-300 border-cyan-500/40';
+
+      document.getElementById('insp-ca').textContent = p.address;
+      document.getElementById('insp-price').textContent = formatPrice(p.priceUsd);
+      document.getElementById('insp-age').textContent = formatAge(p.pairCreatedAt);
+      document.getElementById('insp-sells1h').textContent = `${p.sells1h} sells/1h`;
+      document.getElementById('insp-liq').textContent = formatUsd(p.liquidityUsd);
+      document.getElementById('insp-liqfdv').textContent = `${p.liqFdvPct.toFixed(1)}%`;
+      document.getElementById('insp-vol').textContent = formatUsd(p.volume24h);
+      document.getElementById('insp-buyratio').textContent = `${p.buyRatio.toFixed(0)}%`;
+      document.getElementById('insp-avail-cash').textContent = `Cash: $${state.cashUsd.toFixed(2)}`;
+
+      const addr = encodeURIComponent(p.address);
+      const exp = { solana: `https://solscan.io/token/${addr}`, base: `https://basescan.org/token/${addr}`, ethereum: `https://etherscan.io/token/${addr}`, bsc: `https://bscscan.com/token/${addr}`, arbitrum: `https://arbiscan.io/token/${addr}` }[p.chainId] || p.url;
+      const bm = { solana: 'sol', ethereum: 'eth', base: 'base', bsc: 'bsc', arbitrum: 'arbi' }[p.chainId] || 'eth';
+      document.getElementById('insp-ext-links').innerHTML = [
+        { l: 'DexScreener', u: p.url }, { l: 'Explorer', u: exp }, { l: 'Bubblemaps', u: `https://app.bubblemaps.io/${bm}/token/${addr}` }
+      ].map(x => `<a href="${x.u}" target="_blank" rel="noopener noreferrer" class="text-center py-1.5 rounded-lg bg-term-panel hover:bg-term-hover border border-term-border text-[11px] font-mono text-slate-300">${x.l} ↗</a>`).join('');
+
+      let dexBtns = p.chainId === 'solana'
+        ? [{ l: 'Jupiter Swap', u: `https://jup.ag/swap/SOL-${addr}`, c: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' }, { l: 'Raydium Swap', u: `https://raydium.io/swap/?inputMint=sol&outputMint=${addr}`, c: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40' }]
+        : p.chainId === 'bsc'
+          ? [{ l: 'PancakeSwap', u: `https://pancakeswap.finance/swap?outputCurrency=${addr}`, c: 'bg-amber-500/15 text-amber-300 border-amber-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/bsc/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }]
+          : [{ l: 'Uniswap Swap', u: `https://app.uniswap.org/swap?outputCurrency=${addr}`, c: 'bg-pink-500/15 text-pink-300 border-pink-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/${p.chainId}/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }];
+      document.getElementById('insp-dex-btns').innerHTML = dexBtns.map(b => `<a href="${b.u}" target="_blank" rel="noopener noreferrer" class="text-center py-2 rounded-xl border text-xs font-bold transition ${b.c}">${b.l} ↗</a>`).join('');
+    }
+
+    async function runInspectorAudit(force) {
+      const p = state.selectedPair;
+      if (!p) return;
+      const gate = checkLiquidityGate(p);
+      document.getElementById('insp-gate-verdict').innerHTML = gate.ok
+        ? `<div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">✓ ${esc(gate.reason)}</div>`
+        : `<div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300">✕ Gate Fail: ${esc(gate.reason)}</div>`;
+
+      const secBox = document.getElementById('insp-sec-box');
+      secBox.innerHTML = '<div class="text-slate-400">Running live security audit...</div>';
+      const sec = await runMandatorySecurityAudit(p, force);
+      if (!state.selectedPair || state.selectedPair.id !== p.id) return;
+      secBox.innerHTML = sec.pass
+        ? `<div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">✓ ${esc(sec.reason)}</div>`
+        : `<div class="p-2 rounded-lg bg-rose-950/50 border border-rose-500/40 text-rose-200">✕ ${esc(sec.reason)}</div>`;
+    }
+
+    function toggleEmbeddedChart() {
+      const p = state.selectedPair;
+      if (!p) return;
+      state.chartVisible = !state.chartVisible;
+      const box = document.getElementById('insp-chart-box');
+      const btn = document.getElementById('btn-toggle-chart');
+      if (state.chartVisible) {
+        const ref = p.pairAddress || p.address;
+        box.innerHTML = `<iframe src="https://dexscreener.com/${encodeURIComponent(p.chainId)}/${encodeURIComponent(ref)}?embed=1&theme=dark&trades=0&info=0" class="w-full h-full border-0" loading="lazy"></iframe>`;
+        box.classList.remove('hidden');
+        btn.textContent = 'Hide Chart';
+      } else {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        btn.textContent = 'Show Chart';
+      }
+    }
+
+    function updateManualBuyPreview() {
+      const p = state.selectedPair;
+      if (!p) return;
+      const usd = Number(document.getElementById('manual-buy-usd').value || 0);
+      if (usd <= 0) { document.getElementById('manual-buy-preview').textContent = ''; return; }
+      const ex = calcBuyExecution(usd, p.priceUsd, p.liquidityUsd);
+      document.getElementById('manual-buy-preview').textContent =
+        `Est. Receive: ${formatTokens(ex.tokensBought)} ${p.symbol} | Eff. Buy: ${formatPrice(ex.effectiveBuyPrice)} | Impact ${(ex.impactRate*100).toFixed(2)}% + 0.30% Fee ($${(ex.feeUsd + ex.impactUsd).toFixed(2)})`;
+    }
+
+    function executeManualPaperBuy() {
+      const p = state.selectedPair;
+      if (!p) return;
+      const usd = Number(document.getElementById('manual-buy-usd').value || 0);
+      if (!Number.isFinite(usd) || usd <= 0) { showToast('Enter a valid USD amount.', 'error'); return; }
+      if (usd > state.cashUsd) { showToast(`Insufficient cash ($${state.cashUsd.toFixed(2)} available).`, 'error'); return; }
+      executePaperBuy(p, usd, 'MANUAL-BUY', 'Manual Override');
+      renderAutoTraderView();
+      document.getElementById('insp-avail-cash').textContent = `Cash: $${state.cashUsd.toFixed(2)}`;
+    }
+
+    /*************************************************************************
+     * 8. 24/7 AUTONOMOUS NODE.JS BOT GENERATOR (BUILT-IN DASHBOARD + TELEGRAM)
+     *************************************************************************/
+    function buildAutonomousBotCode() {
+      const c = state.config;
+      const feedUrl =
+        state.feed === 'top-boosts' ? 'https://api.dexscreener.com/token-boosts/top/v1' :
+        state.feed === 'profiles' ? 'https://api.dexscreener.com/token-profiles/latest/v1' :
+        'https://api.dexscreener.com/token-boosts/latest/v1';
+      const tgToken = document.getElementById('bot-tg-token')?.value.trim() || '';
+      const tgChat = document.getElementById('bot-tg-chat')?.value.trim() || '';
+      const port = Number(document.getElementById('bot-port')?.value || 3000);
+      const pollSec = state.pollIntervalSec || 30;
+
+      return `#!/usr/bin/env node
+/**
+ * MEME.RADAR v4 — 24/7 Autonomous Paper-Trading Node.js Bot (Zero Simulation)
+ * Pure Node.js 18+ ESM (zero external npm packages: uses native fetch, fs, http).
+ *
+ * Features:
+ * - Polls live DexScreener feeds + enriches in 30-address batches
+ * - Strict Liquidity & Sellability Gate + mandatory live RugCheck (Solana) / GoPlus (EVM)
+ * - Realistic AMM impact (tradeUsd / (2 * liquidityUsd)) + 0.30% DEX fee on Buy & Sell
+ * - Auto-Exit: Take Profit, Stop Loss, Trailing Stop, Max Hold Time, Emergency Liq Drop (>60%)
+ * - Saves state persistently to paper_portfolio.json (importable into Web UI!) & paper_trades.csv
+ * - Serves a live dark-mode Web Dashboard on http://localhost:${port} (or process.env.PORT)
+ * - Sends instant Telegram receipts on every AUTO-BUY and AUTO-SELL + hourly summary
+ */
+
+import fs from 'node:fs/promises';
+import http from 'node:http';
+
+const CONFIG = {
+  FEED_URL: ${JSON.stringify(feedUrl)},
+  CHAIN_FILTER: ${JSON.stringify(state.chain)},
+  SUPPORTED_CHAINS: ['solana', 'base', 'ethereum', 'bsc', 'arbitrum'],
+  EVM_CHAIN_IDS: { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' },
+  POLL_SEC: ${pollSec},
+  PORT: Number(process.env.PORT || ${port}),
+  DEX_FEE_RATE: 0.003,
+  BACKOFF_STEPS: [10, 20, 40, 60],
+
+  // Synced Strategy & Liquidity Gate Settings
+  STARTING_BANKROLL: ${c.startingBankroll},
+  TRADE_SIZE_USD: ${c.tradeSizeUsd},
+  MAX_OPEN_POSITIONS: ${c.maxOpenPositions},
+  TP_PCT: ${c.tpPct},
+  SL_PCT: ${c.slPct},
+  TRAIL_ARM_PCT: ${c.trailArmPct},
+  TRAIL_DROP_PCT: ${c.trailDropPct},
+  MAX_HOLD_HOURS: ${c.maxHoldHours},
+  COOLDOWN_MINS: ${c.cooldownMins},
+  MIN_LIQUIDITY_USD: ${c.minLiquidityUsd},
+  MAX_TRADE_TO_LIQ_PCT: ${c.maxTradeToLiqPct},
+  MIN_LIQ_FDV_PCT: ${c.minLiqFdvPct},
+  MIN_SELLS_1H: ${c.minSells1h},
+  MIN_VOLUME_24H: ${c.minVolume24h},
+  MIN_BUY_RATIO_PCT: ${c.minBuyRatioPct},
+
+  // Telegram & Persistence
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || ${JSON.stringify(tgToken)},
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || ${JSON.stringify(tgChat)},
+  PORTFOLIO_FILE: 'paper_portfolio.json',
+  CSV_FILE: 'paper_trades.csv'
+};
+
+const secCache = new Map();
+let failures = 0;
+let lastPollIso = null;
+let lastError = '';
+let lastHourlySummaryMs = Date.now();
+
+let portfolio = {
+  autoTradeEnabled: true,
+  startingBankroll: CONFIG.STARTING_BANKROLL,
+  cashUsd: CONFIG.STARTING_BANKROLL,
+  openPositions: [],
+  closedTrades: [],
+  cooldowns: {},
+  decisionLog: []
+};
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const nowIso = () => new Date().toISOString();
+
+async function loadState() {
+  try {
+    const raw = await fs.readFile(CONFIG.PORTFOLIO_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    portfolio = { ...portfolio, ...parsed };
+    console.log(\`[\${nowIso()}] Loaded \${CONFIG.PORTFOLIO_FILE} | Cash: $\${portfolio.cashUsd.toFixed(2)} | Open: \${portfolio.openPositions.length} | Closed: \${portfolio.closedTrades.length}\`);
+  } catch {
+    await saveState();
+    console.log(\`[\${nowIso()}] Initialized fresh \${CONFIG.PORTFOLIO_FILE} with $\${portfolio.cashUsd.toFixed(2)} USDC\`);
+  }
+}
+
+async function saveState() {
+  await fs.writeFile(CONFIG.PORTFOLIO_FILE, JSON.stringify(portfolio, null, 2), 'utf8');
+}
+
+async function appendCsv(t) {
+  let exists = true;
+  try { await fs.access(CONFIG.CSV_FILE); } catch { exists = false; }
+  if (!exists) {
+    await fs.writeFile(CONFIG.CSV_FILE, 'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason\\n', 'utf8');
+  }
+  const line = [
+    new Date(t.entryTime).toISOString(), new Date(t.exitTime).toISOString(), t.symbol, t.chainId,
+    t.buyPrice, t.tokensBought, t.costUsd.toFixed(2), Math.round(t.entryLiquidityUsd),
+    t.sellPrice, t.exitValueUsd.toFixed(2), t.feesImpactUsd.toFixed(2), t.netPnlUsd.toFixed(2),
+    t.netPnlPct.toFixed(2), t.exitReason
+  ].join(',') + '\\n';
+  await fs.appendFile(CONFIG.CSV_FILE, line, 'utf8');
+}
+
+async function fetchJsonStrict(url, timeoutMs = 11000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(\`HTTP \${res.status} \${res.statusText}\`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    throw new Error(\`\${url} -> \${err.message}\`);
+  }
+}
+
+async function sendTelegram(text) {
+  if (!CONFIG.TELEGRAM_BOT_TOKEN || !CONFIG.TELEGRAM_CHAT_ID) return;
+  try {
+    await fetch(\`https://api.telegram.org/bot\${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CONFIG.TELEGRAM_CHAT_ID, text, disable_web_page_preview: true })
+    });
+  } catch (e) {
+    console.error(\`[\${nowIso()}] Telegram error: \${e.message}\`);
+  }
+}
+
+function logDecision(action, symbol, chainId, reason) {
+  portfolio.decisionLog.unshift({ ts: Date.now(), timeStr: nowIso().slice(11, 19), action, symbol, chainId, reason });
+  if (portfolio.decisionLog.length > 150) portfolio.decisionLog.pop();
+  console.log(\`[\${nowIso()}] [\${action}] \${symbol} (\${chainId}): \${reason}\`);
+}
+
+function calcBuy(usd, price, liq) {
+  const feeUsd = usd * CONFIG.DEX_FEE_RATE;
+  const impactRate = liq > 0 ? Math.min(0.25, usd / (2 * liq)) : 0.05;
+  const effPrice = price * (1 + impactRate);
+  const net = usd - feeUsd;
+  return { feeUsd, impactUsd: net * impactRate, effPrice, tokens: net / effPrice };
+}
+
+function calcSell(tokens, price, liq) {
+  const gross = tokens * price;
+  const impactRate = liq > 0 ? Math.min(0.50, gross / (2 * liq)) : 0.10;
+  const effPrice = price * (1 - impactRate);
+  const afterImp = tokens * effPrice;
+  const feeUsd = afterImp * CONFIG.DEX_FEE_RATE;
+  return { effPrice, impactUsd: gross - afterImp, feeUsd, netProceeds: Math.max(0, afterImp - feeUsd) };
+}
+
+async function auditSecurity(pair) {
+  const key = pair.id;
+  const cached = secCache.get(key);
+  if (cached && Date.now() - cached.ts < 900000) return cached;
+
+  if (pair.chainId === 'solana') {
+    try {
+      const r = await fetchJsonStrict(\`https://api.rugcheck.xyz/v1/tokens/\${pair.address}/report/summary\`, 9000);
+      const score = r.score ?? r.score_normalised ?? 0;
+      const danger = (r.risks || []).find(x => (x.level || '').toLowerCase() === 'danger');
+      const pass = !r.rugged && score <= 2000 && !danger;
+      const reason = pass ? \`RugCheck PASS (Score \${score})\` : \`RugCheck REJECT (rugged=\${!!r.rugged}, score=\${score}, danger=\${danger?.name || 'none'})\`;
+      const out = { ts: Date.now(), pass, reason };
+      secCache.set(key, out);
+      return out;
+    } catch (e) {
+      return { ts: Date.now(), pass: false, reason: \`Skipped: Security API unreachable (RugCheck: \${e.message})\` };
+    }
+  } else if (CONFIG.EVM_CHAIN_IDS[pair.chainId]) {
+    const id = CONFIG.EVM_CHAIN_IDS[pair.chainId];
+    try {
+      const gp = await fetchJsonStrict(\`https://api.gopluslabs.io/api/v1/token_security/\${id}?contract_addresses=\${pair.address}\`, 9000);
+      const d = gp?.result?.[pair.address.toLowerCase()];
+      if (!d) return { ts: Date.now(), pass: false, reason: 'GoPlus REJECT: Unindexed contract' };
+      const bt = Number(d.buy_tax || 0), st = Number(d.sell_tax || 0);
+      const pass = d.is_honeypot !== '1' && d.cannot_sell_all !== '1' && bt <= 0.05 && st <= 0.05;
+      const reason = pass ? \`GoPlus PASS (Tax \${(bt*100).toFixed(1)}%/\${(st*100).toFixed(1)}%)\` : \`GoPlus REJECT (honey=\${d.is_honeypot}, sellTax=\${(st*100).toFixed(1)}%)\`;
+      const out = { ts: Date.now(), pass, reason };
+      secCache.set(key, out);
+      return out;
+    } catch (e) {
+      return { ts: Date.now(), pass: false, reason: \`Skipped: Security API unreachable (GoPlus: \${e.message})\` };
+    }
+  }
+  return { ts: Date.now(), pass: false, reason: 'Unsupported chain' };
+}
+
+async function pollCycle() {
+  // 1. Refresh Open Positions
+  const byChainPos = new Map();
+  for (const pos of portfolio.openPositions) {
+    if (!byChainPos.has(pos.chainId)) byChainPos.set(pos.chainId, new Set());
+    byChainPos.get(pos.chainId).add(pos.pairAddress);
+  }
+  const livePosMap = new Map();
+  for (const [chain, set] of byChainPos.entries()) {
+    const addrs = Array.from(set);
+    for (let i = 0; i < addrs.length; i += 30) {
+      await sleep(220);
+      const res = await fetchJsonStrict(\`https://api.dexscreener.com/latest/dex/pairs/\${chain}/\${addrs.slice(i, i + 30).join(',')}\`);
+      for (const p of (res?.pairs || [])) livePosMap.set(p.pairAddress.toLowerCase(), p);
+    }
+  }
+
+  for (let i = portfolio.openPositions.length - 1; i >= 0; i--) {
+    const pos = portfolio.openPositions[i];
+    const lp = livePosMap.get(pos.pairAddress.toLowerCase());
+    if (!lp) continue;
+    pos.lastPrice = Number(lp.priceUsd);
+    pos.lastLiquidityUsd = Number(lp.liquidity?.usd || 0);
+    if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
+    if (CONFIG.TRAIL_ARM_PCT > 0 && ((pos.peakPrice - pos.buyPrice) / pos.buyPrice) * 100 >= CONFIG.TRAIL_ARM_PCT) pos.trailArmed = true;
+
+    const ex = calcSell(pos.tokens, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
+    const pnlPct = ((ex.netProceeds - pos.costUsd) / pos.costUsd) * 100;
+    const holdHrs = (Date.now() - pos.entryTime) / 3600000;
+    const dropPeak = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
+    const liqDrop = pos.entryLiquidityUsd > 0 ? ((pos.entryLiquidityUsd - pos.lastLiquidityUsd) / pos.entryLiquidityUsd) * 100 : 0;
+
+    let reason = null;
+    if (liqDrop > 60) reason = 'LIQ_DROP';
+    else if (pnlPct >= CONFIG.TP_PCT) reason = 'TP';
+    else if (pnlPct <= -CONFIG.SL_PCT) reason = 'SL';
+    else if (pos.trailArmed && dropPeak >= CONFIG.TRAIL_DROP_PCT) reason = 'TRAILING';
+    else if (holdHrs >= CONFIG.MAX_HOLD_HOURS) reason = 'MAX_HOLD';
+
+    if (reason) {
+      const netPnlUsd = ex.netProceeds - pos.costUsd;
+      portfolio.cashUsd += ex.netProceeds;
+      const trade = {
+        id: 'tr_' + Date.now(), symbol: pos.symbol, chainId: pos.chainId, address: pos.address,
+        entryTime: pos.entryTime, buyPrice: pos.buyPrice, tokensBought: pos.tokens, costUsd: pos.costUsd,
+        entryLiquidityUsd: pos.entryLiquidityUsd, exitTime: Date.now(), sellPrice: ex.effPrice,
+        exitValueUsd: ex.netProceeds, feesImpactUsd: pos.buyFeeAndImpactUsd + ex.feeUsd + ex.impactUsd,
+        netPnlUsd, netPnlPct: pnlPct, exitReason: reason
+      };
+      portfolio.closedTrades.unshift(trade);
+      portfolio.cooldowns[pos.pairId] = Date.now();
+      portfolio.openPositions.splice(i, 1);
+      await appendCsv(trade);
+      logDecision('SOLD', pos.symbol, pos.chainId, \`[\${reason}] Net \${netPnlUsd >= 0 ? '+' : '-'}$\${Math.abs(netPnlUsd).toFixed(2)} (\${pnlPct.toFixed(1)}%)\`);
+      await sendTelegram(\`AUTO-SELL [\${reason}]: \${pos.symbol} (\${pos.chainId.toUpperCase()})\\nBuy: $\${pos.buyPrice} -> Sell: $\${ex.effPrice}\\nTokens: \${pos.tokens.toFixed(2)}\\nNet PnL: \${netPnlUsd >= 0 ? '+' : '-'}$\${Math.abs(netPnlUsd).toFixed(2)} (\${pnlPct.toFixed(1)}%)\\nNew Cash: $\${portfolio.cashUsd.toFixed(2)}\`);
+    }
+  }
+
+  // 2. Scan Feed for New Auto-Buys
+  if (portfolio.openPositions.length < CONFIG.MAX_OPEN_POSITIONS && portfolio.cashUsd >= CONFIG.TRADE_SIZE_USD) {
+    const items = await fetchJsonStrict(CONFIG.FEED_URL);
+    const byChain = new Map();
+    for (const it of (items || [])) {
+      const c = (it.chainId || '').toLowerCase();
+      if (!CONFIG.SUPPORTED_CHAINS.includes(c)) continue;
+      if (CONFIG.CHAIN_FILTER !== 'all' && c !== CONFIG.CHAIN_FILTER) continue;
+      if (!it.tokenAddress) continue;
+      if (!byChain.has(c)) byChain.set(c, new Set());
+      byChain.get(c).add(it.tokenAddress);
+    }
+
+    const best = new Map();
+    for (const [chain, set] of byChain.entries()) {
+      const addrs = Array.from(set);
+      for (let i = 0; i < addrs.length; i += 30) {
+        await sleep(250);
+        const batch = await fetchJsonStrict(\`https://api.dexscreener.com/tokens/v1/\${chain}/\${addrs.slice(i, i + 30).join(',')}\`);
+        for (const p of (batch || [])) {
+          if (!p.baseToken?.address || !Number(p.priceUsd)) continue;
+          const key = \`\${chain}:\${p.baseToken.address.toLowerCase()}\`;
+          const liq = Number(p.liquidity?.usd || 0);
+          if (!best.has(key) || liq > Number(best.get(key).liquidity?.usd || 0)) best.set(key, p);
+        }
+      }
+    }
+
+    const held = new Set(portfolio.openPositions.map(x => x.pairId));
+    let secChecks = 0;
+    for (const [key, p] of best.entries()) {
+      if (portfolio.openPositions.length >= CONFIG.MAX_OPEN_POSITIONS || portfolio.cashUsd < CONFIG.TRADE_SIZE_USD) break;
+      if (held.has(key)) continue;
+      if (Date.now() - (portfolio.cooldowns[key] || 0) < CONFIG.COOLDOWN_MINS * 60000) continue;
+
+      const liq = Number(p.liquidity?.usd || 0);
+      const vol = Number(p.volume?.h24 || 0);
+      const fdv = Number(p.fdv || p.marketCap || 0);
+      const sells1h = Number(p.txns?.h1?.sells || 0);
+      const buys24 = Number(p.txns?.h24?.buys || 0), sells24 = Number(p.txns?.h24?.sells || 0);
+      const buyRatio = buys24 + sells24 > 0 ? (buys24 / (buys24 + sells24)) * 100 : 0;
+      const liqFdv = fdv > 0 ? (liq / fdv) * 100 : 0;
+      const tradeToLiq = liq > 0 ? (CONFIG.TRADE_SIZE_USD / liq) * 100 : 100;
+
+      if (liq < CONFIG.MIN_LIQUIDITY_USD || tradeToLiq > CONFIG.MAX_TRADE_TO_LIQ_PCT || liqFdv < CONFIG.MIN_LIQ_FDV_PCT || sells1h < CONFIG.MIN_SELLS_1H || vol < CONFIG.MIN_VOLUME_24H || buyRatio < CONFIG.MIN_BUY_RATIO_PCT) continue;
+
+      if (secChecks >= 4) break;
+      secChecks++;
+      await sleep(250);
+      const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
+      const sec = await auditSecurity(pairObj);
+      if (!sec.pass) {
+        logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId, sec.reason);
+        continue;
+      }
+
+      const ex = calcBuy(CONFIG.TRADE_SIZE_USD, Number(p.priceUsd), liq);
+      portfolio.cashUsd -= CONFIG.TRADE_SIZE_USD;
+      portfolio.openPositions.unshift({
+        id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
+        address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
+        entryTime: Date.now(), entrySpotPrice: Number(p.priceUsd), buyPrice: ex.effPrice, tokens: ex.tokens,
+        costUsd: CONFIG.TRADE_SIZE_USD, buyFeeAndImpactUsd: ex.feeUsd + ex.impactUsd, entryLiquidityUsd: liq,
+        lastPrice: Number(p.priceUsd), lastLiquidityUsd: liq, peakPrice: Number(p.priceUsd), trailArmed: false, securitySummary: sec.reason
+      });
+      held.add(key);
+      logDecision('BOUGHT', p.baseToken.symbol, pairObj.chainId, \`$\${CONFIG.TRADE_SIZE_USD} @ $\${ex.effPrice} | Liq $\${Math.round(liq).toLocaleString()} | \${sec.reason}\`);
+      await sendTelegram(\`AUTO-BUY: \${p.baseToken.symbol} (\${pairObj.chainId.toUpperCase()})\\nPrice: $\${ex.effPrice} | Tokens: \${ex.tokens.toFixed(2)}\\nCost: $\${CONFIG.TRADE_SIZE_USD} | Liq: $\${Math.round(liq).toLocaleString()}\\nSecurity: \${sec.reason}\`);
+    }
+  }
+
+  lastPollIso = nowIso();
+  lastError = '';
+  await saveState();
+
+  if (Date.now() - lastHourlySummaryMs >= 3600000) {
+    lastHourlySummaryMs = Date.now();
+    const real = portfolio.closedTrades.reduce((a, t) => a + t.netPnlUsd, 0);
+    await sendTelegram(\`HOURLY STATUS\\nCash: $\${portfolio.cashUsd.toFixed(2)} | Open: \${portfolio.openPositions.length}\\nClosed Trades: \${portfolio.closedTrades.length} | Realized PnL: \${real >= 0 ? '+' : '-'}$\${Math.abs(real).toFixed(2)}\`);
+  }
+}
+
+// Built-in Live Web Dashboard & JSON API
+function startDashboardServer() {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/api/state') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ lastPollIso, lastError, portfolio }, null, 2));
+      return;
+    }
+    const real = portfolio.closedTrades.reduce((a, t) => a + t.netPnlUsd, 0);
+    const openRows = portfolio.openPositions.map(p => {
+      const ex = calcSell(p.tokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
+      const pnl = ex.netProceeds - p.costUsd;
+      return \`<tr><td><b>\${p.symbol}</b> (\${p.chainId})</td><td>$\${p.buyPrice}</td><td>$\${p.lastPrice}</td><td>\${p.tokens.toFixed(2)}</td><td>$\${p.costUsd.toFixed(2)}</td><td style="color:\${pnl>=0?'#10b981':'#f43f5e'}">\${pnl>=0?'+':'-'}$\${Math.abs(pnl).toFixed(2)}</td></tr>\`;
+    }).join('') || '<tr><td colspan="6" style="color:#64748b">No open positions</td></tr>';
+    const closedRows = portfolio.closedTrades.slice(0, 50).map(t =>
+      \`<tr><td><b>\${t.symbol}</b> (\${t.chainId})</td><td>$\${t.buyPrice}</td><td>\${t.tokensBought.toFixed(2)}</td><td>$\${t.costUsd.toFixed(2)}</td><td>$\${t.sellPrice}</td><td>$\${t.exitValueUsd.toFixed(2)}</td><td style="color:\${t.netPnlUsd>=0?'#10b981':'#f43f5e'}">\${t.netPnlUsd>=0?'+':'-'}$\${Math.abs(t.netPnlUsd).toFixed(2)} (\${t.netPnlPct.toFixed(1)}%)</td><td>\${t.exitReason}</td></tr>\`
+    ).join('') || '<tr><td colspan="8" style="color:#64748b">No closed trades yet</td></tr>';
+
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(\`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="15"><title>MEME.RADAR 24/7 Bot</title>
+    <style>body{background:#090d16;color:#e2e8f0;font-family:monospace;padding:20px;max-width:1200px;margin:auto}table{width:100%;border-collapse:collapse;margin:12px 0;background:#111827}th,td{padding:8px 10px;border-bottom:1px solid #1e293b;text-align:left;font-size:12px}th{color:#94a3b8}</style></head>
+    <body><h2>MEME.RADAR v4 — 24/7 AUTONOMOUS PAPER BOT</h2>
+    <p>Last Poll: \${lastPollIso || 'Starting...'} | Cash: <b>$\${portfolio.cashUsd.toFixed(2)}</b> | Open: <b>\${portfolio.openPositions.length}</b> | Realized PnL: <b style="color:\${real>=0?'#10b981':'#f43f5e'}">\${real>=0?'+':'-'}$\${Math.abs(real).toFixed(2)}</b> | <a href="/api/state" style="color:#38bdf8">/api/state (Download JSON)</a></p>
+    \${lastError ? \`<p style="color:#f43f5e">Last Error: \${lastError}</p>\` : ''}
+    <h3>Open Positions</h3><table><tr><th>Coin</th><th>Buy Price</th><th>Live Price</th><th>Tokens</th><th>Cost</th><th>Unrealized PnL</th></tr>\${openRows}</table>
+    <h3>Trade Ledger (Last 50)</h3><table><tr><th>Coin</th><th>Buy</th><th>Tokens</th><th>Cost</th><th>Sell</th><th>Exit Val</th><th>Net PnL</th><th>Reason</th></tr>\${closedRows}</table></body></html>\`);
+  });
+  server.listen(CONFIG.PORT, () => console.log(\`[\${nowIso()}] Live Dashboard listening on http://localhost:\${CONFIG.PORT}\`));
+}
+
+async function main() {
+  await loadState();
+  startDashboardServer();
+  while (true) {
+    try {
+      await pollCycle();
+      failures = 0;
+      await sleep(CONFIG.POLL_SEC * 1000);
+    } catch (err) {
+      failures++;
+      lastError = err.message;
+      const wait = CONFIG.BACKOFF_STEPS[Math.min(failures - 1, CONFIG.BACKOFF_STEPS.length - 1)];
+      console.error(\`[\${nowIso()}] [ERROR #\${failures}] \${err.message} — retrying in \${wait}s\`);
+      await sleep(wait * 1000);
+    }
+  }
+}
+
+main();
+`;
+    }
+
+    function renderBotGenerator() {
+      const c = state.config;
+      const pills = [
+        `Feed: ${state.feed}`, `Chain: ${state.chain.toUpperCase()}`, `Size: $${c.tradeSizeUsd}`, `MaxPos: ${c.maxOpenPositions}`,
+        `TP +${c.tpPct}% / SL -${c.slPct}%`, `Min Liq: $${c.minLiquidityUsd.toLocaleString()}`, `Min 1h Sells: ${c.minSells1h}`, `Min Vol: $${c.minVolume24h.toLocaleString()}`
+      ];
+      document.getElementById('bot-config-pills').innerHTML = pills.map(t => `<span class="px-2 py-0.5 rounded bg-term-bg border border-term-border text-cyan-300">${esc(t)}</span>`).join('');
+      document.getElementById('bot-code-preview').textContent = buildAutonomousBotCode();
+    }
+
+    function copyBotScript() {
+      copyText(buildAutonomousBotCode(), '24/7 Autonomous Bot code copied');
+      const b = document.getElementById('btn-copy-bot');
+      b.textContent = 'Copied!';
+      setTimeout(() => b.textContent = 'Copy Code', 1500);
+    }
+
+    function downloadBotScript() {
+      downloadBlob(buildAutonomousBotCode(), 'meme-radar-autobot-24-7.mjs', 'text/javascript');
+      showToast('Downloaded meme-radar-autobot-24-7.mjs', 'success');
+    }
+
+    /*************************************************************************
+     * 9. CONFIG, IMPORT/EXPORT, NAVIGATION & DEVICE HELPERS
+     *************************************************************************/
+    function loadConfigToInputs() {
+      const c = state.config;
+      document.getElementById('cfg-bankroll').value = c.startingBankroll;
+      document.getElementById('cfg-size').value = c.tradeSizeUsd;
+      document.getElementById('cfg-max-pos').value = c.maxOpenPositions;
+      document.getElementById('cfg-tp').value = c.tpPct;
+      document.getElementById('cfg-sl').value = c.slPct;
+      document.getElementById('cfg-max-hold').value = c.maxHoldHours;
+      document.getElementById('cfg-trail-arm').value = c.trailArmPct;
+      document.getElementById('cfg-trail-drop').value = c.trailDropPct;
+      document.getElementById('cfg-cooldown').value = c.cooldownMins;
+      document.getElementById('cfg-min-liq').value = c.minLiquidityUsd;
+      document.getElementById('cfg-max-trade-liq').value = c.maxTradeToLiqPct;
+      document.getElementById('cfg-min-liq-fdv').value = c.minLiqFdvPct;
+      document.getElementById('cfg-min-sells1h').value = c.minSells1h;
+      document.getElementById('cfg-min-vol').value = c.minVolume24h;
+      document.getElementById('cfg-min-buy').value = c.minBuyRatioPct;
+    }
+
+    function onConfigChange() {
+      const num = (id, fb) => { const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : fb; };
+      state.config = {
+        startingBankroll: Math.max(10, num('cfg-bankroll', 1000)),
+        tradeSizeUsd: Math.max(5, num('cfg-size', 100)),
+        maxOpenPositions: Math.max(1, Math.min(20, num('cfg-max-pos', 5))),
+        tpPct: Math.max(1, num('cfg-tp', 40)),
+        slPct: Math.max(1, Math.min(99, num('cfg-sl', 18))),
+        maxHoldHours: Math.max(0, num('cfg-max-hold', 24)),
+        trailArmPct: Math.max(0, num('cfg-trail-arm', 20)),
+        trailDropPct: Math.max(1, num('cfg-trail-drop', 12)),
+        cooldownMins: Math.max(1, num('cfg-cooldown', 60)),
+        minLiquidityUsd: Math.max(1000, num('cfg-min-liq', 75000)),
+        maxTradeToLiqPct: Math.max(0.05, num('cfg-max-trade-liq', 0.5)),
+        minLiqFdvPct: Math.max(0, num('cfg-min-liq-fdv', 5)),
+        minSells1h: Math.max(0, num('cfg-min-sells1h', 10)),
+        minVolume24h: Math.max(0, num('cfg-min-vol', 50000)),
+        minBuyRatioPct: Math.max(0, num('cfg-min-buy', 55))
+      };
+      persistConfig();
+      renderRadarTable();
+      renderAutoTraderView();
+      renderBotGenerator();
+    }
+
+    function handleResetBankrollClick() {
+      const btn = document.getElementById('btn-reset-bankroll');
+      if (!state.resetConfirmPending) {
+        state.resetConfirmPending = true;
+        btn.textContent = 'Confirm Reset?';
+        btn.className = 'px-2.5 py-1.5 rounded-lg bg-rose-500 text-white font-mono text-[11px] font-bold transition';
+        setTimeout(() => {
+          if (state.resetConfirmPending) {
+            state.resetConfirmPending = false;
+            btn.textContent = 'Reset Bankroll';
+            btn.className = 'px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-[11px] font-mono text-rose-300 transition';
+          }
+        }, 4000);
+        return;
+      }
+      state.resetConfirmPending = false;
+      btn.textContent = 'Reset Bankroll';
+      btn.className = 'px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-[11px] font-mono text-rose-300 transition';
+      state.cashUsd = state.config.startingBankroll;
+      state.openPositions = [];
+      state.closedTrades = [];
+      state.cooldowns = {};
+      state.decisionLog = [];
+      persistPortfolio();
+      renderAutoTraderView();
+      renderLedger();
+      showToast(`Paper bankroll reset to $${state.cashUsd.toFixed(2)} USDC.`, 'info');
+    }
+
+    function toggleAutoPaperTrade() {
+      state.autoTradeEnabled = !state.autoTradeEnabled;
+      persistPortfolio();
+      renderAutoTraderHeaderStatus();
+      showToast(state.autoTradeEnabled ? 'Autonomous Paper-Trading ENABLED' : 'Autonomous Paper-Trading PAUSED', state.autoTradeEnabled ? 'success' : 'info');
+      if (state.autoTradeEnabled && !state.isFetching && state.apiHealth === 'LIVE') {
+        pollAndExecuteCycle();
+      }
+    }
+
+    function runAutoCycleNow() {
+      if (!state.autoTradeEnabled) {
+        showToast('Turn ON "AUTO-PAPER-TRADE" in the top bar first.', 'warn');
+        return;
+      }
+      pollAndExecuteCycle();
+    }
+
+    function handleImportBotJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const raw = JSON.parse(String(reader.result));
+          const data = raw.portfolio ? raw.portfolio : raw;
+          if (typeof data.cashUsd !== 'number' || !Array.isArray(data.closedTrades)) {
+            throw new Error('JSON does not match paper_portfolio.json format');
+          }
+          state.cashUsd = data.cashUsd;
+          state.openPositions = Array.isArray(data.openPositions) ? data.openPositions : [];
+          state.closedTrades = data.closedTrades;
+          state.cooldowns = data.cooldowns || {};
+          state.decisionLog = Array.isArray(data.decisionLog) ? data.decisionLog : state.decisionLog;
+          persistPortfolio();
+          renderAutoTraderView();
+          renderLedger();
+          showToast(`Imported ${state.openPositions.length} open & ${state.closedTrades.length} closed trades!`, 'success');
+        } catch (err) {
+          showToast(`Import failed: ${err.message}`, 'error');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    function exportLedgerCsv() {
+      if (!state.closedTrades.length) { showToast('No closed trades to export.', 'warn'); return; }
+      const header = 'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason';
+      const rows = state.closedTrades.map(t => [
+        new Date(t.entryTime).toISOString(), new Date(t.exitTime).toISOString(), t.symbol, t.chainId,
+        t.buyPrice, t.tokensBought, t.costUsd.toFixed(2), Math.round(t.entryLiquidityUsd || 0),
+        t.sellPrice, t.exitValueUsd.toFixed(2), (t.feesImpactUsd || 0).toFixed(2), t.netPnlUsd.toFixed(2),
+        t.netPnlPct.toFixed(2), t.exitReason
+      ].join(','));
+      downloadBlob([header, ...rows].join('\n'), 'paper_trades.csv', 'text/csv');
+    }
+
+    function exportFullStateJson() {
+      downloadBlob(JSON.stringify({
+        exportedAt: new Date().toISOString(),
+        cashUsd: state.cashUsd,
+        openPositions: state.openPositions,
+        closedTrades: state.closedTrades,
+        cooldowns: state.cooldowns,
+        decisionLog: state.decisionLog
+      }, null, 2), 'paper_portfolio.json', 'application/json');
+    }
+
+    function switchTab(tab) {
+      state.activeTab = tab;
+      ['radar', 'autotrader', 'ledger', 'bot', 'telemetry'].forEach(t => {
+        const v = document.getElementById(`view-${t}`);
+        const b = document.getElementById(`tab-btn-${t}`);
+        if (t === tab) {
+          v.classList.remove('hidden');
+          b.classList.add('border-emerald-400', 'text-emerald-400', 'font-semibold');
+          b.classList.remove('border-transparent', 'text-slate-400', 'font-medium');
+        } else {
+          v.classList.add('hidden');
+          b.classList.remove('border-emerald-400', 'text-emerald-400', 'font-semibold');
+          b.classList.add('border-transparent', 'text-slate-400', 'font-medium');
+        }
+      });
+      if (tab === 'bot') renderBotGenerator();
+      if (tab === 'autotrader') renderAutoTraderView();
+      if (tab === 'ledger') renderLedger();
+    }
+
+    function selectFeed(feed) {
+      state.feed = feed;
+      document.querySelectorAll('.feed-btn').forEach(b => {
+        const active = b.dataset.feed === feed;
+        b.className = active
+          ? 'feed-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 transition'
+          : 'feed-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition';
+      });
+      renderBotGenerator();
+      if (feed === 'search') {
+        document.getElementById('radar-search-input').focus();
+        if (state.searchQuery) pollAndExecuteCycle();
+      } else {
+        pollAndExecuteCycle();
+      }
+    }
+
+    function selectChain(chain) {
+      state.chain = chain;
+      document.querySelectorAll('.chain-btn').forEach(b => {
+        const active = b.dataset.chain === chain;
+        b.className = active
+          ? 'chain-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 transition'
+          : 'chain-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-term-bg text-slate-400 border border-term-border hover:text-white transition';
+      });
+      renderBotGenerator();
+      pollAndExecuteCycle();
+    }
+
+    function handleSearchSubmit(e) {
+      e.preventDefault();
+      const q = document.getElementById('radar-search-input').value.trim();
+      if (!q) return;
+      state.searchQuery = q;
+      selectFeed('search');
+    }
+
+    function toggleSort(col) {
+      if (state.sortCol === col) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+      else { state.sortCol = col; state.sortDir = 'desc'; }
+      document.querySelectorAll('.sort-ind').forEach(el => {
+        el.textContent = el.dataset.col === state.sortCol ? (state.sortDir === 'desc' ? '▼' : '▲') : '';
+      });
+      renderRadarTable();
+    }
+
+    function onPollChange() {
+      state.pollIntervalSec = Number(document.getElementById('hud-poll-select').value);
+      if (state.pollIntervalSec === 0) {
+        document.getElementById('hud-countdown').textContent = 'MAN';
+        document.getElementById('hud-progress-bar').style.width = '0%';
+      } else if (!state.inBackoff) {
+        state.countdownSec = state.pollIntervalSec;
+      }
+      renderBotGenerator();
+    }
+
+    function forceRefreshNow() {
+      state.countdownSec = state.pollIntervalSec || 30;
+      pollAndExecuteCycle();
+    }
+
+    function clearDecisionLog() { state.decisionLog = []; persistPortfolio(); renderDecisionLog(); }
+    function setTelemetryFilter(m) {
+      state.telemetryFilter = m;
+      document.getElementById('tel-btn-all').className = m === 'all' ? 'px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-semibold' : 'px-3 py-1.5 rounded-lg bg-term-bg border border-term-border text-slate-400 hover:text-white font-mono text-xs';
+      document.getElementById('tel-btn-err').className = m === 'errors' ? 'px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-xs font-semibold' : 'px-3 py-1.5 rounded-lg bg-term-bg border border-term-border text-slate-400 hover:text-white font-mono text-xs';
+      renderTelemetryTable();
+    }
+    function exportTelemetryJson() { downloadBlob(JSON.stringify(state.telemetry, null, 2), 'api_telemetry.json', 'application/json'); }
+    function clearTelemetryLogs() { state.telemetry = []; state.errorCount = 0; document.getElementById('badge-err-count').classList.add('hidden'); renderTelemetryTable(); }
+    function copySelectedCa() { if (state.selectedPair) copyText(state.selectedPair.address, 'Contract address copied'); }
+
+    async function toggleWakeLock() {
+      const btn = document.getElementById('btn-wakelock'), dot = document.getElementById('dot-wakelock');
+      if (!('wakeLock' in navigator)) { showToast('Wake Lock unsupported in this browser.', 'warn'); return; }
+      if (state.wakeLock) {
+        try { await state.wakeLock.release(); } catch {}
+        state.wakeLock = null; dot.className = 'w-2 h-2 rounded-full bg-slate-500'; btn.classList.remove('border-emerald-500/40', 'text-emerald-300');
+        return;
+      }
+      try {
+        state.wakeLock = await navigator.wakeLock.request('screen');
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse'; btn.classList.add('border-emerald-500/40', 'text-emerald-300');
+        state.wakeLock.addEventListener('release', () => { state.wakeLock = null; dot.className = 'w-2 h-2 rounded-full bg-slate-500'; btn.classList.remove('border-emerald-500/40', 'text-emerald-300'); });
+        showToast('Screen Wake Lock active.', 'success');
+      } catch (e) { showToast(`Wake Lock error: ${e.message}`, 'warn'); }
+    }
+
+    function toggleAudioAlerts() {
+      state.audioEnabled = !state.audioEnabled;
+      document.getElementById('dot-audio').className = state.audioEnabled ? 'w-2 h-2 rounded-full bg-emerald-400' : 'w-2 h-2 rounded-full bg-slate-500';
+      document.getElementById('btn-audio').classList.toggle('border-emerald-500/40', state.audioEnabled);
+      document.getElementById('btn-audio').classList.toggle('text-emerald-300', state.audioEnabled);
+      if (state.audioEnabled) playChime(740, 0.12);
+    }
+
+    async function toggleBrowserNotif() {
+      if (typeof Notification === 'undefined') { showToast('Notifications unsupported.', 'warn'); return; }
+      if (!state.notifyEnabled) {
+        const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+        if (perm !== 'granted') { showToast(`Notification permission: ${perm}`, 'warn'); return; }
+        state.notifyEnabled = true;
+      } else state.notifyEnabled = false;
+      document.getElementById('dot-notify').className = state.notifyEnabled ? 'w-2 h-2 rounded-full bg-emerald-400' : 'w-2 h-2 rounded-full bg-slate-500';
+      document.getElementById('btn-notify').classList.toggle('border-emerald-500/40', state.notifyEnabled);
+      document.getElementById('btn-notify').classList.toggle('text-emerald-300', state.notifyEnabled);
+    }
+
+    function playChime(freq = 880, dur = 0.15) {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx(), osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        g.gain.setValueAtTime(0.08, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+        osc.connect(g); g.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + dur);
+      } catch {}
+    }
+
+    function sendBrowserNotif(title, body) {
+      if (state.notifyEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try { new Notification(title, { body }); } catch {}
+      }
+    }
+
+    function copyText(text, msg) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        showToast(msg, 'success');
+      } catch { showToast('Clipboard copy failed.', 'error'); }
+    }
+
+    function downloadBlob(content, filename, mime) {
+      const blob = new Blob([content], { type: mime + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function showToast(msg, type = 'info') {
+      const box = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      const cls = type === 'success' ? 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200'
+        : type === 'error' ? 'bg-rose-950/95 border-rose-500/50 text-rose-200'
+        : type === 'warn' ? 'bg-amber-950/95 border-amber-500/50 text-amber-200'
+        : 'bg-term-card/95 border-slate-600 text-slate-200';
+      el.className = `pointer-events-auto px-3.5 py-2.5 rounded-xl border shadow-xl text-xs font-medium backdrop-blur-md transition-all duration-200 opacity-0 translate-y-2 ${cls}`;
+      el.textContent = msg; box.appendChild(el);
+      requestAnimationFrame(() => el.classList.remove('opacity-0', 'translate-y-2'));
+      setTimeout(() => { el.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => el.remove(), 220); }, 3400);
+    }
+
+    // Formatters
+    function formatPrice(n) {
+      if (!Number.isFinite(n) || n <= 0) return '$0.00';
+      if (n >= 1) return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      if (n >= 0.001) return '$' + n.toFixed(5);
+      if (n >= 0.00001) return '$' + n.toFixed(7);
+      return '$' + n.toExponential(3);
+    }
+    function formatUsd(n) {
+      if (!Number.isFinite(n) || n <= 0) return '$0';
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toFixed(0);
+    }
+    function formatTokens(n) {
+      if (!Number.isFinite(n) || n <= 0) return '0';
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+      return n.toFixed(4);
+    }
+    function formatPct(n) { const v = Number(n || 0); return `${v > 0 ? '+' : ''}${v.toFixed(1)}%`; }
+    function pctColor(n) { const v = Number(n || 0); return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : 'text-slate-400'; }
+    function formatAge(ms) {
+      if (!ms) return 'N/A';
+      const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+      if (s < 3600) return Math.floor(s / 60) + 'm';
+      if (s < 86400) return Math.floor(s / 3600) + 'h';
+      return Math.floor(s / 86400) + 'd';
+    }
+    function formatTime(ms) { return ms ? new Date(ms).toLocaleTimeString([], { hour12: false }) : 'Never'; }
+    function formatDateTime(ms) { return ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--'; }
+    function getChainMeta(c) {
+      switch (c) {
+        case 'solana': return { label: 'SOL', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+        case 'base': return { label: 'BASE', cls: 'bg-blue-500/15 text-blue-300 border-blue-500/30' };
+        case 'ethereum': return { label: 'ETH', cls: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' };
+        case 'bsc': return { label: 'BSC', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
+        case 'arbitrum': return { label: 'ARB', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30' };
+        default: return { label: String(c).toUpperCase(), cls: 'bg-slate-800 text-slate-300 border-slate-700' };
+      }
+    }
+    function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+    /*************************************************************************
+     * 10. MASTER 1-SECOND HEARTBEAT & BOOT
+     *************************************************************************/
+    setInterval(() => {
+      const sec = Math.floor((Date.now() - state.sessionStartMs) / 1000);
+      document.getElementById('hud-uptime').textContent =
+        `${String(Math.floor(sec/3600)).padStart(2,'0')}:${String(Math.floor((sec%3600)/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
+      pruneRpm();
+
+      if (state.pollIntervalSec > 0 && !state.isFetching) {
+        state.countdownSec--;
+        const cdEl = document.getElementById('hud-countdown');
+        const barEl = document.getElementById('hud-progress-bar');
+        const total = state.inBackoff ? BACKOFF_STEPS[Math.min(Math.max(state.consecutiveFailures - 1, 0), BACKOFF_STEPS.length - 1)] : state.pollIntervalSec;
+        cdEl.textContent = `${Math.max(0, state.countdownSec)}s`;
+        cdEl.className = state.inBackoff ? 'text-amber-400 font-semibold w-9' : 'text-cyan-400 font-semibold w-9';
+        barEl.style.width = `${Math.max(0, Math.min(100, (state.countdownSec / total) * 100))}%`;
+        barEl.className = `h-full transition-all duration-500 ${state.inBackoff ? 'bg-amber-400' : 'bg-cyan-400'}`;
+        if (state.inBackoff) document.getElementById('global-error-backoff').textContent = `Exponential backoff retry #${state.consecutiveFailures} in ${Math.max(0, state.countdownSec)}s.`;
+        if (state.countdownSec <= 0) pollAndExecuteCycle();
+      }
+    }, 1000);
+
+    window.addEventListener('offline', () => {
+      setApiHealth('OFFLINE', 'Device network disconnected. Auto-Trading paused safely.');
+      state.positionsStale = true;
+      state.positionsStaleReason = 'Network Offline';
+      renderAutoTraderView();
+    });
+    window.addEventListener('online', () => {
+      addTelemetry('OK', 'SYSTEM', 0, 0, 'window.online', 'Network restored — resuming live poll.');
+      pollAndExecuteCycle();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadConfigToInputs();
+      renderAutoTraderView();
+      renderLedger();
+      renderBotGenerator();
+      renderTelemetryTable();
+      pollAndExecuteCycle();
+    });
+  </script>
+</body>
+</html>
