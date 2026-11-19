@@ -273,7 +273,13 @@ async function pollCycle() {
     const pos = portfolio.openPositions[i];
     const lp = livePosMap.get(pos.pairAddress.toLowerCase());
     if (!lp || !Number(lp.priceUsd) || !Number(lp.liquidity?.usd)) {
-      pos.dataStale = true;\n      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';\n      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);\n      continue;\n    }\n    pos.dataStale = false;\n    pos.dataStaleReason = '';
+      pos.dataStale = true;
+      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';
+      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);
+      continue;
+    }
+    pos.dataStale = false;
+    pos.dataStaleReason = '';
     pos.lastPrice = Number(lp.priceUsd);
     pos.lastLiquidityUsd = Number(lp.liquidity?.usd || 0);
     if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
