@@ -192,11 +192,47 @@ export function analyzeCreatorSignals({
     mintAuthority,
     freezeAuthority,
     authoritySignatureCount: Number.isFinite(authoritySignatureCount) ? authoritySignatureCount : null,
-    holderOwnersObserved: uniqueOwners.length,
+    holderOwnersObserved: uniqueOwners.length,\n    holderOwnerAddresses: uniqueOwners,
     repeatedHolderOwners: repeatedOwners,
     authorityHolderOverlap,
     reusedMintAuthorityTokens,
     warnings,
     interpretation: 'RPC-visible authorities and token-account owners only; not proof of creator identity, common beneficial ownership, or manipulation'
   };
+}
+
+
+/**
+ * Groups exact RPC-observed authority and token-account owner strings across
+ * research snapshots. A cluster is a review lead, not proof of shared identity.
+ */
+export function summarizeCrossTokenClusters(rows = [], minTokens = 2) {
+  const groups = new Map();
+  const add = (kind, address, token) => {
+    if (typeof address !== 'string' || address.length < 20 || typeof token !== 'string' || !token) return;
+    const key = kind + ':' + address;
+    if (!groups.has(key)) groups.set(key, { signalType: kind, address, tokens: new Set(), observations: 0 });
+    const group = groups.get(key);
+    group.tokens.add(token);
+    group.observations++;
+  };
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const token = row?.token;
+    const signals = row?.creatorSignals || {};
+    add('mint-authority', signals.mintAuthority, token);
+    add('freeze-authority', signals.freezeAuthority, token);
+    for (const owner of Array.isArray(signals.holderOwnerAddresses) ? signals.holderOwnerAddresses : []) {
+      add('holder-owner', owner, token);
+    }
+  }
+  return [...groups.values()]
+    .filter(group => group.tokens.size >= Math.max(2, Number(minTokens) || 2))
+    .map(group => ({
+      signalType: group.signalType,
+      address: group.address,
+      tokenCount: group.tokens.size,
+      observationCount: group.observations,
+      tokens: [...group.tokens]
+    }))
+    .sort((a, b) => b.tokenCount - a.tokenCount || a.signalType.localeCompare(b.signalType));
 }
