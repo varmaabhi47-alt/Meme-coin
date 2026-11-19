@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter, calculateJupiterQuoteExit } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -22,6 +22,8 @@ const CONFIG = {
   EVM_CHAIN_IDS: { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' },
   POLL_SEC: 30,
   DEX_FEE_RATE: 0.003,
+  JUPITER_API_KEY: process.env.JUPITER_API_KEY || '',
+  JUPITER_QUOTE_ENABLED: process.env.JUPITER_QUOTE_ENABLED !== 'false',
   BACKOFF_STEPS: [10, 20, 40, 60],
 
   // Synced Strategy & Liquidity Gate Settings
@@ -50,6 +52,9 @@ const CONFIG = {
 };
 
 const secCache = new Map();
+const jupiterQuoteCache = new Map();
+let lastJupiterRequestMs = 0;
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 let failures = 0;
 let lastPollIso = null;
 let lastError = '';
@@ -101,11 +106,11 @@ async function appendCsv(t) {
   await fs.appendFile(CONFIG.CSV_FILE, line, 'utf8');
 }
 
-async function fetchJsonStrict(url, timeoutMs = 11000) {
+async function fetchJsonStrict(url, timeoutMs = 11000, headers = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(url, { signal: ctrl.signal, headers });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     return await res.json();
@@ -147,6 +152,38 @@ function logDecision(action, symbol, chainId, reason) {
 function calcBuy(usd, price, liq) {
   const result = calculatePaperBuy(usd, price, liq, CONFIG.DEX_FEE_RATE);
   return { feeUsd: result.feeUsd, impactUsd: result.impactUsd, impactRate: result.impactRate, effPrice: result.effectivePrice, tokens: result.tokens, model: result.model };
+}
+
+async function calcPaperExit(pos, price, liq) {
+  const fallback = () => ({ ...calcSell(pos.tokens, price, liq), quoteSource: 'constant-product-fallback' });
+  if (!CONFIG.JUPITER_QUOTE_ENABLED || pos.chainId !== 'solana' ||
+      !pos.address || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
+  const decimals = Number(pos.tokenDecimals);
+  if (decimals < 0 || decimals > 18) return fallback();
+  const cacheKey = String(pos.address);
+  const cached = jupiterQuoteCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 8000) return cached.value;
+  try {
+    const rawAmount = BigInt(Math.floor(Number(pos.tokens) * (10 ** decimals))).toString();
+    if (rawAmount === '0') return fallback();
+    const waitMs = Math.max(0, 2100 - (Date.now() - lastJupiterRequestMs));
+    if (waitMs) await sleep(waitMs);
+    const params = new URLSearchParams({ inputMint: pos.address, outputMint: USDC_MINT, amount: rawAmount });
+    lastJupiterRequestMs = Date.now();
+    const headers = CONFIG.JUPITER_API_KEY ? { 'x-api-key': CONFIG.JUPITER_API_KEY } : {};
+    const quote = await fetchJsonStrict(`https://api.jup.ag/swap/v2/order?${params}`, 9000, headers);
+    const result = calculateJupiterQuoteExit({ quote, tokens: pos.tokens, spotPrice: price, outputDecimals: 6 });
+    const value = {
+      effPrice: result.effectivePrice, impactUsd: result.impactUsd, impactRate: result.impactRate,
+      feeUsd: result.feeUsd, netProceeds: result.netProceeds, model: result.model,
+      quoteSource: 'jupiter', router: result.router
+    };
+    jupiterQuoteCache.set(cacheKey, { ts: Date.now(), value });
+    return value;
+  } catch (error) {
+    console.warn(`[${nowIso()}] Jupiter quote unavailable for ${pos.symbol}; using labelled paper estimate: ${error.message}`);
+    return fallback();
+  }
 }
 
 function calcSell(tokens, price, liq) {
@@ -329,7 +366,7 @@ async function pollCycle() {
     if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
     if (CONFIG.TRAIL_ARM_PCT > 0 && ((pos.peakPrice - pos.buyPrice) / pos.buyPrice) * 100 >= CONFIG.TRAIL_ARM_PCT) pos.trailArmed = true;
 
-    const ex = calcSell(pos.tokens, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
+    const ex = await calcPaperExit(pos, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
     const pnlPct = ((ex.netProceeds - pos.costUsd) / pos.costUsd) * 100;
     const holdHrs = (Date.now() - pos.entryTime) / 3600000;
     const dropPeak = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
@@ -348,7 +385,7 @@ async function pollCycle() {
       const trade = {
         id: 'tr_' + Date.now(), symbol: pos.symbol, chainId: pos.chainId, address: pos.address,
         entryTime: pos.entryTime, buyPrice: pos.buyPrice, tokensBought: pos.tokens, costUsd: pos.costUsd,
-        entryLiquidityUsd: pos.entryLiquidityUsd, exitTime: Date.now(), sellPrice: ex.effPrice,
+        entryLiquidityUsd: pos.entryLiquidityUsd, exitTime: Date.now(), sellPrice: ex.effPrice, exitQuoteSource: ex.quoteSource || 'constant-product-fallback', exitRouter: ex.router || null,
         exitValueUsd: ex.netProceeds, feesImpactUsd: pos.buyFeeAndImpactUsd + ex.feeUsd + ex.impactUsd,
         netPnlUsd, netPnlPct: pnlPct, exitReason: reason
       };
@@ -429,7 +466,7 @@ async function pollCycle() {
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
-        entryTime: Date.now(), entrySpotPrice: Number(p.priceUsd), buyPrice: ex.effPrice, tokens: ex.tokens,
+        entryTime: Date.now(), entrySpotPrice: Number(p.priceUsd), buyPrice: ex.effPrice, tokens: ex.tokens, tokenDecimals: holderData?.decimals ?? null,
         costUsd: CONFIG.TRADE_SIZE_USD, buyFeeAndImpactUsd: ex.feeUsd + ex.impactUsd, entryLiquidityUsd: liq,
         lastPrice: Number(p.priceUsd), lastLiquidityUsd: liq, peakPrice: Number(p.priceUsd), trailArmed: false, securitySummary: sec.reason
       });
