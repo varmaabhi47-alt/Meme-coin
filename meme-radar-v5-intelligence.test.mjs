@@ -3,7 +3,7 @@ import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
-  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
+  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, analyzeNarrativeFootprint, summarizePaperLearning, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
 } from './meme-radar-v5-intelligence.mjs';
 
 const healthyPair = {
@@ -153,4 +153,40 @@ test('Jupiter quote parser fails closed on missing, malformed or zero output', (
   assert.throws(() => calculateJupiterQuoteExit({ quote: {}, tokens: 100, spotPrice: 1 }));
   assert.throws(() => calculateJupiterQuoteExit({ quote: { outAmount: 'abc' }, tokens: 100, spotPrice: 1 }));
   assert.throws(() => calculateJupiterQuoteExit({ quote: { outAmount: '0' }, tokens: 100, spotPrice: 1 }));
+});
+
+test('Engine 5 scores observable website and social footprint without claiming sentiment', () => {
+  const result = analyzeNarrativeFootprint({
+    baseToken: { name: 'Example Token', symbol: 'EX' },
+    info: {
+      websites: [{ url: 'https://example.org' }],
+      socials: [{ type: 'twitter', url: 'https://x.com/example' }, { type: 'telegram', url: 'https://t.me/example' }]
+    }
+  });
+  assert.equal(result.websiteCount, 1);
+  assert.equal(result.socialLinkCount, 2);
+  assert.equal(result.sentimentAnalyzed, false);
+  assert.equal(result.engagementVerified, false);
+  assert.equal(result.tier, 'BROAD_FOOTPRINT');
+});
+
+test('Engine 5 treats absent metadata as unknown/thin footprint, not a scam verdict', () => {
+  const result = analyzeNarrativeFootprint({});
+  assert.equal(result.tier, 'THIN_FOOTPRINT');
+  assert.ok(result.flags.length >= 2);
+});
+
+test('Engine 6 reports descriptive paper-trade outcomes and sample sufficiency', () => {
+  const small = summarizePaperLearning([
+    { netPnlUsd: 2, netPnlPct: 2, exitTime: 1 },
+    { netPnlUsd: -1, netPnlPct: -1, exitTime: 2 }
+  ]);
+  assert.equal(small.sampleSize, 2);
+  assert.equal(small.evidence, 'INSUFFICIENT_SAMPLE');
+  assert.equal(small.autoTuningEnabled, false);
+  const enough = summarizePaperLearning(Array.from({ length: 20 }, (_, i) => ({
+    netPnlUsd: i % 2 ? -1 : 2, netPnlPct: i % 2 ? -1 : 2, exitTime: i + 1
+  })));
+  assert.equal(enough.evidence, 'SAMPLE_AVAILABLE');
+  assert.equal(enough.sampleSize, 20);
 });
