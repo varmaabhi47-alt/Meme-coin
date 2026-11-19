@@ -1,6 +1,11 @@
 name: MEME.RADAR V5 Live API Smoke Checks
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/v5-live-readonly-smoke.mjs"
+      - ".github/workflows/v5-live-api-smoke.yml"
   workflow_dispatch:
   schedule:
     - cron: "17 */6 * * *"
