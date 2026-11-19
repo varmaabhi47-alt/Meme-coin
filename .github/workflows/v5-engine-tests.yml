@@ -1,0 +1,43 @@
+name: MEME.RADAR V5 Engine Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "meme-radar-v5-*.mjs"
+      - "meme-radar-bot.mjs"
+      - ".github/workflows/v5-engine-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v5-engine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check V5 bot syntax
+        run: node --check meme-radar-bot.mjs
+
+      - name: Check V5 intelligence module syntax
+        run: node --check meme-radar-v5-intelligence.mjs
+
+      - name: Run all V5 unit tests
+        run: node --test meme-radar-v5-*.test.mjs
+
+      - name: Confirm no live trading code is enabled
+        run: |
+          if grep -RniE "sendTransaction|signTransaction|wallet\.connect|swap/v2/execute" meme-radar-bot.mjs meme-radar-v5-*.mjs; then
+            echo "Unexpected transaction execution code detected."
+            exit 1
+          fi
+          echo "Paper-trading-only source guard passed."
