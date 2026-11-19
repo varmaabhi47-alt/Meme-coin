@@ -18,8 +18,8 @@
       "costUsd": 100,
       "buyFeeAndImpactUsd": 0.33338632952702385,
       "entryLiquidityUsd": 149312.61,
-      "lastPrice": 0.001893,
-      "lastLiquidityUsd": 150200.87,
+      "lastPrice": 0.001845,
+      "lastLiquidityUsd": 148050.12,
       "peakPrice": 0.001893,
       "trailArmed": false,
       "securitySummary": "RugCheck PASS (Score 1)"
@@ -39,8 +39,8 @@
       "costUsd": 100,
       "buyFeeAndImpactUsd": 0.3527197634178143,
       "entryLiquidityUsd": 94556.57,
-      "lastPrice": 0.0001423,
-      "lastLiquidityUsd": 86242.62,
+      "lastPrice": 0.0001414,
+      "lastLiquidityUsd": 85913.73,
       "peakPrice": 0.0001709,
       "trailArmed": false,
       "securitySummary": "GoPlus PASS (Tax 0.0%/0.0%)"
