@@ -121,3 +121,18 @@ test('cross-token clustering ignores one-token and malformed observations', () =
     { token: null, creatorSignals: { mintAuthority: 'AnotherWallet111111111111111111111' } }
   ]), []);
 });
+
+
+test('discovery prefilter explains every failed cheap gate', () => {
+  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 1000 }, fdv: 100000, volume: { h24: 10 }, txns: { h1: { sells: 0 }, h24: { buys: 0, sells: 0 } } });
+  assert.equal(result.pass, false);
+  assert.ok(result.reasons.includes('liquidity below minimum'));
+  assert.ok(result.reasons.includes('24h buy ratio unavailable'));
+  assert.equal(result.metrics.buyRatioPct, null);
+});
+
+test('discovery prefilter passes a candidate meeting configured thresholds', () => {
+  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, txns: { h1: { sells: 20 }, h24: { buys: 70, sells: 30 } } });
+  assert.equal(result.pass, true);
+  assert.deepEqual(result.reasons, []);
+});
