@@ -944,6 +944,39 @@ node meme-radar-autobot-24-7.mjs
     }
 
     /*************************************************************************
+    // Shared portfolio sync: Cloudflare D1 is the central source of truth.
+    const PORTFOLIO_API_URL = 'https://memeradar-state-api.varmaabhi47.workers.dev/state';
+    let remotePortfolioUpdatedAt = '';
+    async function syncPortfolioFromCloudflare() {
+      try {
+        const response = await fetch(PORTFOLIO_API_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        const remote = result.portfolio || result.state || result.data?.portfolio || result.data || null;
+        if (!remote || typeof remote.cashUsd !== 'number' || !Array.isArray(remote.openPositions) || !Array.isArray(remote.closedTrades)) {
+          throw new Error('Cloud portfolio response format was not recognized');
+        }
+        const updatedAt = result.updatedAt || result.updated_at || '';
+        if (updatedAt && updatedAt === remotePortfolioUpdatedAt) return true;
+        state.cashUsd = remote.cashUsd;
+        state.autoTradeEnabled = remote.autoTradeEnabled ?? state.autoTradeEnabled;
+        state.openPositions = remote.openPositions;
+        state.closedTrades = remote.closedTrades;
+        state.cooldowns = remote.cooldowns || {};
+        state.decisionLog = Array.isArray(remote.decisionLog) ? remote.decisionLog : [];
+        remotePortfolioUpdatedAt = updatedAt;
+        persistPortfolio();
+        renderAutoTraderView();
+        renderLedger();
+        renderDecisionLog();
+        addTelemetry('OK', 'D1', 0, 0, 'portfolio-sync', 'Shared portfolio loaded from Cloudflare D1.');
+        return true;
+      } catch (err) {
+        addTelemetry('WARN', 'D1', 0, 0, 'portfolio-sync', `Cloud sync unavailable; using this device's saved portfolio. ${err.message}`);
+        return false;
+      }
+    }
+
      * 2. TELEMETRY, RPM PACER & STRICT ZERO-SIMULATION FETCH
      *************************************************************************/
     function pruneRpm() {
