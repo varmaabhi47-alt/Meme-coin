@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
@@ -63,4 +64,17 @@ test('basic manipulation warnings detect extreme turnover and sell pressure', ()
     txns: { h1: { buys: 10, sells: 30 } }, priceChange: { m5: 40 }
   });
   assert.ok(warnings.length >= 3);
+});
+
+test('top holder concentration is calculated from raw token account balances', () => {
+  const { calculateTopHolderConcentration } = requireHolderModule;
+  const result = calculateTopHolderConcentration([{amount:'400'},{amount:'300'},{amount:'100'},{amount:'100'},{amount:'50'},{amount:'50'}], '2000');
+  assert.equal(result.known, true);
+  assert.equal(result.top5Pct, 47.5);
+  assert.equal(result.top10Pct, 50);
+});
+
+test('holder concentration returns unknown for missing supply', () => {
+  const { calculateTopHolderConcentration } = requireHolderModule;
+  assert.equal(calculateTopHolderConcentration([], '0').known, false);
 });
