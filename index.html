@@ -3054,7 +3054,7 @@ main();
         }
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const body = await response.text();
-        v5ResearchRows = body.split(/\\r?\\n/).filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+        v5ResearchRows = body.split(/\r?\n/).filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
         renderV5Research();
         status.textContent = v5ResearchRows.length + ' snapshots loaded. Backtest requires later observations at the selected horizon.';
       } catch (error) {
