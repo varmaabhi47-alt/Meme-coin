@@ -151,3 +151,52 @@ export function calculateTopHolderConcentration(largestAccounts, totalSupplyRaw)
   const pct = amount => Number((amount * 1000000n) / supply) / 10000;
   return { known: true, top5Pct: pct(sum(amounts.slice(0, 5))), top10Pct: pct(sum(amounts.slice(0, 10))), accountsObserved: amounts.length, interpretation: 'Raw largest token accounts; may include LP, exchange, or custodial accounts' };
 }
+
+
+/**
+ * Transparent Solana authority/holder heuristics.
+ * These signals are clues for manual review, not proof of a creator's identity
+ * or coordinated wallets. Holder owners are derived from parsed token accounts.
+ */
+export function analyzeCreatorSignals({
+  mintAuthority = null,
+  freezeAuthority = null,
+  authoritySignatureCount = null,
+  holderOwners = [],
+  priorAuthorityRows = []
+} = {}) {
+  const owners = holderOwners.filter(owner => typeof owner === 'string' && owner.length > 20);
+  const uniqueOwners = [...new Set(owners)];
+  const counts = new Map();
+  for (const owner of owners) counts.set(owner, (counts.get(owner) || 0) + 1);
+  const repeatedOwners = [...counts.entries()].filter(([, count]) => count > 1)
+    .map(([address, count]) => ({ address, count }));
+  const authoritySet = new Set([mintAuthority, freezeAuthority].filter(Boolean));
+  const authorityHolderOverlap = uniqueOwners.filter(owner => authoritySet.has(owner));
+  const priorTokens = new Set();
+  if (mintAuthority) {
+    for (const row of priorAuthorityRows) {
+      if (row?.creatorSignals?.mintAuthority === mintAuthority && row.token) priorTokens.add(row.token);
+    }
+  }
+  const reusedMintAuthorityTokens = priorTokens.size;
+  const warnings = [];
+  if (mintAuthority) warnings.push('mint authority is active; minting control remains');
+  if (freezeAuthority) warnings.push('freeze authority is active; freeze control remains');
+  if (authorityHolderOverlap.length) warnings.push('authority wallet also appears among observed top-holder owners');
+  if (reusedMintAuthorityTokens > 0) warnings.push('mint authority appeared on previously recorded token(s); review possible deployer reuse');
+  if (repeatedOwners.length) warnings.push('same owner controls multiple observed top token accounts');
+  if (Number.isFinite(authoritySignatureCount) && authoritySignatureCount >= 500) warnings.push('authority wallet has at least 500 recent signatures; activity count is not a reputation score');
+  return {
+    known: true,
+    mintAuthority,
+    freezeAuthority,
+    authoritySignatureCount: Number.isFinite(authoritySignatureCount) ? authoritySignatureCount : null,
+    holderOwnersObserved: uniqueOwners.length,
+    repeatedHolderOwners: repeatedOwners,
+    authorityHolderOverlap,
+    reusedMintAuthorityTokens,
+    warnings,
+    interpretation: 'RPC-visible authorities and token-account owners only; not proof of creator identity, common beneficial ownership, or manipulation'
+  };
+}
