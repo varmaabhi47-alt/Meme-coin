@@ -270,6 +270,76 @@ export function summarizeCrossTokenClusters(rows = [], minTokens = 2) {
  * Explain the bot's cheap discovery gates before expensive security RPC calls.
  * Missing metrics are explicitly flagged instead of silently treated as safe.
  */
+/**
+ * Engine 5: measures only the observable public-profile footprint.
+ * It does NOT claim sentiment, real followers, community quality, or virality.
+ */
+export function analyzeNarrativeFootprint(pair = {}) {
+  const info = pair.info || {};
+  const websites = Array.isArray(info.websites) ? info.websites : [];
+  const socials = Array.isArray(info.socials) ? info.socials : [];
+  const normalize = value => {
+    try {
+      const u = new URL(String(value));
+      return { host: u.hostname.toLowerCase().replace(/^www\\./, ''), url: u.toString() };
+    } catch { return null; }
+  };
+  const websiteHosts = [...new Set(websites.map(x => normalize(x?.url || x)).filter(Boolean).map(x => x.host))];
+  const socialRows = socials.map(x => {
+    const parsed = normalize(x?.url || x);
+    return parsed ? { type: String(x?.type || 'unknown').toLowerCase(), host: parsed.host } : null;
+  }).filter(Boolean);
+  const socialHosts = [...new Set(socialRows.map(x => x.host))];
+  const recognized = new Set(['x.com','twitter.com','t.me','telegram.me','discord.gg','discord.com','reddit.com','youtube.com','youtu.be','instagram.com','medium.com','warpcast.com']);
+  const recognizedSocials = [...new Set(socialHosts.filter(host => recognized.has(host) || [...recognized].some(d => host.endsWith('.' + d))))];
+  const name = String(pair.baseToken?.name || '').trim();
+  const symbol = String(pair.baseToken?.symbol || '').trim();
+  const hasWebsite = websiteHosts.length > 0;
+  const hasSocial = socialHosts.length > 0;
+  const score = Math.min(100, (hasWebsite ? 25 : 0) + Math.min(60, recognizedSocials.length * 20) + (name.length >= 3 ? 5 : 0) + (symbol.length >= 2 ? 5 : 0) + (websiteHosts.length > 1 ? 5 : 0));
+  const flags = [];
+  if (!hasWebsite) flags.push('No website listed in pair metadata');
+  if (!hasSocial) flags.push('No social links listed in pair metadata');
+  if (hasSocial && recognizedSocials.length === 0) flags.push('Social links use unrecognized domains; manual review suggested');
+  return {
+    score, tier: score >= 70 ? 'BROAD_FOOTPRINT' : score >= 35 ? 'SOME_FOOTPRINT' : 'THIN_FOOTPRINT',
+    websiteHosts, socialHosts, recognizedSocialHosts: recognizedSocials,
+    websiteCount: websiteHosts.length, socialLinkCount: socialRows.length,
+    dataSource: 'DexScreener pair metadata', sentimentAnalyzed: false,
+    engagementVerified: false, flags
+  };
+}
+
+/**
+ * Engine 6: descriptive learning from completed paper trades only.
+ * No parameter changes are made. A minimum sample threshold prevents tiny
+ * samples from being presented as a reliable strategy conclusion.
+ */
+export function summarizePaperLearning(closedTrades = [], minSamples = 20) {
+  const valid = closedTrades.filter(t => Number.isFinite(Number(t.netPnlUsd)) && Number.isFinite(Number(t.netPnlPct)));
+  const n = valid.length;
+  const wins = valid.filter(t => Number(t.netPnlUsd) > 0).length;
+  const losses = valid.filter(t => Number(t.netPnlUsd) < 0).length;
+  const totalPnlUsd = valid.reduce((sum, t) => sum + Number(t.netPnlUsd), 0);
+  const avgPnlPct = n ? valid.reduce((sum, t) => sum + Number(t.netPnlPct), 0) / n : null;
+  const sorted = [...valid].sort((a, b) => Number(a.exitTime || 0) - Number(b.exitTime || 0));
+  let equity = 1, peak = 1, maxDrawdownPct = 0;
+  for (const trade of sorted) {
+    equity *= Math.max(0, 1 + Number(trade.netPnlPct) / 100);
+    peak = Math.max(peak, equity);
+    if (peak > 0) maxDrawdownPct = Math.max(maxDrawdownPct, (peak - equity) / peak * 100);
+  }
+  return {
+    sampleSize: n, wins, losses, breakeven: n - wins - losses,
+    winRatePct: n ? wins / n * 100 : null, totalPnlUsd,
+    averagePnlPct: avgPnlPct, maxDrawdownPct,
+    evidence: n >= minSamples ? 'SAMPLE_AVAILABLE' : 'INSUFFICIENT_SAMPLE',
+    minSamplesRequired: minSamples,
+    autoTuningEnabled: false,
+    note: n >= minSamples ? 'Descriptive paper-trade history; not proof of future performance.' : 'Collect more completed paper trades before drawing strategy conclusions.'
+  };
+}
+
 export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const minLiquidity = Number(config.MIN_LIQUIDITY_USD ?? 75000);
   const maxTradeToLiquidity = Number(config.MAX_TRADE_TO_LIQ_PCT ?? 2);
