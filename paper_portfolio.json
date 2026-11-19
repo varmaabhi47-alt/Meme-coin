@@ -1,0 +1,41 @@
+{
+  "autoTradeEnabled": true,
+  "startingBankroll": 1000,
+  "cashUsd": 900,
+  "openPositions": [
+    {
+      "id": "pos_1795114188480",
+      "pairId": "bsc:0x7d03759e5b41e36899833cb2e008455d69a24444",
+      "chainId": "bsc",
+      "pairAddress": "0x3DC2878f9F60476dbBb18aF7531fbe1A603c8Dc0",
+      "address": "0x7d03759E5B41E36899833cb2E008455d69A24444",
+      "symbol": "PRICELESS",
+      "name": "priceless",
+      "entryTime": 1795114188480,
+      "entrySpotPrice": 0.0001709,
+      "buyPrice": 0.00017099036918323074,
+      "tokens": 583073.7747174694,
+      "costUsd": 100,
+      "buyFeeAndImpactUsd": 0.3527197634178143,
+      "entryLiquidityUsd": 94556.57,
+      "lastPrice": 0.0001709,
+      "lastLiquidityUsd": 94556.57,
+      "peakPrice": 0.0001709,
+      "trailArmed": false,
+      "securitySummary": "GoPlus PASS (Tax 0.0%/0.0%)"
+    }
+  ],
+  "closedTrades": [],
+  "cooldowns": {},
+  "decisionLog": [
+    {
+      "ts": 1795114188494,
+      "timeStr": "18:49:48",
+      "action": "BOUGHT",
+      "symbol": "priceless",
+      "chainId": "bsc",
+      "reason": "$100 @ $0.00017099036918323074 | Liq $94,557 | GoPlus PASS (Tax 0.0%/0.0%)"
+    }
+  ],
+  "lastHourlySummaryMs": 0
+}
