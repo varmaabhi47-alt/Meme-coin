@@ -165,7 +165,7 @@ async function recordResearch(pair, security, analysis, decision) {
     components: analysis?.components || {}, metrics: analysis?.metrics || {},
     warnings: detectBasicMarketWarnings(pair), decision
   };
-  await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\\n', 'utf8');
+  await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
 }
 
 async function auditSecurity(pair) {
@@ -368,6 +368,7 @@ async function pollCycle() {
   lastPollIso = nowIso();
   lastError = '';
   await saveState();
+  await syncPortfolioToCloudflare();
 
   if (Date.now() - lastHourlySummaryMs >= 3600000) {
     lastHourlySummaryMs = Date.now();
