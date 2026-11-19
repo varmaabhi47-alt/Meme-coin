@@ -13,7 +13,7 @@
  */
 
 import fs from 'node:fs/promises';
-import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals } from './meme-radar-v5-intelligence.mjs';
+import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters } from './meme-radar-v5-intelligence.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -411,7 +411,7 @@ async function pollCycle() {
       const holderData = holders.holderDistribution;
       const creatorData = holders.creatorSignals;
       if (holderData?.known && holderData.top10Pct >= 70) intelligence.reasons.push(`top 10 token accounts hold ${holderData.top10Pct.toFixed(2)}% (manual review; LP/custody not excluded)`);
-      for (const warning of creatorData?.warnings || []) intelligence.reasons.push(warning);
+      // Creator/cluster warnings remain separate from the numerical score and tier.\n      
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
