@@ -697,7 +697,7 @@ node meme-radar-autobot-24-7.mjs
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <div class="p-3 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] text-slate-500 font-mono">SNAPSHOTS</div><div id="v5-snapshot-count" class="text-xl font-bold text-white mt-1">—</div></div>
         <div class="p-3 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] text-slate-500 font-mono">RESEARCH CANDIDATES</div><div id="v5-candidate-count" class="text-xl font-bold text-cyan-300 mt-1">—</div></div>
-        <div class="p-3 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] text-slate-500 font-mono">REJECTED</div><div id="v5-rejected-count" class="text-xl font-bold text-rose-300 mt-1">—</div></div>
+        <div class="p-3 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] text-slate-500 font-mono">REJECTED (ALL GATES)</div><div id="v5-rejected-count" class="text-xl font-bold text-rose-300 mt-1">—</div></div>
         <div class="p-3 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] text-slate-500 font-mono">UNIQUE TOKENS</div><div id="v5-token-count" class="text-xl font-bold text-white mt-1">—</div></div>
       </div>
       <div class="p-3 rounded-xl bg-term-panel border border-term-border">
@@ -989,7 +989,7 @@ node meme-radar-autobot-24-7.mjs
       const unique = new Set(rows.map(row => row.token || row.pairAddress).filter(Boolean));
       document.getElementById('v5-snapshot-count').textContent = rows.length;
       document.getElementById('v5-candidate-count').textContent = rows.filter(row => row.tier === 'RESEARCH').length;
-      document.getElementById('v5-rejected-count').textContent = rows.filter(row => row.tier === 'REJECT').length;
+      document.getElementById('v5-rejected-count').textContent = rows.filter(row => row.tier === 'REJECT' || row.tier === 'PREFILTER_REJECT').length;
       document.getElementById('v5-token-count').textContent = unique.size;
       document.getElementById('badge-research-count').textContent = rows.length;
       const tbody = document.getElementById('v5-research-tbody');
@@ -3050,14 +3050,14 @@ main();
         if (response.status === 404) {
           v5ResearchRows = [];
           renderV5Research();
-          status.textContent = 'No paper_research.jsonl file yet. It will appear after the next successful bot scan records a candidate.';
+          status.textContent = 'No paper_research.jsonl file yet. It will appear after the next bot scan records a discovery candidate or prefilter rejection.';
           return;
         }
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const body = await response.text();
         v5ResearchRows = body.split(/\r?\n/).filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
         renderV5Research();
-        status.textContent = v5ResearchRows.length + ' snapshots loaded. Backtest requires later observations at the selected horizon.';
+        status.textContent = v5ResearchRows.length + ' snapshots loaded, including inexpensive prefilter rejections. Backtest uses scored candidates only and requires later observations at the selected horizon.';
       } catch (error) {
         status.textContent = 'Research feed unavailable: ' + error.message;
         addTelemetry('WARN', 'V5-RESEARCH', 0, 0, V5_RESEARCH_URL, error.message);
