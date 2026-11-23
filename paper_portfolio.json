@@ -19,11 +19,13 @@
       "costUsd": 100,
       "buyFeeAndImpactUsd": 0.39358949290389733,
       "entryLiquidityUsd": 106395.74,
-      "lastPrice": 0.0002669,
-      "lastLiquidityUsd": 106395.74,
-      "peakPrice": 0.0002669,
+      "lastPrice": 0.0002931,
+      "lastLiquidityUsd": 120109.29,
+      "peakPrice": 0.0002931,
       "trailArmed": false,
-      "securitySummary": "GoPlus PASS (Tax 0.0%/0.0%)"
+      "securitySummary": "GoPlus PASS (Tax 0.0%/0.0%)",
+      "dataStale": false,
+      "dataStaleReason": ""
     }
   ],
   "closedTrades": [
@@ -136,6 +138,238 @@
     "bsc:0x38ab22fffcf6940fc4b23dd301ab898d84287777": 1795373754996
   },
   "decisionLog": [
+    {
+      "ts": 1795414259988,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "HOUSE",
+      "chainId": "bsc",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259987,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "SI",
+      "chainId": "ethereum",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum"
+    },
+    {
+      "ts": 1795414259987,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "WOJACK",
+      "chainId": "ethereum",
+      "reason": "liquidity/FDV below minimum"
+    },
+    {
+      "ts": 1795414259987,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "TGOPS",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h volume below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259987,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "FOXE",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity"
+    },
+    {
+      "ts": 1795414259986,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "camel",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259986,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "PEACH",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum"
+    },
+    {
+      "ts": 1795414259986,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "Fly",
+      "chainId": "solana",
+      "reason": "liquidity below minimum"
+    },
+    {
+      "ts": 1795414259986,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "hCAT",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259986,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "CHICKEN",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum"
+    },
+    {
+      "ts": 1795414259985,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "lilguy",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity"
+    },
+    {
+      "ts": 1795414259985,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "PLANK",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h volume below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259985,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "HI",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259985,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "Wolf",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum"
+    },
+    {
+      "ts": 1795414259985,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "tailinu",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259984,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "stuffinu",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259984,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "CHUDBOB",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h volume below minimum"
+    },
+    {
+      "ts": 1795414259984,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "ca",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity"
+    },
+    {
+      "ts": 1795414259984,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "BJG",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259983,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "TAIL",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity"
+    },
+    {
+      "ts": 1795414259983,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "DPRK",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h volume below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259983,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "Trilaygo",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum"
+    },
+    {
+      "ts": 1795414259982,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "panel",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259982,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "BLANK",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h volume below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259982,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "HUMAN",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259981,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "Nikumaru",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
+    },
+    {
+      "ts": 1795414259981,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "BELLA",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity"
+    },
+    {
+      "ts": 1795414259980,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "PumpMeme",
+      "chainId": "solana",
+      "reason": "liquidity below minimum"
+    },
+    {
+      "ts": 1795414259979,
+      "timeStr": "06:10:59",
+      "action": "PREFILTER",
+      "symbol": "Huang",
+      "chainId": "solana",
+      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum; 24h buy ratio below minimum"
+    },
     {
       "ts": 1795391885461,
       "timeStr": "23:58:05",
@@ -1103,238 +1337,6 @@
       "symbol": "LUNC",
       "chainId": "solana",
       "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795305059754,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "BLADES",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795305059753,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "lens",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum"
-    },
-    {
-      "ts": 1795305059753,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "GTANUS",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795305059753,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "Mei-chan",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795305059752,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "BREAKUP",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795305059752,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "BIGFOOT",
-      "chainId": "solana",
-      "reason": "liquidity below minimum"
-    },
-    {
-      "ts": 1795305059751,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "Wow",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum"
-    },
-    {
-      "ts": 1795305059751,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "lens",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum"
-    },
-    {
-      "ts": 1795305059751,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "Inu",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795305059750,
-      "timeStr": "23:50:59",
-      "action": "PREFILTER",
-      "symbol": "KAREN",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum"
-    },
-    {
-      "ts": 1795288840735,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "HUK",
-      "chainId": "ethereum",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795288840735,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "HOODI",
-      "chainId": "ethereum",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840734,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "CLAUDIA",
-      "chainId": "ethereum",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum"
-    },
-    {
-      "ts": 1795288840734,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "Air",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840734,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "TrumpCoin",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum"
-    },
-    {
-      "ts": 1795288840734,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "WEALTH",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840733,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "Prayge",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840733,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "Candy",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity"
-    },
-    {
-      "ts": 1795288840733,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "GD",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840732,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "shep",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity"
-    },
-    {
-      "ts": 1795288840732,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "PICCOLA",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity"
-    },
-    {
-      "ts": 1795288840731,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "UNI",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840729,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "SANTINU",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795288840729,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "HOSS",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum"
-    },
-    {
-      "ts": 1795288840728,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "Singularity",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840728,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "TIMON",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840727,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "UNI",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840727,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "JERB",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 24h volume below minimum; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795288840726,
-      "timeStr": "19:20:40",
-      "action": "PREFILTER",
-      "symbol": "chego",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity"
     }
   ],
   "lastHourlySummaryMs": 0
