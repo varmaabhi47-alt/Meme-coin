@@ -22,6 +22,7 @@ const USAGE=path.join(ROOT,'rpc-curator-usage.json');
 const DAY=86400, LOOKBACK=30*DAY;
 const MAX_RPS=Math.min(6,Math.max(1,Number(process.env.RPC_MAX_RPS||6)));
 const MONTHLY_LIMIT=1_000_000;
+function canSpendRpcCredits(used,requested=1){return Number.isSafeInteger(used)&&Number.isSafeInteger(requested)&&used>=0&&requested>=0&&used+requested<=MONTHLY_LIMIT;}
 const DEX_PROGRAMS=new Set([
  'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
  'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB',
@@ -42,7 +43,7 @@ let lastReq=0, rpcId=0;
 async function rpc(method,params){
   const usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
   if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
-  if(usage.credits>=MONTHLY_LIMIT)throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
+  if(!canSpendRpcCredits(Number(usage.credits||0),1))throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
   const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
   let attempt=0;
   while(true){
@@ -56,14 +57,14 @@ async function rpc(method,params){
     return body.result;
   }
 }
-const RPC_BATCH_SIZE=25;
+const RPC_BATCH_SIZE=6;
 async function rpcBatch(method,paramsList){
   const results=[];
   for(let offset=0;offset<paramsList.length;offset+=RPC_BATCH_SIZE){
     const params=paramsList.slice(offset,offset+RPC_BATCH_SIZE),usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
     if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
-    if(usage.credits+params.length>MONTHLY_LIMIT)throw new Error('RPC monthly credit budget would be exceeded by batch; refusing calls.');
-    const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
+    if(!canSpendRpcCredits(Number(usage.credits||0),params.length))throw new Error('RPC monthly credit budget would be exceeded by batch; refusing calls.');
+    const wait=Math.max(0,Math.ceil(params.length*1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
     const requests=params.map(p=>({jsonrpc:'2.0',id:++rpcId,method,params:p})),ids=requests.map(x=>x.id);
     let attempt=0,body;
     while(true){
@@ -303,4 +304,4 @@ async function main(){
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
-export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,solDeltaByAccount,decodeSwap,analyzeTrades,vetWallet,validAddress,MONTHLY_LIMIT,MAX_RPS};
+export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,solDeltaByAccount,decodeSwap,analyzeTrades,vetWallet,validAddress,canSpendRpcCredits,MONTHLY_LIMIT,MAX_RPS,RPC_BATCH_SIZE};
