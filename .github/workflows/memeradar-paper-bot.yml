@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "meme-radar-bot.mjs"
+      - "meme-radar-v5-*.mjs"
+      - "memeradar-state-api/**"
+      - "index.html"
+      - "package.json"
+      - ".github/workflows/memeradar-paper-bot.yml"
 
 permissions:
   contents: write
@@ -33,7 +42,14 @@ jobs:
       - name: Run v5 intelligence unit tests
         run: node --test meme-radar-v5-*.test.mjs
 
+      - name: Versioned D1 sync check after source update
+        if: github.event_name == 'push'
+        env:
+          MEMERADAR_SYNC_SECRET: ${{ secrets.MEMERADAR_SYNC_SECRET }}
+        run: node meme-radar-bot.mjs --sync-check
+
       - name: Run one paper-trading scan
+        if: github.event_name != 'push'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
