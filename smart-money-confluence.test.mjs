@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateSmartMoneyConfluence} from './smart-money-confluence.mjs';
 const now=Date.now(),gate={passed:1,checked_at:now-1000};
-const wallets=[{address:'A',status:'ACTIVE',median_buy_sol:1,correlation_group:'G1'},{address:'B',status:'ACTIVE',median_buy_sol:1,correlation_group:'G2'},{address:'C',status:'ACTIVE',median_buy_sol:1,correlation_group:'G3'},{address:'W',status:'WATCH',median_buy_sol:1}];
+const wallets=[{address:'A',status:'ACTIVE',median_buy_sol:1,correlation_group:'G1'},{address:'B',status:'ACTIVE',median_buy_sol:1,correlation_group:'G2'},{address:'C',status:'ACTIVE',median_buy_sol:1,correlation_group:'G2'},{address:'W',status:'WATCH',median_buy_sol:1}];
 const buys=[{wallet:'A',mint:'M',slot:100,occurred_at:now-60000,sol_amount:0.5},{wallet:'B',mint:'M',slot:101,occurred_at:now-30000,sol_amount:0.7}];
 test('requires independent active wallets, size threshold, distinct slots and fresh passing gate',()=>{
   const r=evaluateSmartMoneyConfluence({wallets,buys,gate,now,minConfluence:2});
