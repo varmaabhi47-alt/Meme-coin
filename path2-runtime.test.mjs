@@ -47,6 +47,7 @@ test('standard WebSocket listener triggers only migration and configured pool-in
  socket.emit('message',{data:JSON.stringify({id:ray.id,result:102})});
  socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:101,result:{context:{slot:1},value:{signature:'sig1',err:null,logs:['Program log: Trade']}}}})});
  socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:101,result:{context:{slot:2},value:{signature:'sig2',err:null,logs:['Program log: Migrate']}}}})});
+ socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:101,result:{context:{slot:2},value:{signature:'sig2b',err:null,logs:['Program log: Trade Migrate']}}}})});
  socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:102,result:{context:{slot:3},value:{signature:'sig3',err:null,logs:['Program log: Initialize Pool']}}}})});
  assert.equal(mints.length,2);assert.equal(mints[0].trigger,'pump-migration');assert.equal(mints[1].trigger,'raydium-pool-init');listener.stop();
 });
