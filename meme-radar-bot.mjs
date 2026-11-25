@@ -90,19 +90,21 @@ const nowIso = () => new Date().toISOString();
 
 async function loadState() {
   try { const cache=JSON.parse(await fs.readFile('audit-cache.json','utf8')); for(const [key,value] of Object.entries(cache)) if(value&&Date.now()-Number(value.ts)<900000)secCache.set(key,value); } catch {}
-  let parsed=null,localExists=false;
-  try{parsed=JSON.parse(await fs.readFile(CONFIG.PORTFOLIO_FILE,'utf8'));localExists=true;}
+  let localParsed=null,localExists=false;
+  try{localParsed=JSON.parse(await fs.readFile(CONFIG.PORTFOLIO_FILE,'utf8'));localExists=true;}
   catch(error){if(error.code!=='ENOENT')throw new Error('Local portfolio file is unreadable; refusing to reset: '+error.message);}
-  if(!localExists){
-    const secret=process.env.MEMERADAR_SYNC_SECRET;
-    if(secret){
-      const remote=await fetchJsonStrict('https://memeradar-state-api.varmaabhi47.workers.dev/state',8000,{Authorization:'Bearer '+secret});
-      parsed=remote.portfolio||remote.state||null;d1Version=Number(remote.version||0);
-    }
-    if(parsed&&typeof parsed==='object')console.log('Hydrated local paper state from authenticated D1 version '+d1Version+'.');
-    else if(process.env.ALLOW_FRESH_PAPER_STATE==='true'){parsed={...portfolio};console.warn('Explicitly initializing a new paper portfolio; D1 had no existing state.');}
-    else throw new Error('No local paper portfolio and no authoritative D1 portfolio. Set ALLOW_FRESH_PAPER_STATE=true only for an intentional fresh paper account.');
-  }
+  let parsed=null;
+  const secret=process.env.MEMERADAR_SYNC_SECRET;
+  if(secret){
+    // D1 is authoritative whenever configured; local Git state is only a cache.
+    const remote=await fetchJsonStrict('https://memeradar-state-api.varmaabhi47.workers.dev/state',8000,{Authorization:'Bearer '+secret});
+    parsed=remote.portfolio||remote.state||null;d1Version=Number(remote.version||0);
+    if(!parsed&&process.env.ALLOW_FRESH_PAPER_STATE==='true'&&localExists){parsed=localParsed;console.warn('D1 has no portfolio row; using local state only because fresh/bootstrap flag is explicitly enabled.');}
+    if(!parsed)throw new Error('Authenticated D1 has no portfolio state; refusing to initialize or overwrite.');
+    console.log('Loaded authoritative D1 portfolio version '+d1Version+'.');
+  }else if(localExists)parsed=localParsed;
+  else if(process.env.ALLOW_FRESH_PAPER_STATE==='true'){parsed={...portfolio};console.warn('Explicitly initializing a fresh paper portfolio without D1 sync.');}
+  else throw new Error('No D1 secret or local paper portfolio. Set ALLOW_FRESH_PAPER_STATE=true only for an intentional fresh paper account.');
   if(!parsed||typeof parsed!=='object'||!Array.isArray(parsed.openPositions)||!Array.isArray(parsed.closedTrades))throw new Error('Portfolio state shape invalid; refusing to reset.');
   portfolio={...portfolio,...parsed};
   lastHourlySummaryMs=Number(parsed.lastHourlySummaryMs||0);consecutiveRiskExits=Number(parsed.consecutiveRiskExits||0);telegramOffset=Number(parsed.telegramOffset||0);
