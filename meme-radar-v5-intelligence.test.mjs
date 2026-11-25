@@ -3,14 +3,14 @@ import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
-  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, evaluateDiscoveryPrefilter, analyzeNarrativeFootprint, summarizePaperLearning, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
+  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, evaluateDiscoveryPrefilter, analyzeNarrativeFootprint, summarizePaperLearning, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateSolanaHardSecurityGates
 } from './meme-radar-v5-intelligence.mjs';
 
 const healthyPair = {
   liquidity: { usd: 250000 },
   volume: { h1: 180000, h24: 900000 },
   fdv: 2000000,
-  txns: { h1: { buys: 180, sells: 100 }, h24: { buys: 1600, sells: 1100 } },
+  txns: { m5: { buys: 60, sells: 40 }, h1: { buys: 180, sells: 100 }, h24: { buys: 1600, sells: 1100 } },
   priceChange: { m5: 3, h1: 12 },
   pairCreatedAt: Date.now() - 86400000
 };
@@ -27,7 +27,7 @@ test('healthy candidate gets a deterministic, bounded score', () => {
   const b = scoreCandidate(healthyPair, { pass: true });
   assert.equal(a.score, b.score);
   assert.ok(a.score >= 0 && a.score <= 100);
-  assert.equal(a.version, '5.0.0');
+  assert.equal(a.version, '5.1.0');
 });
 
 test('low liquidity and thin activity are rejected', () => {
@@ -132,7 +132,7 @@ test('discovery prefilter explains every failed cheap gate', () => {
 });
 
 test('discovery prefilter passes a candidate meeting configured thresholds', () => {
-  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, txns: { h1: { sells: 20 }, h24: { buys: 70, sells: 30 } } });
+  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, pairCreatedAt: Date.now() - 3600000, priceChange: { m5: 3, h1: 10 }, txns: { m5: { buys: 60, sells: 40 }, h1: { sells: 20 }, h24: { buys: 70, sells: 30 } } });
   assert.equal(result.pass, true);
   assert.deepEqual(result.reasons, []);
 });
@@ -189,4 +189,15 @@ test('Engine 6 reports descriptive paper-trade outcomes and sample sufficiency',
   })));
   assert.equal(enough.evidence, 'SAMPLE_AVAILABLE');
   assert.equal(enough.sampleSize, 20);
+});
+
+test('Solana hard security gates reject active authorities, concentration, overlap and reused authority',()=>{
+ const result=evaluateSolanaHardSecurityGates({
+  mintAuthority:'MintAuthorityAddress111111111111111111111',
+  freezeAuthority:'FreezeAuthorityAddress222222222222222222222',
+  holderDistribution:{known:true,top5Pct:30,top10Pct:45},
+  creatorSignals:{authorityHolderOverlap:['MintAuthorityAddress111111111111111111111'],reusedMintAuthorityTokens:2}
+ });
+ assert.equal(result.pass,false);
+ assert.ok(result.reasons.length>=5);
 });

@@ -1,0 +1,39 @@
+name: MEME.RADAR V5.1 Upgrade Checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "meme-radar-bot.mjs"
+      - "meme-radar-v5-*.mjs"
+      - "memeradar-state-api/**"
+      - "index.html"
+      - "package.json"
+      - ".github/workflows/v5-upgrade-check.yml"
+  push:
+    branches: [v5-risk-engine-upgrade]
+    paths:
+      - "meme-radar-bot.mjs"
+      - "meme-radar-v5-*.mjs"
+      - "memeradar-state-api/**"
+      - "index.html"
+      - "package.json"
+      - ".github/workflows/v5-upgrade-check.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm run check
+      - run: npm test
+      - name: Confirm paper-only code
+        run: |
+          if grep -RniE "sendTransaction|signTransaction|wallet\.connect|swap/v2/execute" meme-radar-bot.mjs meme-radar-v5-*.mjs; then
+            echo "Unexpected transaction execution code detected."
+            exit 1
+          fi

@@ -23,7 +23,7 @@ const dexPair = {
   fdv: 1800000,
   liquidity: { usd: 180000 },
   volume: { h1: 42000, h24: 650000 },
-  txns: { h1: { buys: 210, sells: 130 }, h24: { buys: 2400, sells: 1800 } },
+  txns: { m5: { buys: 60, sells: 40 }, h1: { buys: 210, sells: 130 }, h24: { buys: 2400, sells: 1800 } },
   priceChange: { m5: 2.4, h1: 8.1, h24: 19.5 },
   pairCreatedAt: 1760000000000,
   info: {
@@ -111,8 +111,8 @@ test('integration: learning stays insufficient until minimum completed paper-tra
 test('integration: historical backtest does not invent an exit when later snapshot is absent', () => {
   const result = backtestSnapshots([{
     token: 'fixture-token', recordedAt: '2026-01-01T00:00:00.000Z',
-    priceUsd: 1, score: 90, decision: 'RESEARCH'
-  }], { horizonMinutes: 60 });
+    priceUsd: 1, liquidityUsd: 100000, score: 90, tier: 'RESEARCH', security: { pass: true }, decision: 'RESEARCH'
+  }]);
   assert.equal(result.trades, 0);
   assert.equal(result.missingExitSnapshots, 1);
 });

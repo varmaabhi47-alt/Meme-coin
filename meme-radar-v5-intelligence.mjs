@@ -4,7 +4,7 @@
  * This is a screening heuristic, not a prediction or guarantee of safety.
  */
 
-export const V5_SCORE_VERSION = '5.0.0';
+export const V5_SCORE_VERSION = '5.1.0';
 
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
 const num = value => {
@@ -16,11 +16,14 @@ export function scoreCandidate(pair, security = { pass: false }) {
   const liq = num(pair?.liquidity?.usd);
   const vol24 = num(pair?.volume?.h24);
   const vol1h = num(pair?.volume?.h1);
+  const buys5m = num(pair?.txns?.m5?.buys);
+  const sells5m = num(pair?.txns?.m5?.sells);
   const buys1h = num(pair?.txns?.h1?.buys);
   const sells1h = num(pair?.txns?.h1?.sells);
   const buys24 = num(pair?.txns?.h24?.buys);
   const sells24 = num(pair?.txns?.h24?.sells);
   const fdv = num(pair?.fdv || pair?.marketCap);
+  const buyRatio5m = buys5m + sells5m ? buys5m / (buys5m + sells5m) : 0;
   const buyRatio1h = buys1h + sells1h ? buys1h / (buys1h + sells1h) : 0;
   const buyRatio24 = buys24 + sells24 ? buys24 / (buys24 + sells24) : 0;
   const liqFdv = fdv > 0 ? liq / fdv : 0;
@@ -52,9 +55,11 @@ export function scoreCandidate(pair, security = { pass: false }) {
   if (buys1h + sells1h < 10) reasons.push('insufficient 1h transactions');
   if (vol24 < 50000) reasons.push('24h volume below $50k');
   if (buyRatio1h < 0.52) reasons.push('1h buy ratio below 52%');
-  if (liqFdv < 0.05) reasons.push('liquidity/FDV below 5%');
+  if (liqFdv < 0.08) reasons.push('liquidity/FDV below 8%');
   if (turnover > 20) reasons.push('extreme turnover; possible churn');
   if (change5m > 35) reasons.push('extreme 5m move; chase-risk');
+  if (change1h > 150) reasons.push('extreme 1h move; parabolic chase-risk');
+  if (buyRatio5m < 0.55) reasons.push('5m buy ratio below 55%');
 
   return {
     version: V5_SCORE_VERSION,
@@ -70,7 +75,7 @@ export function scoreCandidate(pair, security = { pass: false }) {
       turnover: Math.round(turnoverScore),
       security: Math.round(securityScore)
     },
-    metrics: { liq, vol24, vol1h, buys1h, sells1h, buyRatio1h, buyRatio24, liqFdv, turnover, change5m, change1h }
+    metrics: { liq, vol24, vol1h, buys5m, sells5m, buyRatio5m, buys1h, sells1h, buyRatio1h, buyRatio24, liqFdv, turnover, change5m, change1h }
   };
 }
 
@@ -165,20 +170,16 @@ export function detectBasicMarketWarnings(pair) {
   return warnings;
 }
 
-export function calculateTopHolderConcentration(largestAccounts, totalSupplyRaw) {
-  let supply;
-  try { supply = BigInt(String(totalSupplyRaw || '0')); } catch { supply = 0n; }
-  if (supply <= 0n || !Array.isArray(largestAccounts)) {
-    return { known: false, top5Pct: null, top10Pct: null, reason: 'holder data unavailable' };
-  }
-  const amounts = largestAccounts.map(account => {
-    try { return BigInt(String(account.amount || '0')); } catch { return 0n; }
-  }).filter(amount => amount > 0n).sort((a, b) => a > b ? -1 : a < b ? 1 : 0);
-  const sum = list => list.reduce((total, amount) => total + amount, 0n);
-  const pct = amount => Number((amount * 1000000n) / supply) / 10000;
-  return { known: true, top5Pct: pct(sum(amounts.slice(0, 5))), top10Pct: pct(sum(amounts.slice(0, 10))), accountsObserved: amounts.length, interpretation: 'Raw largest token accounts; may include LP, exchange, or custodial accounts' };
+export function calculateTopHolderConcentration(largestAccounts,totalSupplyRaw,excludedAddresses=[]){
+ let supply;try{supply=BigInt(String(totalSupplyRaw||'0'));}catch{supply=0n;}
+ if(supply<=0n||!Array.isArray(largestAccounts))return{known:false,top5Pct:null,top10Pct:null,reason:'holder data unavailable'};
+ const knownBurn=new Set(['1nc1nerator11111111111111111111111111111111']);
+ const excluded=new Set([...knownBurn,...(Array.isArray(excludedAddresses)?excludedAddresses:[])].filter(Boolean).map(String));
+ const eligible=largestAccounts.filter(a=>!excluded.has(String(a.address||''))&&!excluded.has(String(a.owner||'')));
+ const amounts=eligible.map(a=>{try{return BigInt(String(a.amount||'0'));}catch{return 0n;}}).filter(x=>x>0n).sort((a,b)=>a>b?-1:a<b?1:0);
+ const sum=list=>list.reduce((total,amount)=>total+amount,0n),pct=amount=>Number((amount*1000000n)/supply)/10000;
+ return{known:true,top5Pct:pct(sum(amounts.slice(0,5))),top10Pct:pct(sum(amounts.slice(0,10))),accountsObserved:amounts.length,excludedAccounts:largestAccounts.length-eligible.length,interpretation:'Largest token accounts after excluding known burn addresses and supplied LP/pool addresses; unlabelled custodial/LP accounts may remain'};
 }
-
 
 /**
  * Transparent Solana authority/holder heuristics.
@@ -340,10 +341,28 @@ export function summarizePaperLearning(closedTrades = [], minSamples = 20) {
   };
 }
 
+/**
+ * Fail-closed Solana authority/holder hard blockers.
+ * Caller supplies only observed RPC-derived fields; unknown values are rejected.
+ */
+export function evaluateSolanaHardSecurityGates({ mintAuthority = null, freezeAuthority = null, holderDistribution = null, creatorSignals = null } = {}) {
+  const reasons = [];
+  if (mintAuthority) reasons.push('active mint authority');
+  if (freezeAuthority) reasons.push('active freeze authority');
+  if (!holderDistribution?.known) reasons.push('holder concentration unknown');
+  else {
+    if (Number(holderDistribution.top10Pct) > 35) reasons.push('top-10 concentration exceeds 35%');
+    if (Number(holderDistribution.top5Pct) > 25) reasons.push('top-5 concentration exceeds 25%');
+  }
+  if ((creatorSignals?.authorityHolderOverlap || []).length) reasons.push('authority/holder overlap');
+  if (Number(creatorSignals?.reusedMintAuthorityTokens || 0) > 0) reasons.push('mint authority reused on prior recorded token');
+  return { pass: reasons.length === 0, reasons };
+}
+
 export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const minLiquidity = Number(config.MIN_LIQUIDITY_USD ?? 75000);
   const maxTradeToLiquidity = Number(config.MAX_TRADE_TO_LIQ_PCT ?? 2);
-  const minLiqFdv = Number(config.MIN_LIQ_FDV_PCT ?? 5);
+  const minLiqFdv = Number(config.MIN_LIQ_FDV_PCT ?? 8);
   const minSells = Number(config.MIN_SELLS_1H ?? 10);
   const minVolume = Number(config.MIN_VOLUME_24H ?? 50000);
   const minBuyRatio = Number(config.MIN_BUY_RATIO_PCT ?? 52);
@@ -352,9 +371,15 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const tradeSize = Number(config.TRADE_SIZE_USD ?? 100);
   const volume = Number(pair?.volume?.h24 || 0);
   const sells1h = Number(pair?.txns?.h1?.sells || 0);
+  const buys5m = Number(pair?.txns?.m5?.buys || 0);
+  const sells5m = Number(pair?.txns?.m5?.sells || 0);
   const buys24 = Number(pair?.txns?.h24?.buys || 0);
   const sells24 = Number(pair?.txns?.h24?.sells || 0);
   const buyRatio = buys24 + sells24 > 0 ? buys24 / (buys24 + sells24) * 100 : null;
+  const buyRatio5m = buys5m + sells5m > 0 ? buys5m / (buys5m + sells5m) * 100 : null;
+  const change5m = Number(pair?.priceChange?.m5);
+  const change1h = Number(pair?.priceChange?.h1);
+  const pairAgeMinutes = Number(pair?.pairCreatedAt) > 0 ? (Date.now() - Number(pair.pairCreatedAt)) / 60000 : null;
   const liqFdv = fdv > 0 ? liquidity / fdv * 100 : null;
   const tradeToLiq = liquidity > 0 ? tradeSize / liquidity * 100 : null;
   const reasons = [];
@@ -371,6 +396,6 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   return {
     pass: reasons.length === 0,
     reasons,
-    metrics: { liquidityUsd: liquidity, fdvUsd: fdv || null, volume24hUsd: volume, sells1h, buyRatioPct: buyRatio, liquidityFdvPct: liqFdv, tradeToLiquidityPct: tradeToLiq }
+    metrics: { liquidityUsd: liquidity, fdvUsd: fdv || null, volume24hUsd: volume, sells1h, buyRatioPct: buyRatio, buyRatio5mPct: buyRatio5m, change5m, change1h, pairAgeMinutes, liquidityFdvPct: liqFdv, tradeToLiquidityPct: tradeToLiq }
   };
 }

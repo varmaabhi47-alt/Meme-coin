@@ -1,0 +1,12 @@
+{
+  "name": "meme-radar-v5-paper-trader",
+  "version": "5.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check meme-radar-bot.mjs && node --check meme-radar-v5-intelligence.mjs && node --check meme-radar-v5-risk-engine.mjs && node --check meme-radar-v5-backtest.mjs",
+    "test": "node --test meme-radar-v5-*.test.mjs",
+    "dry-run": "node meme-radar-bot.mjs --dry-run",
+    "persistent": "RUN_MODE=persistent node meme-radar-bot.mjs"
+  }
+}
