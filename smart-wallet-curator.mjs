@@ -51,9 +51,10 @@ async function rpc(method,params){
   while(true){
     lastReq=Date.now();
     const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++rpcId,method,params})});
-    if(res.status===429){if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
+    usage.httpRequests=(usage.httpRequests||0)+1;
+    if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
     const raw=await res.text();let body;try{body=JSON.parse(raw);}catch{throw new Error('RPC returned non-JSON HTTP '+res.status);}
-    usage.credits++;usage.requests++;usage.httpRequests=(usage.httpRequests||0)+1;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
+    usage.credits++;usage.requests++;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
     if(!res.ok||body.error)throw new Error('RPC '+method+' failed HTTP '+res.status+': '+JSON.stringify(body.error||body).slice(0,500));
     if(!Object.hasOwn(body,'result'))throw new Error('RPC '+method+' response missing result');
     return body.result;
@@ -73,13 +74,14 @@ async function rpcBatch(method,paramsList){
     while(true){
       lastReq=Date.now();
       const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
-      if(res.status===429){if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
+      usage.httpRequests=(usage.httpRequests||0)+1;
+      if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
       const raw=await res.text();try{body=JSON.parse(raw);}catch{throw new Error('RPC provider rejected JSON-RPC batch request (non-JSON HTTP '+res.status+').');}
       if(!res.ok)throw new Error('RPC batch failed HTTP '+res.status+': '+JSON.stringify(body).slice(0,500));
       break;
     }
     if(!Array.isArray(body))throw new Error('RPC provider rejected JSON-RPC batch request (response was not an array).');
-    usage.credits+=requests.length;usage.requests+=requests.length;usage.httpRequests=(usage.httpRequests||0)+1;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+requests.length;await writeJson(USAGE,usage);
+    usage.credits+=requests.length;usage.requests+=requests.length;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+requests.length;await writeJson(USAGE,usage);
     const byId=new Map(body.map(item=>[item.id,item]));
     for(const id of ids){const item=byId.get(id);if(!item){results.push({error:{message:'batch response omitted request id '+id}});continue;}results.push(Object.hasOwn(item,'error')?{error:item.error}:item.result);}
   }
