@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { analyzeFundingLinks } from './funding-link-detection.mjs';
 import { summarizeWalletOutcomes } from './curator-outcomes.mjs';
 import { reconstructSolSwap } from './swap-reconstruction.mjs';
-import { selectWinningResearchMints } from './research-mint-source.mjs';
+import { selectWinningResearchMints, selectRecentPassingResearchMints } from './research-mint-source.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.HELIUS_RPC_URL||process.env.SOLANA_RPC_URL||'https://mainnet.helius-rpc.com/';
@@ -147,12 +147,13 @@ function decodeSwap(tx,owner){
   const result=reconstructSolSwap(tx,owner);
   return result.swap?[result.swap]:[];
 }
-async function signatures(address,before,until){
-  const all=[];let cursor;
-  for(let page=0;page<10;page++){
-    const p={limit:1000};if(cursor)p.before=cursor;if(until)p.until=until;
+async function signatures(address,before,until,maxResults=10000){
+  const cap=Math.max(1,Math.min(10000,Math.floor(Number(maxResults)||10000))),all=[];let cursor;
+  for(let page=0;page<10&&all.length<cap;page++){
+    const p={limit:Math.min(1000,cap-all.length)};if(cursor)p.before=cursor;if(until)p.until=until;
     const batch=await rpc('getSignaturesForAddress',[address,p]);if(!Array.isArray(batch))throw new Error('getSignaturesForAddress malformed result');
-    all.push(...batch);if(batch.length<1000)break;cursor=batch.at(-1)?.signature;if(!cursor)break;
+    all.push(...batch);if(batch.length<p.limit)break;cursor=batch.at(-1)?.signature;if(!cursor)break;
+    if(all.length>=cap)break;
     if(batch.at(-1)?.blockTime&&batch.at(-1).blockTime<before)break;
   }return all.filter(s=>Number(s.blockTime||0)>=before&&!s.err);
 }
@@ -161,18 +162,21 @@ async function txBySignature(signature){
 }
 async function discoverFromMint(mint){
   if(!validAddress(mint))throw new Error('Invalid mint: '+mint);
-  const sigs=await signatures(mint,Date.now()/1000-LOOKBACK),candidates=new Map();
+  const rawLimit=Number(process.env.CURATOR_DISCOVERY_SIGNATURE_LIMIT||250),limit=Math.max(25,Math.min(1000,Math.floor(Number.isFinite(rawLimit)?rawLimit:250)));
+  const sigs=await signatures(mint,Date.now()/1000-LOOKBACK,undefined,limit),candidates=new Map();
   for(let offset=0;offset<sigs.length;offset+=RPC_BATCH_SIZE){
     const batch=sigs.slice(offset,offset+RPC_BATCH_SIZE),txs=await transactionsBySignatures(batch.map(s=>s.signature),'json');
     for(let i=0;i<batch.length;i++){const s=batch[i],tx=txs[i];if(!tx||tx.error)continue;
       try{resolvedKeys(tx);const deltas=tokenDeltaByOwner(tx);
-        for(const [key,delta] of deltas){const [owner,token]=key.split('|');if(token===mint&&delta>0&&validAddress(owner))candidates.set(owner,{address:owner,label:'graduated-token-discovery',source:'winning-mint:'+mint,firstSeen:s.blockTime||0});}
+        for(const [key,delta] of deltas){const [owner,token]=key.split('|');if(token===mint&&delta>0&&validAddress(owner))candidates.set(owner,{address:owner,label:'recent-passing-research-mint',source:'research-mint:'+mint,firstSeen:s.blockTime||0});}
       }catch{/* unresolved/unsupported transaction: no inferred candidate evidence */}
     }
-  }return [...candidates.values()];
+  }return [...candidates.values()].sort((a,b)=>Number(b.firstSeen||0)-Number(a.firstSeen||0));
 }
 async function recentWalletSwaps(address,cutoff){
-  const sigs=await signatures(address,cutoff),rows=[];
+  const rawLimit=Number(process.env.CURATOR_MAX_WALLET_SIGNATURES||10000),limit=Math.max(100,Math.min(10000,Math.floor(Number.isFinite(rawLimit)?rawLimit:10000)));
+  const sigs=await signatures(address,cutoff,undefined,limit),rows=[];
+  if(sigs.length>=limit)throw new Error('wallet history reached '+limit+' signatures; 30-day coverage is incomplete, refusing to calculate full-window metrics');
   for(let offset=0;offset<sigs.length;offset+=RPC_BATCH_SIZE){
     const batch=sigs.slice(offset,offset+RPC_BATCH_SIZE),txs=await transactionsBySignatures(batch.map(s=>s.signature),'json');
     for(let i=0;i<batch.length;i++){const s=batch[i],tx=txs[i];if(!tx||tx.error)continue;
@@ -223,8 +227,10 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
 }
 async function findFundingSource(address){
   // Scan the earliest signatures available in the bounded 10k-signature window;
-  // initial wallet funding often predates the 30-day trading lookback.
-  const sigs=await signatures(address,0),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,30);
+  // if the window is saturated, funding provenance is incomplete and candidate must fail closed.
+  const sigs=await signatures(address,0);
+  if(sigs.length>=10000)throw new Error('funding provenance window reached 10,000 signatures; incomplete funding-link coverage, refusing candidate');
+  const oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,30);
   const txs=await transactionsBySignatures(oldest.map(s=>s.signature),'jsonParsed');
   for(let i=0;i<oldest.length;i++){const tx=txs[i];if(!tx?.meta||tx.meta.err||tx.error)continue;
     const msg=tx.transaction?.message,inner=(tx.meta.innerInstructions||[]).flatMap(x=>x.instructions||[]);
@@ -244,8 +250,11 @@ async function sourceResearchMints(file){
   for(const line of txt.split(/\r?\n/)){if(!line.trim())continue;try{rows.push(JSON.parse(line));}catch{}}
   const portfolio=await readJson(path.join(ROOT,'paper_portfolio.json'),{closedTrades:[]});
   const closed=Array.isArray(portfolio.closedTrades)?portfolio.closedTrades:[];
-  const mints=selectWinningResearchMints(rows,closed,{minSamples:5});
-  if(!mints.length)console.error('[curator] Research source found no mint with passing security, a listed pair, and >=5 individually profitable closed paper trades; no aggregate portfolio PnL was used.');
+  const winning=selectWinningResearchMints(rows,closed,{minSamples:5});
+  const recent=selectRecentPassingResearchMints(rows,{maxAgeMs:7*DAY*1000,maxMints:3});
+  const mints=[...new Set([...recent,...winning])].slice(0,3);
+  if(recent.length)console.error('[curator] Using '+recent.length+' recent checked security-pass RESEARCH mint(s) as discovery sources; discovered wallets still require all live RPC gates.');
+  if(!mints.length)console.error('[curator] No recent checked security-pass RESEARCH mints and no individually profitable winning mints; no candidate discovery performed.');
   return mints;
 }
 async function pruneWallets(){
@@ -293,15 +302,24 @@ async function main(){
   if(args.includes('--from-research')){const f=get('--from-research')||path.join(ROOT,'paper_research.jsonl');mints.push(...await sourceResearchMints(f));}
   for(const mint of [...new Set(mints)])candidates.push(...await discoverFromMint(mint));
   const verify=get('--verify-signature'),wallet=get('--wallet');if(verify&&wallet){const tx=await txBySignature(verify);if(!tx)throw new Error('Signature not found');console.log(JSON.stringify({signature:verify,slot:tx.slot,resolvedAccountKeys:resolvedKeys(tx),loadedAddresses:tx.meta?.loadedAddresses||null,programs:instructionProgramIds(tx)},null,2));return;}
-  if(!candidates.length)throw new Error('No candidates. Supply --import file, --from-mints list, or --from-research [file].');
+  if(!candidates.length){
+    if(args.includes('--from-research')&&!imp){console.error('[curator] No wallet buyers were recoverable from the selected live research mint transactions; no wallet records changed.');return;}
+    throw new Error('No candidates. Supply --import file, --from-mints list, or --from-research [file].');
+  }
+  const candidateLimitRaw=Number(process.env.CURATOR_MAX_CANDIDATES||0),candidateLimit=Math.max(0,Math.min(100,Math.floor(Number.isFinite(candidateLimitRaw)?candidateLimitRaw:0)));
+  if(candidateLimit>0){
+    const unique=new Map();for(const c of candidates)if(validAddress(c.address)){const prior=unique.get(c.address);if(!prior||Number(c.firstSeen||0)>Number(prior.firstSeen||0))unique.set(c.address,c);}
+    candidates=[...unique.values()].sort((a,b)=>Number(b.firstSeen||0)-Number(a.firstSeen||0)).slice(0,candidateLimit);
+    console.error('[curator] Bounded live candidate vetting to '+candidates.length+' wallet(s) this run; cap='+candidateLimit+'.');
+  }
   const q=await readJson(QUEUE,{version:1,candidates:[]}),by=new Map((q.candidates||[]).map(x=>[x.address,x]));
   for(const c of candidates)if(validAddress(c.address))by.set(c.address,{...by.get(c.address),...c,queued_at:iso(Date.now()),status:'PENDING'});
   q.candidates=[...by.values()];await writeJson(QUEUE,q);
   const curated=await readJson(WALLETS,{version:1,wallets:[]}),tracked=new Set(curated.wallets.filter(w=>w.status==='ACTIVE').map(w=>w.address)),promoted=[],rejected=[];
-  const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map();
-  for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){rejected.push({address:c.address,fundingScanError:String(e)});}}
+  const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map(),fundingScanFailed=new Set();
+  for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){fundingScanFailed.add(c.address);rejected.push({address:c.address,fundingScanError:String(e)});}}
   const fundingLinks=analyzeFundingLinks([...sources.keys()],sources,{knownRiskAddresses:knownDeployers,trackedAddresses:tracked,sharedSourceMin:2,maxDepth:2});
-  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});continue;}
+  for(const c of candidates){if(!validAddress(c.address)||fundingScanFailed.has(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});continue;}
     const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
