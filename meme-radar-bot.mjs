@@ -299,8 +299,8 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
     const buyerAmounts=new Map();
     for(const tx of txs){
       if(!tx||Number(tx.slot)!==creationSlot)continue;
-      const pre=new Map((tx.meta?.preTokenBalances||[]).filter(x=>x.mint===pair.address&&x.owner).map(x=>[x.owner,BigInt(x.uiTokenAmount?.amount||'0')]));
-      const post=new Map((tx.meta?.postTokenBalances||[]).filter(x=>x.mint===pair.address&&x.owner).map(x=>[x.owner,BigInt(x.uiTokenAmount?.amount||'0')]));
+      const aggregate=rows=>{const map=new Map();for(const x of rows||[]){if(x.mint!==pair.address||!x.owner)continue;const amount=BigInt(x.uiTokenAmount?.amount||'0');map.set(x.owner,(map.get(x.owner)||0n)+amount);}return map;};
+      const pre=aggregate(tx.meta?.preTokenBalances),post=aggregate(tx.meta?.postTokenBalances);
       for(const [owner,amount] of post){const delta=amount-(pre.get(owner)||0n);if(delta>0n)buyerAmounts.set(owner,(buyerAmounts.get(owner)||0n)+delta);}
     }
     const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
