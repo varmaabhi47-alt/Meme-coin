@@ -1004,6 +1004,10 @@ node meme-radar-autobot-24-7.mjs
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[char]));
     }
+    function safeHttpsUrl(value) {
+      try { const url = new URL(String(value ?? '')); return url.protocol === 'https:' ? url.href : ''; }
+      catch { return ''; }
+    }
 
     function renderV5Research() {
       const rows = v5ResearchRows;
@@ -1958,14 +1962,14 @@ node meme-radar-autobot-24-7.mjs
         const gateBadge = gate.ok
           ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Passes Liquidity & Sellability Gate">PASS</span>`
           : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700" title="${esc(gate.reason)}">FAIL</span>`;
-        const iconUrl = String(p.icon ?? '');
-        const hasSafeIcon = iconUrl.startsWith('https://') || iconUrl.startsWith('http://');
+        const iconUrl = safeHttpsUrl(p.icon);
+        const hasSafeIcon = Boolean(iconUrl);
         const avatar = hasSafeIcon
           ? `<img src="${esc(iconUrl)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`
           : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`;
 
         return `
-          <tr onclick="openInspectorById('${esc(p.id)}')" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
+          <tr data-pair-id="${escapeHtml(p.id)}" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
             <td class="py-2.5 px-3.5">
               <div class="flex items-center gap-2.5 min-w-[175px]">
                 ${avatar}
@@ -1994,11 +1998,13 @@ node meme-radar-autobot-24-7.mjs
             <td class="py-2.5 px-2 text-center">${gateBadge}</td>
             <td class="py-2.5 px-2 text-right font-mono font-bold text-white tabular-nums">${p.alphaScore}</td>
             <td class="py-2.5 px-3 text-right">
-              <button onclick="event.stopPropagation(); openInspectorById('${esc(p.id)}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-semibold">Inspect</button>
+              <button type="button" data-pair-inspect="${escapeHtml(p.id)}" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-semibold">Inspect</button>
             </td>
           </tr>
         `;
       }).join('');
+      tbody.querySelectorAll('[data-pair-id]').forEach(el=>el.addEventListener('click',()=>openInspectorById(el.dataset.pairId)));
+      tbody.querySelectorAll('[data-pair-inspect]').forEach(el=>el.addEventListener('click',event=>{event.stopPropagation();openInspectorById(el.dataset.pairInspect);}));
       tbody.querySelectorAll('[data-radar-symbol]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'');});
       tbody.querySelectorAll('[data-radar-name]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.name??'');});
       tbody.querySelectorAll('[data-radar-initials]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'').slice(0,2);});
@@ -2173,12 +2179,12 @@ node meme-radar-autobot-24-7.mjs
         return `
           <div class="px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-term-hover/30">
             <div class="flex items-center gap-2 min-w-0">
-              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${d.action}</span>
+              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${esc(d.action)}</span>
               <span class="font-bold text-white shrink-0" data-decision-symbol></span>
               <span class="text-slate-500 shrink-0">[${esc((d.chainId || '').toUpperCase())}]</span>
               <span class="text-slate-300 truncate">${esc(d.reason)}</span>
             </div>
-            <span class="text-slate-500 shrink-0">${d.timeStr}</span>
+            <span class="text-slate-500 shrink-0">${esc(d.timeStr)}</span>
           </div>
         `;
       }).join('');
@@ -2283,10 +2289,10 @@ node meme-radar-autobot-24-7.mjs
         const pill = e.level === 'OK' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
         return `
           <tr class="hover:bg-term-hover/40">
-            <td class="py-2 px-3.5 text-slate-400 whitespace-nowrap">${e.timeStr}</td>
-            <td class="py-2 px-3 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${pill}">${e.status || e.level}</span></td>
+            <td class="py-2 px-3.5 text-slate-400 whitespace-nowrap">${esc(e.timeStr)}</td>
+            <td class="py-2 px-3 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${pill}">${esc(e.status || e.level)}</span></td>
             <td class="py-2 px-3 text-cyan-300 whitespace-nowrap">${esc(e.context)}</td>
-            <td class="py-2 px-3 text-right text-slate-400 whitespace-nowrap">${e.latencyMs}ms</td>
+            <td class="py-2 px-3 text-right text-slate-400 whitespace-nowrap">${Number.isFinite(Number(e.latencyMs)) ? Number(e.latencyMs) : '—'}ms</td>
             <td class="py-2 px-3 text-slate-300 break-all max-w-[340px]">${esc(e.url)}</td>
             <td class="py-2 px-3.5 ${e.level === 'ERROR' ? 'text-rose-300 font-semibold' : 'text-slate-300'}">${esc(e.detail)}</td>
           </tr>
