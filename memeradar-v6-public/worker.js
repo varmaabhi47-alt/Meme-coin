@@ -1,14 +1,10 @@
 const CORS = {
-  "Access-Control-Allow-Origin": "https://memeradar-v4.pages.dev",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
   "Cache-Control": "no-store"
 };
-function headers(request) {
-  const origin = request.headers.get("Origin") || "";
-  const allowed = origin === "https://memeradar-v4.pages.dev" || origin.endsWith(".memeradar-v4.pages.dev");
-  return { ...CORS, "Access-Control-Allow-Origin": allowed ? origin : "https://memeradar-v4.pages.dev", "Vary": "Origin" };
-}
+function headers() { return CORS; }
 function json(data, status, request) {
   return Response.json(data, { status: status || 200, headers: headers(request) });
 }
