@@ -2330,7 +2330,7 @@ node meme-radar-autobot-24-7.mjs
       const initials = String(p.symbol ?? '').slice(0,2);
       av.textContent = initials;
       const iconUrl = String(p.icon ?? '');
-      if (/^https?:\\/\\//i.test(iconUrl)) {
+      if (iconUrl.startsWith('https://') || iconUrl.startsWith('http://')) {
         const img = document.createElement('img');
         img.src = iconUrl; img.alt = String(p.symbol ?? 'token logo');
         img.className = 'w-full h-full object-cover';
