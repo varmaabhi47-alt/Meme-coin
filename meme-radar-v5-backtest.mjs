@@ -48,7 +48,8 @@ export function backtestSnapshots(rows,options={}){
    pos.peakPrice=peak;pos.lastLiquidity=row.liq;trackEquity();continue;
   }
   if(row.score<minScore||row.decision==='REJECT'||row.decision==='PREFILTER_REJECT'||row.tier==='REJECT'||row.tier==='PREFILTER_REJECT'||row.security?.pass!==true)continue;
-  if(row.tier&&row.tier!=='RESEARCH')continue;\n  if(row.decision!=='RESEARCH')continue;
+  if(row.tier&&row.tier!=='RESEARCH')continue;
+  if(row.decision!=='RESEARCH')continue;
   if(row.ts-(lastEntry.get(row.token)??-Infinity)<cooldownMs)continue;
   if(positions.size>=maxOpen)continue;
   const equity=equityAt(),tierMult=row.score>=90?1:row.score>=80?0.8:0;
