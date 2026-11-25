@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvedKeys,instructionProgramIds,vetWallet,analyzeTrades} from './smart-wallet-curator.mjs';
+import {resolvedKeys,instructionProgramIds,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS} from './smart-wallet-curator.mjs';
 
 test('versioned message account keys append runtime-loaded ALT addresses in correct writable/readonly order',()=>{
   const tx={transaction:{message:{staticAccountKeys:['payer','staticA'],addressTableLookups:[{accountKey:'lookupTable',writableIndexes:[2],readonlyIndexes:[5]}],instructions:[{programIdIndex:2,accounts:[0,2,3],data:''}]}},meta:{loadedAddresses:{writable:['altWritable'],readonly:['altReadonly']}}};
