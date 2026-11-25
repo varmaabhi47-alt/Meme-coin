@@ -8,9 +8,9 @@ function baseTx({preSol=1_000_000_000,postSol=499_000_000,fee=1_000_000,preToken
   return {slot:22,blockTime:1700000000,signature:'sig',transaction:{message:{staticAccountKeys:[wallet,pool],instructions:[{programId:DEX,accounts:[1],data:''},...extra]}},meta:{fee,preBalances:[preSol,0],postBalances:[postSol,0],preTokenBalances:[{owner:wallet,mint,uiTokenAmount:{uiAmountString:String(preToken)}}],postTokenBalances:[{owner:wallet,mint,uiTokenAmount:{uiAmountString:String(postToken)}}],innerInstructions:[]}};
 }
 
-test('reconstructs one unambiguous SOL buy with fee removed from payer delta',()=>{
+test('reconstructs one unambiguous SOL buy with actual fee-inclusive wallet delta',()=>{
   const {swap,reason}=reconstructSolSwap(baseTx(),wallet);
-  assert.equal(reason,null);assert.equal(swap.side,'BUY');assert.equal(swap.solAmount,0.5);assert.equal(swap.tokenAmount,100);
+  assert.equal(reason,null);assert.equal(swap.side,'BUY');assert.equal(swap.solAmount,0.501);assert.equal(swap.tokenAmount,100);
 });
 test('rejects multiple token legs instead of assigning full SOL delta to each mint',()=>{
   const tx=baseTx();tx.meta.postTokenBalances.push({owner:wallet,mint:'mintB',uiTokenAmount:{uiAmountString:'7'}});
