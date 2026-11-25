@@ -1077,6 +1077,8 @@ node meme-radar-autobot-24-7.mjs
         state.positionsStaleReason = '';
         state.lastPosSyncMs = updatedAt ? Date.parse(updatedAt) : Date.now();
         remotePortfolioUpdatedAt = updatedAt;
+        const sharedStatus = document.getElementById('at-status-text');
+        if (sharedStatus) { sharedStatus.textContent = updatedAt ? `TELEGRAM PORTFOLIO SYNCED • ${new Date(updatedAt).toLocaleTimeString()}` : 'TELEGRAM PORTFOLIO SYNCED'; sharedStatus.className = 'mt-1 font-mono text-xs font-bold text-cyan-300'; }
         persistPortfolio();
         renderAutoTraderView();
         renderLedger();
@@ -1084,6 +1086,8 @@ node meme-radar-autobot-24-7.mjs
         addTelemetry('OK', 'D1', 0, 0, 'portfolio-sync', 'Shared portfolio loaded from Cloudflare D1.');
         return true;
       } catch (err) {
+        const sharedStatus = document.getElementById('at-status-text');
+        if (sharedStatus) { sharedStatus.textContent = `SYNC FAILED • SHOWING OLD LOCAL DATA • ${err.message}`; sharedStatus.className = 'mt-1 font-mono text-xs font-bold text-rose-300'; }
         addTelemetry('WARN', 'D1', 0, 0, 'portfolio-sync', `Cloud sync unavailable; using this device's saved portfolio. ${err.message}`);
         return false;
       }
