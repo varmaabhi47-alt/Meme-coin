@@ -536,7 +536,8 @@ async function persistentRunner(){
  while(true){
   try{await pollTelegramCommands();const now=Date.now();
    if(portfolio.openPositions.length&&now-lastMonitor>=CONFIG.MONITOR_SEC*1000){await monitorPositions();lastMonitor=Date.now();}
-   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await discoveryCycle();lastDiscovery=Date.now();}\n   if(now-lastResearch>=300000){await monitorResearchSnapshots();lastResearch=Date.now();}
+   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await discoveryCycle();lastDiscovery=Date.now();}
+   if(now-lastResearch>=300000){await monitorResearchSnapshots();lastResearch=Date.now();}
   }catch(e){lastError=e?.message||String(e);console.error('Persistent runner error: '+lastError);await saveState();}
   await sleep(5000);
  }
