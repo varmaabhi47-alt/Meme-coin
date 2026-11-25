@@ -166,11 +166,11 @@ async function calcPaperEntry(usd,pair,security,decimals){
  const est=calcBuy(usd,Number(pair.priceUsd),Number(pair.liquidity?.usd||0));
  const fallbackPenalty=chain==='solana'?0.05:0;
  const tokens=est.tokens*(1-fallbackPenalty)*(1-tax);
- return {...est,tokens,effPrice:(usd+networkFeeUsd)/tokens,feeUsd:est.feeUsd+networkFeeUsd+usd*tax,networkFeeUsd,buyTaxRate:tax,quoteSource:'constant-product-fallback',quoteFallback:chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED,fallbackPenaltyPct:fallbackPenalty*100};
+ return {...est,tokens,effPrice:(usd+networkFeeUsd)/tokens,feeUsd:est.feeUsd+networkFeeUsd+usd*tax,networkFeeUsd,buyTaxRate:tax,quoteSource:'constant-product-fallback',quoteFallback:chain==='solana',fallbackPenaltyPct:fallbackPenalty*100};
 }
 
 async function calcPaperExit(pos, price, liq) {
-  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=pos.chainId==='solana'?Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||5))/100:0;const tax=Number(pos.sellTaxRate||0),networkFeeUsd=estimatedNetworkFeeUsd(pos.chainId);const afterTax=est.netProceeds*(1-tax);return {...est,netProceeds:Math.max(0,afterTax*(1-penalty)-networkFeeUsd),feeUsd:est.feeUsd+networkFeeUsd+est.netProceeds*tax,quoteSource:'constant-product-fallback',quoteFallback:pos.chainId==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED,fallbackPenaltyPct:penalty*100,networkFeeUsd};};
+  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=pos.chainId==='solana'?Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||5))/100:0;const tax=Number(pos.sellTaxRate||0),networkFeeUsd=estimatedNetworkFeeUsd(pos.chainId);const afterTax=est.netProceeds*(1-tax);return {...est,netProceeds:Math.max(0,afterTax*(1-penalty)-networkFeeUsd),feeUsd:est.feeUsd+networkFeeUsd+est.netProceeds*tax,quoteSource:'constant-product-fallback',quoteFallback:pos.chainId==='solana',fallbackPenaltyPct:penalty*100,networkFeeUsd};};
   if (!CONFIG.JUPITER_QUOTE_ENABLED || pos.chainId !== 'solana' ||
       !pos.address || pos.tokenDecimals == null || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
   const decimals = Number(pos.tokenDecimals);
