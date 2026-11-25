@@ -564,7 +564,7 @@ async function monitorPositions({ discover = false } = {}) {
         const gatePublished=await publishV6Gate(mintForGate,gatePass,gateReasons);
         if(gatePass&&gatePublished)await fetchSmartMoneySignal(mintForGate);else if(portfolio.smartMoneySignals)delete portfolio.smartMoneySignals[mintForGate];
       }
-      intelligence.smartMoneyConfluence=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')]?.source==='worker-gated';
+      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
@@ -658,7 +658,14 @@ async function persistentRunner(){
             if(!(tx?.meta?.logMessages||[]).some(line=>/swap/i.test(line)))return;
             for(const mint of extractWalletTokenBuys(tx,event.wallet)){
               if([USDC_MINT,'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB','So11111111111111111111111111111111111111112'].includes(mint))continue;
-              portfolio.eventDiscoveryRequested=true;logDecision('SMART_WALLET_BUY_OBSERVED',mint,'solana','wallet swap observed; waiting for Worker-qualified independent confluence and V6 hard gates');
+              const signal=smartMoneyConfluence(event.wallet,mint,Date.now());
+              if(signal){
+                portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
+                portfolio.smartMoneySignals[mint]={signal:signal.signal,wallets:signal.wallets,walletAddresses:[],source:'standard-wss-wallet-events',at:signal.at};
+                logDecision('SMART_MONEY_CONFLUENCE',mint,'solana',signal.wallets+' distinct tracked wallet buys within 15 minutes');
+              }else logDecision('SMART_WALLET_BUY_OBSERVED',mint,'solana','one tracked wallet buy observed; awaiting a second distinct wallet within 15 minutes');
+              eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
+              portfolio.eventDiscoveryRequested=true;
             }
           }catch(error){console.error('Smart-wallet transaction lookup failed; no signal inferred: '+error.message);}
         }
