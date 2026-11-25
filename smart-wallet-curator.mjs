@@ -65,8 +65,18 @@ function resolvedKeys(tx){
   if(!msg)throw new Error('transaction message missing');
   const stat=msg.staticAccountKeys||msg.accountKeys||[];
   const keys=stat.map(k=>typeof k==='string'?k:k.pubkey);
-  const loaded=tx.meta?.loadedAddresses||{};
-  return keys.concat((loaded.writable||[]).map(k=>typeof k==='string'?k:k.pubkey),(loaded.readonly||[]).map(k=>typeof k==='string'?k:k.pubkey));
+  const lookups=msg.addressTableLookups||[];
+  const loaded=tx.meta?.loadedAddresses;
+  // A v0 message with lookups is not safely decodable unless RPC supplied the
+  // resolved addresses. Never guess lookup-table contents or account ordering.
+  if(lookups.length&&!loaded)throw new Error('versioned transaction missing meta.loadedAddresses; skip metrics');
+  const writable=(loaded?.writable||[]).map(k=>typeof k==='string'?k:k.pubkey);
+  const readonly=(loaded?.readonly||[]).map(k=>typeof k==='string'?k:k.pubkey);
+  const expectedWritable=lookups.reduce((n,x)=>n+(x.writableIndexes||[]).length,0);
+  const expectedReadonly=lookups.reduce((n,x)=>n+(x.readonlyIndexes||[]).length,0);
+  if(lookups.length&&(writable.length!==expectedWritable||readonly.length!==expectedReadonly))
+    throw new Error('loaded ALT address count does not match message lookup indexes; skip metrics');
+  return keys.concat(writable,readonly);
 }
 function instructionProgramIds(tx){
   const msg=tx?.transaction?.message||tx?.message;const keys=resolvedKeys(tx);
@@ -83,6 +93,10 @@ function tokenDeltaByOwner(tx){
 function solDeltaByAccount(tx){
   const meta=tx.meta||{},keys=resolvedKeys(tx),pre=meta.preBalances||[],post=meta.postBalances||[],d=new Map();
   for(let i=0;i<Math.min(keys.length,pre.length,post.length);i++)d.set(keys[i],(post[i]-pre[i])/1e9);
+  // Balance deltas include the transaction fee. Restore it to the fee payer's
+  // delta so trade notional is not understated on buys or sells.
+  const fee=Number(meta.fee||0),payer=keys[0];
+  if(Number.isFinite(fee)&&fee>0&&payer&&d.has(payer))d.set(payer,d.get(payer)+fee/1e9);
   return d;
 }
 function decodeSwap(tx,owner){
