@@ -13,7 +13,7 @@ test('partial TP arms runner and fee-covered breakeven stop',()=>{
 test('emergency liquidity exits use entry and consecutive-check thresholds',()=>{
  const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
  assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:64000}).reason,'LIQ_DROP_ENTRY');
- assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:79000}).reason,'LIQ_DROP_CHECK');
+ assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:79000}).reason,'LIQ_DROP_CHECK');\n assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:0}).reason,'LIQ_DROP_ENTRY');
 });
 test('risk-adjusted size uses score tier and pool cap',()=>{
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:85,cashUsd:100}),48);
