@@ -87,7 +87,8 @@ async function loadState() {
     const parsed = JSON.parse(raw);
     portfolio = { ...portfolio, ...parsed };
     lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);
-    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);\n    telegramOffset = Number(parsed.telegramOffset || 0);
+    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
+    telegramOffset = Number(parsed.telegramOffset || 0);
     console.log(`[${nowIso()}] Loaded ${CONFIG.PORTFOLIO_FILE} | Cash: $${portfolio.cashUsd.toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
   } catch {
     await saveState();
