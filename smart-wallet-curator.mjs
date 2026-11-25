@@ -206,7 +206,8 @@ async function pruneWallets(){
   j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
   j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
   const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
-  const recentAdds=kept.filter(w=>Date.now()-Date.parse(w.added_at||0)<=7*DAY).map(w=>w.address);\n  return {active:kept.length,promoted:[...new Set([...promoted,...recentAdds])],muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
+  const recentAdds=kept.filter(w=>Date.now()-Date.parse(w.added_at||0)<=7*DAY).map(w=>w.address);
+  return {active:kept.length,promoted:[...new Set([...promoted,...recentAdds])],muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
 }
 async function sendWeeklyTelegram(summary){
   const token=process.env.TELEGRAM_BOT_TOKEN||'',chat=process.env.TELEGRAM_CHAT_ID||'';if(!token||!chat){console.log('[curator] Telegram summary skipped: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not configured.');return;}
