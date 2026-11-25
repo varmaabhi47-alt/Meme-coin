@@ -111,8 +111,8 @@ test('integration: learning stays insufficient until minimum completed paper-tra
 test('integration: historical backtest does not invent an exit when later snapshot is absent', () => {
   const result = backtestSnapshots([{
     token: 'fixture-token', recordedAt: '2026-01-01T00:00:00.000Z',
-    priceUsd: 1, score: 90, decision: 'RESEARCH'
-  }], { horizonMinutes: 60 });
+    priceUsd: 1, liquidityUsd: 100000, score: 90, tier: 'RESEARCH', security: { pass: true }, decision: 'RESEARCH'
+  }]);
   assert.equal(result.trades, 0);
   assert.equal(result.missingExitSnapshots, 1);
 });
