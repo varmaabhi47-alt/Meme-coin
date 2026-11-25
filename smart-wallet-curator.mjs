@@ -159,8 +159,9 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   if(winRate===null||winRate<45)reasons.push('win-rate-under-45pct');
   if(pf===null||pf<1.8)reasons.push('profit-factor-under-1.8');
   if(!Number.isFinite(pnl)||pnl<=0)reasons.push('non-positive-realized-pnl');
-  const confidence=Math.max(0,Math.min(100,Math.round((winRate||0)*0.35+Math.min(3,pf||0)*12+Math.min(30,profitableMints.size)*0.8+(days7.length?10:0))));
-  return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,profitFactor30d:pf,medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
+  const recent7=trades.filter(t=>t.sellTime>=now-7*DAY),win7=recent7.length?recent7.filter(t=>t.pnlSol>0).length/recent7.length*100:null,weightedWin=win7===null?(winRate||0):(win7*0.65+(winRate||0)*0.35);
+  const confidence=Math.max(0,Math.min(100,Math.round(weightedWin*0.45+Math.min(3,pf||0)*12+Math.min(30,profitableMints.size)*0.8+(days7.length?8:0))));
+  return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,realizedWinRate7d:win7,profitFactor30d:pf,medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,realizedPnl7dSol:recent7.reduce((s,t)=>s+t.pnlSol,0),confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
 }
 async function findFundingSource(address){
   const sigs=await signatures(address,Date.now()/1000-LOOKBACK),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,12);
@@ -185,22 +186,39 @@ async function pruneWallets(){
   const j=await readJson(WALLETS,{version:1,wallets:[]}),research=(await fs.readFile(path.join(ROOT,'paper_research.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean);
   const outcomes=new Map();
   for(const line of research){try{const r=JSON.parse(line),a=r.wallet||r.sourceWallet;if(!a)continue;const arr=outcomes.get(a)||[];arr.push(r);outcomes.set(a,arr);}catch{}}
-  const muted=[],active=[];
-  for(const w of j.wallets||[]){const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
-    const hit=recent.filter(r=>Number(r.performance?.pnl15m??r.pnl15m)>0).length,hitRate=recent.length?hit/recent.length*100:null;
-    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG').length,age=Date.now()-Date.parse(w.last_active_at||w.added_at||0);
-    const reasons=[];if(age>14*DAY*1000)reasons.push('inactive-14d');if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
-    if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else active.push(w);
+  const muted=[],active=[],promoted=[],telemetryErrors=[];
+  for(const w of j.wallets||[]){
+    let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
+    const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
+    const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));}
+    const hitRate=horizons.length?horizons.filter(x=>x>0).length/horizons.length*100:null;
+    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true).length;
+    const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
+    if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
+    else if(age>14*DAY*1000)reasons.push('inactive-14d');
+    if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
+    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:recent.length?recent.reduce((s,r)=>s+Number(r.performance?.pnl4h??r.pnl4h??0),0)/recent.length:null};
+    if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
   const kept=active.slice(0,50);for(const w of active.slice(50)){w.status='WATCH';}
   j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address))].filter(Boolean);
-  j.updated_at=iso(Date.now());await writeJson(WALLETS,j);return {active:kept.length,muted};
+  j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
+  const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
+  return {active:kept.length,promoted,muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
+}
+async function sendWeeklyTelegram(summary){
+  const token=process.env.TELEGRAM_BOT_TOKEN||'',chat=process.env.TELEGRAM_CHAT_ID||'';if(!token||!chat){console.log('[curator] Telegram summary skipped: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not configured.');return;}
+  const lines=['MEME.RADAR weekly wallet curator',`Active: ${summary.active}`,`Promoted: ${summary.promoted.length?summary.promoted.join(', '):'none'}`,`Muted: ${summary.muted.length?summary.muted.map(x=>x.address+' ('+x.reasons.join('/')+')').join(', '):'none'}`,'Top active:'];
+  for(const w of summary.top)lines.push(`• ${w.address}: 14d hit ${w.hitRate14d??'n/a'}%, avg 4h ${w.mean4hPct??'n/a'}%, score ${w.confidence??'n/a'}`);
+  if(summary.telemetryErrors.length)lines.push(`RPC telemetry errors: ${summary.telemetryErrors.length} (see CLI output)`);
+  const res=await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:chat,text:lines.join('\n')})});
+  const body=await res.json().catch(()=>null);if(!res.ok||!body?.ok)throw new Error('Telegram weekly summary failed: HTTP '+res.status+' '+JSON.stringify(body).slice(0,300));
 }
 async function main(){
   const args=process.argv.slice(2),get=(flag)=>{const i=args.indexOf(flag);return i>=0?args[i+1]:null;};
   if(args.includes('--help')){console.log('Usage: node smart-wallet-curator.mjs --import candidates.csv|json|txt | --from-mints MINT1,MINT2 | --from-research [file] | --prune | --dry-run');return;}
-  if(args.includes('--prune')){console.log(JSON.stringify(await pruneWallets(),null,2));return;}
+  if(args.includes('--prune')){const summary=await pruneWallets();console.log(JSON.stringify(summary,null,2));await sendWeeklyTelegram(summary);return;}
   if(args.includes('--dry-run')){const u=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});console.log(JSON.stringify({mode:'dry-run/no-RPC',rpcCreditsThisRun:0,monthlyUsage:u,monthlyLimit:MONTHLY_LIMIT,versionedTxParser:'resolved staticAccountKeys + meta.loadedAddresses; skips unresolved ALT transactions',veting:'strict gates reject incomplete evidence',note:'Use --verify-signature SIG --wallet ADDRESS for live RPC parser validation.'},null,2));return;}
   let candidates=[];
   const imp=get('--import');if(imp)candidates.push(...await importCandidates(imp));
