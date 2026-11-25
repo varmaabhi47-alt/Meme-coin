@@ -20,7 +20,7 @@ export default {
       const row=await env.DB.prepare("SELECT payload,version,updated_at FROM portfolio_state WHERE id=?").bind("main").first();
       if(!row)return json({ok:true,portfolio:null,version:0,updated_at:null});
       let raw;try{raw=JSON.parse(row.payload);}catch{return json({error:"corrupt_state_json"},500);}
-      const cleanText=v=>String(v??"").replace(/[\\u0000-\\u001f\\u007f]/g," ").replace(/<[^>]*>/g,"").slice(0,160);
+      const cleanText=v=>String(v??"").split("").filter(ch=>{const n=ch.charCodeAt(0);return n>=32&&n!==127;}).join("").replace(/<[^>]*>/g,"").slice(0,160);
       const portfolio={
         cashUsd:Number(raw.cashUsd||0),startingBankroll:Number(raw.startingBankroll||0),
         autoTradeEnabled:!!raw.autoTradeEnabled,
