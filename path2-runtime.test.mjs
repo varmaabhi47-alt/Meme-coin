@@ -23,3 +23,10 @@ test('outlier-adjusted edge proof excludes only the largest winning trade',()=>{
  assert.equal(proof.closedTrades,100);assert.equal(proof.EDGE_VERIFIED,true);
  assert.equal(proof.outlierAdjustedPnlUsd,198);assert.equal(proof.largestWinningTradePnlUsd,1000);
 });
+
+test('RPC guard retries HTTP 429 and counts observed calls/credits',async()=>{
+ let calls=0;
+ const guard=new RpcCreditGuard({stateFile:'/tmp/path2-rpc-guard-test.json',monthlyLimit:1000000,fetchImpl:async()=>{calls++;return calls===1?{status:429,ok:false}:{status:200,ok:true,json:async()=>({result:42})};}});
+ assert.equal(await guard.rpc('https://rpc.invalid','getSlot',[],{credits:1}),42);
+ assert.equal(calls,2);assert.equal(guard.telemetry().estimatedCredits,1);
+});
