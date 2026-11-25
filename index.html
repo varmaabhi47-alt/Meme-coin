@@ -3194,7 +3194,7 @@ main();
         default: return { label: String(c).toUpperCase(), cls: 'bg-slate-800 text-slate-300 border-slate-700' };
       }
     }
-    function esc(s) { return escapeHtml(String(s ?? '').replace(/[\\u0000-\\u001f\\u007f]/g, '')); }
+    function esc(s) { const clean = String(s ?? '').split('').filter(ch => { const n = ch.charCodeAt(0); return n >= 32 && n !== 127; }).join(''); return escapeHtml(clean); }
 
     /*************************************************************************
      * 10. MASTER 1-SECOND HEARTBEAT & BOOT
