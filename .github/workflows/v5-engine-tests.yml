@@ -6,6 +6,9 @@ on:
     paths:
       - "meme-radar-v5-*.mjs"
       - "meme-radar-bot.mjs"
+      - "index.html"
+      - "memeradar-state-api/**"
+      - "package.json"
       - ".github/workflows/v5-engine-tests.yml"
   workflow_dispatch:
 
