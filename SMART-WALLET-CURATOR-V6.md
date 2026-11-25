@@ -1,6 +1,6 @@
 # V6 Smart Wallet Curator
 
-The curator is paper-research tooling only. It does not place trades.
+The curator is paper-research tooling only. It does not place trades. A weekly GitHub Actions workflow runs `--prune` against live standard RPC, refreshes wallet last-activity timestamps, evaluates wallet-attributed real 15m/60m/4h research returns, and sends a Telegram digest. Updated statuses commit back to `smart_wallets.json`, triggering the webhook/Worker metadata sync workflow.
 
 ## Zero-cost / data policy
 - Uses standard Solana JSON-RPC `getSignaturesForAddress` and `getTransaction` only.
@@ -32,6 +32,9 @@ node smart-wallet-curator.mjs --prune
 
 # No-network telemetry/budget status
 node smart-wallet-curator.mjs --dry-run
+
+# Combined deterministic tests + no-network credit telemetry dry-run
+npm run curator-self-test
 
 # Deterministic local parser and rejection tests (no mocked RPC calls)
 npm test
@@ -67,6 +70,6 @@ The Worker fails closed: it only records wallet buys for ACTIVE D1 curator entri
 
 ## Current caveats
 - A 30-day history scan is credit-bounded and may stop before complete history. Missing coverage must not be treated as a passing score.
-- The candidate queue and RPC usage file are local JSON state; back them up.
+- The candidate queue and RPC usage file are local JSON state; back them up. Weekly outcome scoring requires V6 snapshots to carry the Worker-qualified wallet attribution; legacy un-attributed research records are not assigned to wallets.
 - Weekly scoring requires research records with wallet attribution and real 15m/60m/4h outcomes. Existing un-attributed research snapshots cannot be assigned to a wallet and will not be guessed.
 - Helius webhook delivery credits are provider-side. This module does not claim exact per-event credit cost beyond the configured no-polling architecture.
