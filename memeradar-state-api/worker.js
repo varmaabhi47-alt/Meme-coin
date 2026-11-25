@@ -23,7 +23,7 @@ export default {
       let raw;try{raw=JSON.parse(row.payload);}catch{return json({error:"corrupt_state_json"},500,request);}
       const cleanText=v=>String(v??"").split("").filter(ch=>{const n=ch.charCodeAt(0);return n>=32&&n!==127;}).join("").replace(/<[^>]*>/g,"").slice(0,160);
       const portfolio={
-        cashUsd:Number(raw.cashUsd||0),startingBankroll:Number(raw.startingBankroll||0),
+        cashUsd:Number(raw.cashUsd||0),startingBankroll:Number(raw.startingBankroll||0),maxOpenPositions:Number(raw.maxOpenPositions||raw.config?.maxOpenPositions||5),
         autoTradeEnabled:!!raw.autoTradeEnabled,
         openPositions:(Array.isArray(raw.openPositions)?raw.openPositions:[]).map(p=>({
           id:cleanText(p.id),pairId:cleanText(p.pairId),chainId:cleanText(p.chainId),pairAddress:cleanText(p.pairAddress),address:cleanText(p.address),
