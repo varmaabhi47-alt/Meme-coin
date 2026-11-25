@@ -20,6 +20,13 @@ test('rejects an unrelated system transfer in the same transaction',()=>{
   const tx=baseTx({extra:[{programId:'11111111111111111111111111111111',parsed:{type:'transfer',info:{source:wallet,destination:'outside',lamports:250000000}}}]});
   const result=reconstructSolSwap(tx,wallet);assert.equal(result.swap,null);assert.match(result.reason,/unrelated SOL transfer/);
 });
+test('rejects compiled SystemProgram transfer unrelated to the DEX accounts',()=>{
+  const tx=baseTx();
+  tx.transaction.message.staticAccountKeys.push('outside');
+  tx.meta.preBalances.push(0);tx.meta.postBalances.push(0);
+  tx.transaction.message.instructions.push({programId:'11111111111111111111111111111111',accounts:[0,2],data:'3Bxs411Dtc7pkFQj'});
+  const result=reconstructSolSwap(tx,wallet);assert.equal(result.swap,null);assert.match(result.reason,/unrelated SOL transfer/);
+});
 test('rejects unresolved versioned transaction lookup addresses',()=>{
   const tx=baseTx();tx.transaction.message.addressTableLookups=[{accountKey:'table',writableIndexes:[0],readonlyIndexes:[]}];
   const result=reconstructSolSwap(tx,wallet);assert.equal(result.swap,null);assert.match(result.reason,/unresolved address lookup/);
