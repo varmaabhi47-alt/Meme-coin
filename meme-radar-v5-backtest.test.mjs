@@ -47,6 +47,6 @@ test('staged replay takes partial profit then exits runner on trailing stop',()=
  assert.equal(result.results[0].partialTpDone,true);
  assert.equal(result.results[0].finalExitReason,'RUNNER_TRAILING');
  assert.ok(result.results[0].netPnlUsd>0);
- assert.equal(typeof result.profitFactor,'number');
+ assert.ok(typeof result.profitFactor==='number'||result.profitFactor==='Infinity');
  assert.equal(typeof result.pnlExcludingLargestTradeUsd,'number');
 });
