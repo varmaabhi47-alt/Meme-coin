@@ -156,7 +156,7 @@ function calcBuy(usd, price, liq) {
 function estimatedNetworkFeeUsd(chain){return chain==='solana'?0.35:chain==='ethereum'?4.00:chain==='base'?0.20:chain==='bsc'?0.25:chain==='arbitrum'?0.30:0.50;}
 async function calcPaperEntry(usd,pair,security,decimals){
  const chain=String(pair.chainId||'').toLowerCase(),networkFeeUsd=estimatedNetworkFeeUsd(chain),tax=Number(security?.buyTaxRate||0);
- if(chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED&&pair.baseToken?.address&&Number.isInteger(Number(decimals))&&Number(decimals)>=0&&Number(decimals)<=18){
+ if(chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED&&pair.baseToken?.address&&decimals!==null&&decimals!==undefined&&decimals!==''&&Number.isInteger(Number(decimals))&&Number(decimals)>=0&&Number(decimals)<=18){
   try{const amount=String(Math.floor(usd*1e6)),params=new URLSearchParams({inputMint:USDC_MINT,outputMint:pair.baseToken.address,amount});const headers=CONFIG.JUPITER_API_KEY?{'x-api-key':CONFIG.JUPITER_API_KEY}:{};
    const q=await fetchJsonStrict('https://api.jup.ag/swap/v2/order?'+params,9000,headers);const raw=String(q.outAmount||'');if(!/^\\d+$/.test(raw)||Number(raw)<=0)throw Error('invalid Jupiter entry output');
    const tokens=Number(raw)/(10**Number(decimals));if(!(tokens>0&&Number.isFinite(tokens)))throw Error('invalid Jupiter token quantity');
@@ -394,7 +394,7 @@ async function monitorPositions() {
     const dropPeak = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
     const liqDrop = pos.entryLiquidityUsd > 0 ? ((pos.entryLiquidityUsd - pos.lastLiquidityUsd) / pos.entryLiquidityUsd) * 100 : 0;
 
-    const risk=pos.manualCloseRequested?{action:'EXIT_ALL',reason:'MANUAL_TELEGRAM_CLOSE',peakPrice:pos.peakPrice}:evaluatePositionRisk(pos,{markPrice:pos.lastPrice,liquidityUsd:currentLiquidityUsd,now:Date.now(),frictionRate:CONFIG.DEX_FEE_RATE});
+    const risk=pos.manualCloseRequested?{action:'EXIT_ALL',reason:'MANUAL_TELEGRAM_CLOSE',peakPrice:pos.peakPrice}:evaluatePositionRisk(pos,{markPrice:pos.lastPrice,liquidityUsd:currentLiquidityUsd,now:Date.now(),frictionRate:CONFIG.DEX_FEE_RATE,netPnlPctOverride:Number(pos.remainingCostUsd??pos.costUsd)>0?((ex.netProceeds-Number(pos.remainingCostUsd??pos.costUsd))/Number(pos.remainingCostUsd??pos.costUsd))*100:0});
     if(risk.peakPrice)pos.peakPrice=risk.peakPrice;pos.lastLiquidityUsd=currentLiquidityUsd;
     if(risk.action==='PARTIAL_EXIT'){
       const qty=Number(pos.remainingTokens??pos.tokens),sellQty=qty*.5,ex=await calcPaperExit({...pos,tokens:sellQty,remainingTokens:sellQty},pos.lastPrice,currentLiquidityUsd);
