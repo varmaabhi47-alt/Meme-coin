@@ -7,7 +7,7 @@
  * - Polls live DexScreener feeds + enriches in 30-address batches
  * - Strict Liquidity & Sellability Gate + mandatory live RugCheck (Solana) / GoPlus (EVM)
  * - Realistic AMM impact (tradeUsd / (2 * liquidityUsd)) + 0.30% DEX fee on Buy & Sell
- * - Auto-Exit: Take Profit, Stop Loss, Trailing Stop, Max Hold Time, Emergency Liq Drop (>60%)
+ * - Path 2 exits: 50% at +40% net; +2% net runner stop; 15%/22% peak trail; emergency liquidity exits (>30% from entry or >15% per check)
  * - Saves state persistently to paper_portfolio.json (importable into Web UI!) & paper_trades.csv
  * - Sends instant Telegram receipts on every AUTO-BUY and AUTO-SELL + hourly summary
  */
@@ -36,14 +36,9 @@ const CONFIG = {
   BASE_RISK_FRACTION: 0.05,
   MAX_POOL_LIQ_FRACTION: 0.003,
   MAX_OPEN_POSITIONS: 5,
-  TP_PCT: 40,
-  SL_PCT: 18,
-  TRAIL_ARM_PCT: 40,
-  TRAIL_DROP_PCT: 15,
-  MAX_HOLD_HOURS: 24,
+  TRAIL_ARM_PCT: 40, // UI state only; authoritative exit thresholds live in v5-risk-engine
   COOLDOWN_MINS: 60,
   MIN_LIQUIDITY_USD: 75000,
-  MAX_TRADE_TO_LIQ_PCT: 0.5,
   MIN_LIQ_FDV_PCT: 8,
   MIN_SELLS_1H: 10,
   MIN_VOLUME_24H: 50000,
