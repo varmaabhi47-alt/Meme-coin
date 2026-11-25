@@ -2371,14 +2371,14 @@ node meme-radar-autobot-24-7.mjs
       const bm = { solana: 'sol', ethereum: 'eth', base: 'base', bsc: 'bsc', arbitrum: 'arbi' }[p.chainId] || 'eth';
       document.getElementById('insp-ext-links').innerHTML = [
         { l: 'DexScreener', u: p.url }, { l: 'Explorer', u: exp }, { l: 'Bubblemaps', u: `https://app.bubblemaps.io/${bm}/token/${addr}` }
-      ].map(x => `<a href="${x.u}" target="_blank" rel="noopener noreferrer" class="text-center py-1.5 rounded-lg bg-term-panel hover:bg-term-hover border border-term-border text-[11px] font-mono text-slate-300">${x.l} ↗</a>`).join('');
+      ].map(x => { const href = safeHttpsUrl(x.u); return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-center py-1.5 rounded-lg bg-term-panel hover:bg-term-hover border border-term-border text-[11px] font-mono text-slate-300">${escapeHtml(x.l)} ↗</a>` : ''; }).join('');
 
       let dexBtns = p.chainId === 'solana'
         ? [{ l: 'Jupiter Swap', u: `https://jup.ag/swap/SOL-${addr}`, c: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' }, { l: 'Raydium Swap', u: `https://raydium.io/swap/?inputMint=sol&outputMint=${addr}`, c: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40' }]
         : p.chainId === 'bsc'
           ? [{ l: 'PancakeSwap', u: `https://pancakeswap.finance/swap?outputCurrency=${addr}`, c: 'bg-amber-500/15 text-amber-300 border-amber-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/bsc/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }]
           : [{ l: 'Uniswap Swap', u: `https://app.uniswap.org/swap?outputCurrency=${addr}`, c: 'bg-pink-500/15 text-pink-300 border-pink-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/${p.chainId}/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }];
-      document.getElementById('insp-dex-btns').innerHTML = dexBtns.map(b => `<a href="${b.u}" target="_blank" rel="noopener noreferrer" class="text-center py-2 rounded-xl border text-xs font-bold transition ${b.c}">${b.l} ↗</a>`).join('');
+      document.getElementById('insp-dex-btns').innerHTML = dexBtns.map(b => { const href = safeHttpsUrl(b.u); return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-center py-2 rounded-xl border text-xs font-bold transition ${b.c}">${escapeHtml(b.l)} ↗</a>` : ''; }).join('');
     }
 
     async function runInspectorAudit(force) {
@@ -3082,7 +3082,8 @@ main();
         const passed = run.status === 'completed' && run.conclusion === 'success';
         const failed = run.status === 'completed' && run.conclusion !== 'success';
         const tone = passed ? 'text-emerald-300' : failed ? 'text-rose-300' : 'text-amber-300';
-        summary.innerHTML = '<div class="flex flex-wrap items-center justify-between gap-2"><div><span class="font-bold ' + tone + '">' + esc(stateLabel) + '</span><span class="text-slate-400 ml-2">Run #' + Number(run.run_number || 0) + '</span></div><a class="text-cyan-300 hover:text-white underline" href="' + esc(run.html_url || 'https://github.com/varmaabhi47-alt/Meme-coin/actions') + '" target="_blank" rel="noopener noreferrer">Open workflow run ↗</a></div><div class="mt-1 text-[11px] text-slate-500">Started: ' + esc(run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown') + ' · Branch: ' + esc(run.head_branch || 'unknown') + '</div>';
+        const runUrl = safeHttpsUrl(run.html_url || 'https://github.com/varmaabhi47-alt/Meme-coin/actions') || 'https://github.com/varmaabhi47-alt/Meme-coin/actions';
+        summary.innerHTML = '<div class="flex flex-wrap items-center justify-between gap-2"><div><span class="font-bold ' + tone + '">' + esc(stateLabel) + '</span><span class="text-slate-400 ml-2">Run #' + Number(run.run_number || 0) + '</span></div><a class="text-cyan-300 hover:text-white underline" href="' + escapeHtml(runUrl) + '" target="_blank" rel="noopener noreferrer">Open workflow run ↗</a></div><div class="mt-1 text-[11px] text-slate-500">Started: ' + esc(run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown') + ' · Branch: ' + esc(run.head_branch || 'unknown') + '</div>;
         const providerNames = ['DexScreener','GoPlus','RugCheck','Solana RPC','Jupiter'];
         const label = passed ? 'PASS' : failed ? 'CHECK FAILED' : 'PENDING';
         const cls = passed ? 'text-emerald-300' : failed ? 'text-rose-300' : 'text-amber-300';
