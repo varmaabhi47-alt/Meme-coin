@@ -121,3 +121,12 @@ export function computeEdgeProof(trades = []) {
   const adjustedLosses = Math.abs(adjusted.filter(t => Number(t.netPnlUsd) < 0).reduce((s,t)=>s+Number(t.netPnlUsd),0));
   return { closedTrades: valid.length, winRatePct: valid.length ? wins.length / valid.length * 100 : null, profitFactor: grossLoss ? grossWin / grossLoss : (grossWin ? null : 0), maxDrawdownPct: null, outlierAdjustedPnlUsd: adjusted.reduce((s,t)=>s+Number(t.netPnlUsd),0), outlierAdjustedProfitFactor: adjustedLosses ? adjustedWins / adjustedLosses : (adjustedWins ? null : 0), EDGE_VERIFIED: valid.length >= 100 && adjustedWins > adjustedLosses && adjustedWins > 0 };
 }
+
+export function extractWalletTokenBuys(tx, wallet) {
+  const keys = tx?.transaction?.message?.accountKeys || [];
+  const index = keys.findIndex(x => (typeof x === 'string' ? x : x.pubkey) === wallet);
+  if (index < 0) return [];
+  const before = new Map((tx?.meta?.preTokenBalances || []).filter(x => Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
+  const after = new Map((tx?.meta?.postTokenBalances || []).filter(x => Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
+  return [...after].filter(([mint, amount]) => amount > (before.get(mint) || 0)).map(([mint]) => mint);
+}
