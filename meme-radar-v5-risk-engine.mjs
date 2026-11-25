@@ -36,7 +36,8 @@ export function evaluatePositionRisk(position, { markPrice, liquidityUsd, now = 
   const peak = Math.max(Number(position.peakPrice || entry), price);
   const gainPeak = entry > 0 ? (peak / entry - 1) * 100 : 0;
   const dropPeak = peak > 0 ? (peak - price) / peak * 100 : 0;
-  const netPct = netReturnPct(position, price, frictionRate);
+  const override=Number(options.netPnlPctOverride);
+  const netPct=Number.isFinite(override)?override:netReturnPct(position,price,frictionRate);
   if (dropEntry > EXIT_RULES.liquidityDropFromEntryPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_ENTRY', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
   if (dropCheck > EXIT_RULES.liquidityDropPerCheckPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_CHECK', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
   const remainingFraction = Number(position.remainingFraction ?? 1);
