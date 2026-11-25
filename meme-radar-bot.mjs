@@ -390,7 +390,8 @@ async function fetchSmartMoneySignal(mint) {
   portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
   for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>15*60*1000)delete portfolio.smartMoneySignals[oldMint];}
   const existing=portfolio.smartMoneySignals[mint],existingAt=Number(existing?.at||existing?.latest||0);
-  if(existing&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
+  if(existing?.source==='worker-gated'&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
+  if(existing)delete portfolio.smartMoneySignals[mint];
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
   try{
     const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
