@@ -281,6 +281,15 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
   };
   await fs.appendFile(CONFIG.RESEARCH_FILE, JSON.stringify(row) + '\n', 'utf8');
+  if (['RESEARCH','WATCH'].includes(String(decision||'').toUpperCase()) && pair.pairAddress) {
+    portfolio.researchTracked = portfolio.researchTracked || {};
+    const token = String(pair.baseToken?.address || pair.address || pair.pairAddress);
+    if (!portfolio.researchTracked[token]) portfolio.researchTracked[token] = {
+      token, pairAddress: pair.pairAddress, chainId: pair.chainId, symbol: row.symbol,
+      entryAt: Date.now(), entryPrice: row.priceUsd, score: row.score, tier: row.tier,
+      security: row.security, intervalsLogged: []
+    };
+  }
 }
 
 async function auditSecurity(pair) {
@@ -321,6 +330,25 @@ async function auditSecurity(pair) {
 }
 
 async function syncPortfolioToCloudflare(){const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret){console.error('D1 sync skipped: missing secret');return false;}try{const headers={'Authorization':`Bearer ${secret}`,'Content-Type':'application/json'};const read=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{headers,cache:'no-store'});if(!read.ok)throw Error('D1 read HTTP '+read.status);const current=await read.json();d1Version=Number(current.version??d1Version);const response=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{method:'POST',headers,body:JSON.stringify({portfolio,version:d1Version})});const result=await response.json().catch(()=>({}));if(!response.ok||result.success===false){if(response.status===409)d1Version=Number(result.version||d1Version);throw Error(result.error||'D1 write HTTP '+response.status);}d1Version=Number(result.version??d1Version+1);console.log('D1 sync OK version '+d1Version);return true;}catch(e){console.error('D1 sync failed: '+e.message);process.exitCode=1;return false;}}
+
+async function monitorResearchSnapshots(){
+ const tracked=Object.values(portfolio.researchTracked||{});if(!tracked.length)return;
+ const targets=[5,15,30,60,240],now=Date.now();
+ for(const item of tracked){
+  const due=targets.filter(m=>now-Number(item.entryAt)>=m*60000&&!(item.intervalsLogged||[]).includes(m));
+  if(!due.length)continue;
+  try{
+   const data=await fetchJsonStrict(`https://api.dexscreener.com/latest/dex/pairs/${item.chainId}/${item.pairAddress}`,10000);
+   const pair=(data?.pairs||[]).find(x=>String(x.pairAddress||'').toLowerCase()===String(item.pairAddress).toLowerCase());
+   if(!pair||!(Number(pair.priceUsd)>0&&Number(pair.liquidity?.usd)>0))throw Error('live pair mark/liquidity unavailable');
+   for(const target of due){
+    const row={schemaVersion:2,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:(now-Number(item.entryAt))/60000,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,source:'DexScreener live pair mark'};
+    await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
+   }
+  }catch(e){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot poll failed; no mark recorded: ${e.message}`);}
+ }
+ await saveState();
+}
 
 async function monitorPositions() {
   // 1. Refresh Open Positions
@@ -413,6 +441,10 @@ async function monitorPositions() {
       if (Date.now() - (portfolio.cooldowns[key] || 0) < CONFIG.COOLDOWN_MINS * 60000) continue;
 
       const liq = Number(p.liquidity?.usd || 0);
+      portfolio.lastLiquidityByPair = portfolio.lastLiquidityByPair || {};
+      const priorLiq = Number(portfolio.lastLiquidityByPair[key] || 0);
+      if (priorLiq > 0) p.previousLiquidityUsd = priorLiq;
+      portfolio.lastLiquidityByPair[key] = liq;
       const prefilter = evaluateDiscoveryPrefilter(p, CONFIG);
       if (!prefilter.pass) {
         await recordResearch(p, { pass: false, checked: false, reason: 'Not security-audited: rejected by inexpensive discovery prefilter' },
@@ -469,7 +501,7 @@ async function monitorPositions() {
   }
 }
 
-async function pollCycle(){await monitorPositions();await updateCircuitBreaker();await discoveryCycle();}
+async function pollCycle(){await monitorPositions();await updateCircuitBreaker();await discoveryCycle();await monitorResearchSnapshots();}
 
 // GitHub Actions mode: one scan per scheduled job; portfolio state is committed by workflow.
 
@@ -500,11 +532,11 @@ async function pollTelegramCommands(){
  }catch(e){console.error('Telegram command poll failed: '+e.message);}
 }
 async function persistentRunner(){
- let lastMonitor=0,lastDiscovery=0;
+ let lastMonitor=0,lastDiscovery=0,lastResearch=0;
  while(true){
   try{await pollTelegramCommands();const now=Date.now();
    if(portfolio.openPositions.length&&now-lastMonitor>=CONFIG.MONITOR_SEC*1000){await monitorPositions();lastMonitor=Date.now();}
-   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await discoveryCycle();lastDiscovery=Date.now();}
+   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await discoveryCycle();lastDiscovery=Date.now();}\n   if(now-lastResearch>=300000){await monitorResearchSnapshots();lastResearch=Date.now();}
   }catch(e){lastError=e?.message||String(e);console.error('Persistent runner error: '+lastError);await saveState();}
   await sleep(5000);
  }
