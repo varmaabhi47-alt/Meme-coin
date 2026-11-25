@@ -6,7 +6,7 @@ const finite=v=>Number.isFinite(Number(v))?Number(v):0;
 const pct=(price,entry,size,options,friction={})=>{
  const gross=price/entry;
  const sellFee=Math.max(0,finite(options.sellFeeRate??0.003));
- const sellTax=Math.max(0,finite(friction.sellTaxRate??options.sellTaxRate??0));
+ const sellTax=Math.max(0,finite(friction.sellTaxRate??friction.security?.sellTaxRate??options.sellTaxRate??0));
  const slip=(friction.quoteFallback||friction.entryQuoteFallback)?Math.max(0,finite(options.fallbackSlippagePct??5))/100:0;
  const liq=Math.max(0,finite(friction.liquidityUsd));
  const exitImpact=liq>0?Math.min(0.75,size/(2*liq)):0.75;
@@ -58,9 +58,9 @@ export function backtestSnapshots(rows,options={}){
   const equity=equityAt(),tierMult=row.score>=90?1:row.score>=80?0.8:0;
   const size=Math.min(equity*baseFraction*tierMult,row.liq*poolCap,cash);
   if(!(size>0))continue;
-  const entryImpact=Math.min(0.75,size/(2*row.liq)),entryFee=Math.max(0,finite(options.entryFeeRate??0.003)),buyTax=Math.max(0,finite(row.buyTaxRate??options.buyTaxRate??0)),entrySlip=row.entryQuoteFallback?Math.max(0,finite(options.fallbackSlippagePct??5))/100:0,entryGas=Math.max(0,finite(row.networkFeeUsd??options.fixedFeeUsd??0.35));
+  const entryImpact=Math.min(0.75,size/(2*row.liq)),entryFee=Math.max(0,finite(options.entryFeeRate??0.003)),buyTax=Math.max(0,finite(row.buyTaxRate??row.security?.buyTaxRate??options.buyTaxRate??0)),entrySlip=row.entryQuoteFallback?Math.max(0,finite(options.fallbackSlippagePct??5))/100:0,entryGas=Math.max(0,finite(row.networkFeeUsd??options.fixedFeeUsd??0.35));
   const effectiveEntryPrice=row.price*(1+entryImpact)*(1+entryFee)*(1+buyTax)*(1+entrySlip)+entryGas/size;
-  cash-=size;positions.set(row.token,{token:row.token,symbol:row.symbol||'UNKNOWN',entryTime:row.recordedAt,entryTs:row.ts,entryPrice:effectiveEntryPrice,entryLiquidity:row.liq,lastLiquidity:row.liq,lastPrice:row.price,peakPrice:row.price,score:row.score,originalSize:size,remainingCost:size,partial:false,realizedPnlUsd:0,entryQuoteFallback:!!row.entryQuoteFallback,buyTaxRate:buyTax,sellTaxRate:finite(row.sellTaxRate??options.sellTaxRate??0),networkFeeUsd:entryGas});entryCount++;trackEquity();
+  cash-=size;positions.set(row.token,{token:row.token,symbol:row.symbol||'UNKNOWN',entryTime:row.recordedAt,entryTs:row.ts,entryPrice:effectiveEntryPrice,entryLiquidity:row.liq,lastLiquidity:row.liq,lastPrice:row.price,peakPrice:row.price,score:row.score,originalSize:size,remainingCost:size,partial:false,realizedPnlUsd:0,entryQuoteFallback:!!row.entryQuoteFallback,buyTaxRate:buyTax,sellTaxRate:finite(row.sellTaxRate??row.security?.sellTaxRate??options.sellTaxRate??0),networkFeeUsd:entryGas});entryCount++;trackEquity();
  }
  missingExitSnapshots=[...positions.values()].length;
  const equityCurve=[startEquity];let equity=equityAt();equityCurve.push(equity);
