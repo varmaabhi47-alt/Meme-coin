@@ -377,7 +377,7 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const minLiqFdv = Number(config.MIN_LIQ_FDV_PCT ?? 8);
   const minSells = Number(config.MIN_SELLS_1H ?? 10);
   const minVolume = Number(config.MIN_VOLUME_24H ?? 50000);
-  const minBuyRatio = Number(config.MIN_BUY_RATIO_PCT ?? 55);
+  const minBuyRatio = Number(config.MIN_BUY_RATIO_PCT ?? 52);
   const minBuyRatio1h = Number(config.MIN_BUY_RATIO_1H_PCT ?? 52);
   const minBuyRatio5m = Number(config.MIN_BUY_RATIO_5M_PCT ?? 55);
   const minPairAgeMinutes = Number(config.MIN_PAIR_AGE_MINUTES ?? 15);
@@ -420,9 +420,9 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   if (pairAgeMinutes === null) reasons.push('pair age unavailable');
   else if (pairAgeMinutes < minPairAgeMinutes) reasons.push('pair age below minimum');
   if (!Number.isFinite(change5m)) reasons.push('5m price change unavailable');
-  else if (change5m >= maxChange5mPct) reasons.push('5m price spike exceeds maximum');
+  else if (change5m > maxChange5mPct) reasons.push('5m price spike exceeds maximum');
   if (!Number.isFinite(change1h)) reasons.push('1h price change unavailable');
-  else if (change1h >= maxChange1hPct) reasons.push('1h price spike exceeds maximum');
+  else if (change1h > maxChange1hPct) reasons.push('1h price spike exceeds maximum');
   const previousLiquidity = Number(config.PREVIOUS_LIQUIDITY_USD);
   if (config.REQUIRE_LIQUIDITY_STABILITY === true) {
     if (!(previousLiquidity > 0)) reasons.push('previous liquidity unavailable');
