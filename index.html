@@ -1055,6 +1055,12 @@ node meme-radar-autobot-24-7.mjs
     // Shared portfolio sync: Cloudflare D1 is the central source of truth.
     const PORTFOLIO_API_URL = 'https://memeradar-state-api.varmaabhi47.workers.dev/state';
     let remotePortfolioUpdatedAt = '';
+    let portfolioSyncStatus = 'WAITING FOR TELEGRAM PORTFOLIO';
+    let portfolioSyncStatusClass = 'text-cyan-300';
+    function renderPortfolioSyncStatus() {
+      const el = document.getElementById('at-status-text');
+      if (el) { el.textContent = portfolioSyncStatus; el.className = `mt-1 font-mono text-xs font-bold ${portfolioSyncStatusClass}`; }
+    }
     async function syncPortfolioFromCloudflare() {
       try {
         const response = await fetch(PORTFOLIO_API_URL, { cache: 'no-store' });
@@ -1065,7 +1071,7 @@ node meme-radar-autobot-24-7.mjs
           throw new Error('Cloud portfolio response format was not recognized');
         }
         const updatedAt = result.updatedAt || result.updated_at || '';
-        if (updatedAt && updatedAt === remotePortfolioUpdatedAt) return true;
+        if (updatedAt && updatedAt === remotePortfolioUpdatedAt) { portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN`; portfolioSyncStatusClass = 'text-cyan-300'; renderPortfolioSyncStatus(); return true; }
         state.cashUsd = remote.cashUsd;
         state.config.startingBankroll = Number(remote.startingBankroll ?? state.config.startingBankroll ?? 1000);
         state.autoTradeEnabled = TELEGRAM_SHARED_READ_ONLY ? false : (remote.autoTradeEnabled ?? state.autoTradeEnabled);
@@ -1077,8 +1083,9 @@ node meme-radar-autobot-24-7.mjs
         state.positionsStaleReason = '';
         state.lastPosSyncMs = updatedAt ? Date.parse(updatedAt) : Date.now();
         remotePortfolioUpdatedAt = updatedAt;
-        const sharedStatus = document.getElementById('at-status-text');
-        if (sharedStatus) { sharedStatus.textContent = updatedAt ? `TELEGRAM PORTFOLIO SYNCED • ${new Date(updatedAt).toLocaleTimeString()}` : 'TELEGRAM PORTFOLIO SYNCED'; sharedStatus.className = 'mt-1 font-mono text-xs font-bold text-cyan-300'; }
+        portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN • ${remote.closedTrades.length} CLOSED`;
+        portfolioSyncStatusClass = 'text-cyan-300';
+        renderPortfolioSyncStatus();
         persistPortfolio();
         renderAutoTraderView();
         renderLedger();
@@ -1086,8 +1093,9 @@ node meme-radar-autobot-24-7.mjs
         addTelemetry('OK', 'D1', 0, 0, 'portfolio-sync', 'Shared portfolio loaded from Cloudflare D1.');
         return true;
       } catch (err) {
-        const sharedStatus = document.getElementById('at-status-text');
-        if (sharedStatus) { sharedStatus.textContent = `SYNC FAILED • SHOWING OLD LOCAL DATA • ${err.message}`; sharedStatus.className = 'mt-1 font-mono text-xs font-bold text-rose-300'; }
+        portfolioSyncStatus = `SYNC FAILED • LOCAL DATA SHOWN • ${err.message}`;
+        portfolioSyncStatusClass = 'text-rose-300';
+        renderPortfolioSyncStatus();
         addTelemetry('WARN', 'D1', 0, 0, 'portfolio-sync', `Cloud sync unavailable; using this device's saved portfolio. ${err.message}`);
         return false;
       }
@@ -1879,7 +1887,7 @@ node meme-radar-autobot-24-7.mjs
         btn.className = 'px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition bg-cyan-500/15 border-cyan-500/40 text-cyan-300 cursor-not-allowed';
         dot.className = 'w-2.5 h-2.5 rounded-full bg-cyan-400';
         lbl.textContent = 'TELEGRAM BOT • SHARED';
-        if (statusTxt) { statusTxt.textContent = 'READ-ONLY • TELEGRAM BOT MANAGES TRADES'; statusTxt.className = 'mt-1 font-mono text-sm font-bold text-cyan-300'; }
+        renderPortfolioSyncStatus();
         return;
       }
       const dot = document.getElementById('master-auto-dot');
