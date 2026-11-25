@@ -1,0 +1,24 @@
+name: Sync curated smart wallets to Helius
+on:
+  push:
+    branches: [main]
+    paths:
+      - smart_wallets.json
+      - sync-helius-webhook.mjs
+  workflow_dispatch:
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reconcile Helius webhook and Worker D1 metadata
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          HELIUS_WEBHOOK_ID: ${{ secrets.HELIUS_WEBHOOK_ID }}
+          HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: node sync-helius-webhook.mjs
