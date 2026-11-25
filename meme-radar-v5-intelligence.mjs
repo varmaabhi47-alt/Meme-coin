@@ -378,6 +378,11 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const minSells = Number(config.MIN_SELLS_1H ?? 10);
   const minVolume = Number(config.MIN_VOLUME_24H ?? 50000);
   const minBuyRatio = Number(config.MIN_BUY_RATIO_PCT ?? 52);
+  const minBuyRatio1h = Number(config.MIN_BUY_RATIO_1H_PCT ?? 52);
+  const minBuyRatio5m = Number(config.MIN_BUY_RATIO_5M_PCT ?? 55);
+  const minPairAgeMinutes = Number(config.MIN_PAIR_AGE_MINUTES ?? 15);
+  const maxChange5mPct = Number(config.MAX_CHANGE_5M_PCT ?? 35);
+  const maxChange1hPct = Number(config.MAX_CHANGE_1H_PCT ?? 150);
   const liquidity = Number(pair?.liquidity?.usd || 0);
   const fdv = Number(pair?.fdv || pair?.marketCap || 0);
   const tradeSize = Number(config.TRADE_SIZE_USD ?? 100);
@@ -385,6 +390,9 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const sells1h = Number(pair?.txns?.h1?.sells || 0);
   const buys5m = Number(pair?.txns?.m5?.buys || 0);
   const sells5m = Number(pair?.txns?.m5?.sells || 0);
+  const buys1h = Number(pair?.txns?.h1?.buys || 0);
+  const sells1hTotal = Number(pair?.txns?.h1?.sells || 0);
+  const buyRatio1h = buys1h + sells1hTotal > 0 ? buys1h / (buys1h + sells1hTotal) * 100 : null;
   const buys24 = Number(pair?.txns?.h24?.buys || 0);
   const sells24 = Number(pair?.txns?.h24?.sells || 0);
   const buyRatio = buys24 + sells24 > 0 ? buys24 / (buys24 + sells24) * 100 : null;
@@ -405,9 +413,24 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   if (volume < minVolume) reasons.push('24h volume below minimum');
   if (buyRatio === null) reasons.push('24h buy ratio unavailable');
   else if (buyRatio < minBuyRatio) reasons.push('24h buy ratio below minimum');
+  if (buyRatio1h === null) reasons.push('1h buy ratio unavailable');
+  else if (buyRatio1h < minBuyRatio1h) reasons.push('1h buy ratio below minimum');
+  if (buyRatio5m === null) reasons.push('5m buy ratio unavailable');
+  else if (buyRatio5m < minBuyRatio5m) reasons.push('5m buy ratio below minimum');
+  if (pairAgeMinutes === null) reasons.push('pair age unavailable');
+  else if (pairAgeMinutes < minPairAgeMinutes) reasons.push('pair age below minimum');
+  if (!Number.isFinite(change5m)) reasons.push('5m price change unavailable');
+  else if (change5m >= maxChange5mPct) reasons.push('5m price spike exceeds maximum');
+  if (!Number.isFinite(change1h)) reasons.push('1h price change unavailable');
+  else if (change1h >= maxChange1hPct) reasons.push('1h price spike exceeds maximum');
+  const previousLiquidity = Number(config.PREVIOUS_LIQUIDITY_USD);
+  if (config.REQUIRE_LIQUIDITY_STABILITY === true) {
+    if (!(previousLiquidity > 0)) reasons.push('previous liquidity unavailable');
+    else if (liquidity < previousLiquidity * 0.95) reasons.push('liquidity fell more than 5% from previous observation');
+  }
   return {
     pass: reasons.length === 0,
     reasons,
-    metrics: { liquidityUsd: liquidity, fdvUsd: fdv || null, volume24hUsd: volume, sells1h, buyRatioPct: buyRatio, buyRatio5mPct: buyRatio5m, change5m, change1h, pairAgeMinutes, liquidityFdvPct: liqFdv, tradeToLiquidityPct: tradeToLiq }
+    metrics: { liquidityUsd: liquidity, fdvUsd: fdv || null, volume24hUsd: volume, sells1h, buyRatioPct: buyRatio, buyRatio1hPct: buyRatio1h, buyRatio5mPct: buyRatio5m, change5m, change1h, pairAgeMinutes, previousLiquidityUsd: previousLiquidity > 0 ? previousLiquidity : null, liquidityFdvPct: liqFdv, tradeToLiquidityPct: tradeToLiq }
   };
 }
