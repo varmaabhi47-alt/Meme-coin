@@ -25,7 +25,8 @@ export function netReturnPct(position, markPrice, friction = 0) {
 }
 
 /** Return actions for one position mark. Mutates position state only after caller confirms simulated fill. */
-export function evaluatePositionRisk(position, { markPrice, liquidityUsd, now = Date.now(), frictionRate = 0 } = {}) {
+export function evaluatePositionRisk(position, options = {}) {
+  const { markPrice, liquidityUsd, now = Date.now(), frictionRate = 0, netPnlPctOverride } = options;
   const price = Number(markPrice), liq = Number(liquidityUsd);
   if (!(price > 0) || !Number.isFinite(liq) || liq < 0) return { action: 'HOLD_STALE', reason: 'live mark/liquidity unavailable' };
   const entryLiq = Number(position.entryLiquidityUsd);
@@ -36,7 +37,7 @@ export function evaluatePositionRisk(position, { markPrice, liquidityUsd, now = 
   const peak = Math.max(Number(position.peakPrice || entry), price);
   const gainPeak = entry > 0 ? (peak / entry - 1) * 100 : 0;
   const dropPeak = peak > 0 ? (peak - price) / peak * 100 : 0;
-  const override=Number(options.netPnlPctOverride);
+  const override=Number(netPnlPctOverride);
   const netPct=Number.isFinite(override)?override:netReturnPct(position,price,frictionRate);
   if (dropEntry > EXIT_RULES.liquidityDropFromEntryPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_ENTRY', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
   if (dropCheck > EXIT_RULES.liquidityDropPerCheckPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_CHECK', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
