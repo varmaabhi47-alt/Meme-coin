@@ -22,7 +22,12 @@ test('trade reconstruction never opens a sell without an earlier market buy',()=
   assert.equal(trades.length,0);
 });
 
-test('local tests and dry-run do not make network calls',()=>{
+test('RPC request budget is capped at one million monthly calls and six RPS',()=>{
+  assert.equal(MONTHLY_LIMIT,1_000_000);
+  assert.ok(MAX_RPS>=1&&MAX_RPS<=6);
+});
+
+test('local parser and rejection tests do not call any RPC endpoint',()=>{
   assert.equal(typeof resolvedKeys,'function');
   assert.equal(typeof vetWallet,'function');
 });
