@@ -16,6 +16,14 @@ test('emergency liquidity exits use entry and consecutive-check thresholds',()=>
  assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:79000}).reason,'LIQ_DROP_CHECK');
  assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:0}).reason,'LIQ_DROP_ENTRY');
 });
+
+test('liquidity emergency thresholds are strict: exactly 30% from entry or 15% per check holds',()=>{
+ const base={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
+ const entryBoundary=evaluatePositionRisk({...base,lastLiquidityUsd:80000},{markPrice:1,liquidityUsd:70000});
+ assert.equal(entryBoundary.action,'HOLD');assert.equal(entryBoundary.dropEntryPct,30);assert.equal(entryBoundary.dropCheckPct,12.5);
+ const checkBoundary=evaluatePositionRisk({...base,lastLiquidityUsd:100000},{markPrice:1,liquidityUsd:85000});
+ assert.equal(checkBoundary.action,'HOLD');assert.equal(checkBoundary.dropCheckPct,15);
+});
 test('risk-adjusted size uses score tier and pool cap',()=>{
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:85,cashUsd:100}),37.5);
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:10000,score:95,cashUsd:100}),30);
