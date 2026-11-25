@@ -14,7 +14,7 @@ import { reconstructSolSwap } from './swap-reconstruction.mjs';
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
 const KEY=process.env.HELIUS_API_KEY||'';
-const RPC_URL=KEY && /helius/i.test(RPC) ? (RPC.includes('?')?RPC+'&':'?')+'api-key='+encodeURIComponent(KEY) : RPC;
+const RPC_URL=(()=>{if(!KEY||!/helius/i.test(RPC))return RPC;const url=new URL(RPC);url.searchParams.set('api-key',KEY);return url.toString();})();
 const WALLETS=path.join(ROOT,'smart_wallets.json');
 const QUEUE=path.join(ROOT,'candidate_wallets.json');
 const USAGE=path.join(ROOT,'rpc-curator-usage.json');
@@ -55,7 +55,7 @@ async function rpc(method,params){
     return body.result;
   }
 }
-function parseCsvLine(line){return line.split(',').map(x=>x.trim().replace(/^["']|["']$/g,''));}
+function parseCsvLine(line){const out=[];let value='',quoted=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){out.push(value.trim());value='';}else value+=ch;}out.push(value.trim());return out;}
 async function importCandidates(file){
   const txt=await fs.readFile(file,'utf8'), out=[];
   if(file.endsWith('.json')){const j=JSON.parse(txt);for(const x of Array.isArray(j)?j:(j.wallets||j.candidates||[])){const a=typeof x==='string'?x:x.address;if(a)out.push({address:a,label:typeof x==='object'?(x.label||'imported'):'imported',source:'manual-import'});}}
