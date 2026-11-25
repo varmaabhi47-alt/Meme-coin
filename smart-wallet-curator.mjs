@@ -7,6 +7,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { analyzeFundingLinks } from './funding-link-detection.mjs';
+import { summarizeWalletOutcomes } from './curator-outcomes.mjs';
 import { reconstructSolSwap } from './swap-reconstruction.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
@@ -191,22 +193,21 @@ async function sourceResearchMints(file){
   return [...mints];
 }
 async function pruneWallets(){
-  const j=await readJson(WALLETS,{version:1,wallets:[]}),research=(await fs.readFile(path.join(ROOT,'paper_research.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean);
-  const outcomes=new Map();
-  for(const line of research){try{const r=JSON.parse(line),addresses=Array.isArray(r.wallets)?r.wallets:[r.wallet||r.sourceWallet].filter(Boolean);for(const a of addresses){if(!a)continue;const arr=outcomes.get(a)||[];arr.push(r);outcomes.set(a,arr);}}catch{}}
+  const j=await readJson(WALLETS,{version:1,wallets:[]}),outcomeLines=(await fs.readFile(path.join(ROOT,'paper_wallet_outcomes.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean),outcomeRows=[];
+  for(const line of outcomeLines){try{outcomeRows.push(JSON.parse(line));}catch{}}
+  const outcomes=new Map();for(const row of outcomeRows){const arr=outcomes.get(row.wallet)||[];arr.push(row);outcomes.set(row.wallet,arr);}
   const muted=[],active=[],promoted=[],telemetryErrors=[],mutedExisting=[];
   for(const w of j.wallets||[]){
     if(w.status==='MUTED'){mutedExisting.push(w);continue;}
     let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
-    const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
-    const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));const interval=Number(r.researchIntervalMin),ret=r.returnPct;if([15,60,240].includes(interval)&&ret!==null&&ret!==undefined&&Number.isFinite(Number(ret)))horizons.push(Number(ret));}
-    const hitRate=horizons.length?horizons.filter(x=>x>0).length/horizons.length*100:null;
-    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true||/rug|rugged/i.test(String(r.security?.reason||''))).length;
+    const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Number(r.entryTime)>=Date.now()-14*DAY*1000),h4=recent.map(r=>r.outcomes?.['4h']?.returnPct).filter(Number.isFinite),allHorizons=recent.flatMap(r=>['15m','60m','4h'].map(h=>r.outcomes?.[h]?.returnPct).filter(Number.isFinite));
+    const hitRate=h4.length?h4.filter(x=>x>0).length/h4.length*100:(allHorizons.length?allHorizons.filter(x=>x>0).length/allHorizons.length*100:null);
+    const rugCount=recent.filter(r=>r.rug===true).length;
     const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
     if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
-    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:(()=>{const rows=recent.filter(r=>Number(r.researchIntervalMin)===240&&r.returnPct!==null&&r.returnPct!==undefined&&Number.isFinite(Number(r.returnPct)));return rows.length?rows.reduce((s,r)=>s+Number(r.returnPct),0)/rows.length:null;})()};
+    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:h4.length?h4.reduce((s,v)=>s+v,0)/h4.length:null};
     if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
@@ -243,9 +244,9 @@ async function main(){
   const curated=await readJson(WALLETS,{version:1,wallets:[]}),tracked=new Set(curated.wallets.filter(w=>w.status==='ACTIVE').map(w=>w.address)),promoted=[],rejected=[];
   const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map();
   for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){rejected.push({address:c.address,fundingScanError:String(e)});}}
-  const sourceCounts=new Map();for(const source of sources.values())if(source)sourceCounts.set(source,(sourceCounts.get(source)||0)+1);
-  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,fundingLinked=!!source&&(knownDeployers.has(source)||tracked.has(source)||(sourceCounts.get(source)||0)>1),v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics});continue;}
-    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:source||'',metrics:m};
+  const fundingLinks=analyzeFundingLinks([...sources.keys()],sources,{knownRiskAddresses:knownDeployers,trackedAddresses:tracked,sharedSourceMin:2,maxDepth:2});
+  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});continue;}
+    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
   curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.wallets=curated.wallets.slice(0,50);curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
