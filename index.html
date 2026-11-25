@@ -1051,7 +1051,6 @@ node meme-radar-autobot-24-7.mjs
       saveJson(STORE_KEYS.CONFIG, state.config);
     }
 
-    /*************************************************************************
     // Shared portfolio sync: Cloudflare D1 is the central source of truth.
     const PORTFOLIO_API_URL = 'https://memeradar-state-api.varmaabhi47.workers.dev/state';
     let remotePortfolioUpdatedAt = '';
@@ -1101,6 +1100,7 @@ node meme-radar-autobot-24-7.mjs
       }
     }
 
+    /*************************************************************************
      * 2. TELEMETRY, RPM PACER & STRICT ZERO-SIMULATION FETCH
      *************************************************************************/
     function pruneRpm() {
