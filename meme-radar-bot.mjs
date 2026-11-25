@@ -312,6 +312,7 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
+  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=!!signal&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -319,7 +320,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
     security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked', buyTaxRate: security?.buyTaxRate ?? null, sellTaxRate: security?.sellTaxRate ?? null },
     networkFeeUsd: estimatedNetworkFeeUsd(pair.chainId), entryQuoteFallback: String(pair.chainId||'').toLowerCase()==='solana', quoteFallback: String(pair.chainId||'').toLowerCase()==='solana',
-    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED', smartMoneyConfluence: !!portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],
+    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED', smartMoneyConfluence: recentSignal,
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
