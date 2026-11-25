@@ -216,8 +216,8 @@ async function pruneWallets(){
     if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else if(w.status==='ACTIVE'){active.push(w);}else{w.status='WATCH';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
-  const kept=active.filter(w=>w.status==='ACTIVE').slice(0,50);for(const w of active.filter(w=>w.status!=='ACTIVE'))w.status='WATCH';for(const w of active.filter(w=>w.status==='ACTIVE').slice(50))w.status='WATCH';
-  j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
+  const kept=active.filter(w=>w.status==='ACTIVE').slice(0,50);const keptSet=new Set(kept);for(const w of active)if(!keptSet.has(w))w.status='WATCH';
+  j.wallets=[...kept,...active.filter(w=>!keptSet.has(w)),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
   j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
   const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
   const recentAdds=kept.filter(w=>Date.now()-Date.parse(w.added_at||0)<=7*DAY).map(w=>w.address);
