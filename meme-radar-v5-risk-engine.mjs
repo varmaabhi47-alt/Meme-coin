@@ -77,7 +77,7 @@ export function checkCircuitBreakers({ realizedUnrealizedPnlUsd, dailyStartingEq
 }
 
 export function parseTelegramCommand(text) {
-  const match = String(text || '').trim().match(/^\/(status|positions|pause|resume)(?:@\w+)?$|^\/close(?:@\w+)?\s+([A-Za-z0-9._-]{1,32})$/i);
+  const match = String(text || '').trim().match(/^\/(status|positions|pause|resume|kill)(?:@\w+)?$|^\/close(?:@\w+)?\s+([A-Za-z0-9._-]{1,32})$/i);
   if (!match) return null;
   if (/^\/close/i.test(String(text).trim())) return { command: 'close', symbol: match[2].toUpperCase() };
   return { command: String(text).trim().split(/[ @]/)[0].slice(1).toLowerCase() };
