@@ -45,7 +45,7 @@ const CONFIG = {
   MIN_LIQ_FDV_PCT: 8,
   MIN_SELLS_1H: 10,
   MIN_VOLUME_24H: 50000,
-  MIN_BUY_RATIO_PCT: 55,
+  MIN_BUY_RATIO_PCT: 52,
 
   // Telegram & Persistence
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
@@ -86,7 +86,7 @@ async function loadState() {
     const raw = await fs.readFile(CONFIG.PORTFOLIO_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     portfolio = { ...portfolio, ...parsed };
-    lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);
+    lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);\n    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
     console.log(`[${nowIso()}] Loaded ${CONFIG.PORTFOLIO_FILE} | Cash: $${portfolio.cashUsd.toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
   } catch {
     await saveState();
@@ -427,6 +427,10 @@ async function monitorPositions() {
         continue;
       }
 
+      if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
+        logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
+        continue;
+      }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
       const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:portfolio.cashUsd});
       if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}
@@ -456,7 +460,7 @@ async function monitorPositions() {
   }
 }
 
-async function pollCycle(){await monitorPositions();await discoveryCycle();}
+async function pollCycle(){await monitorPositions();await updateCircuitBreaker();await discoveryCycle();}
 
 // GitHub Actions mode: one scan per scheduled job; portfolio state is committed by workflow.
 
