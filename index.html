@@ -2060,14 +2060,14 @@ node meme-radar-autobot-24-7.mjs
       let netOpenVal = 0;
       let anyStale = false;
       state.openPositions.forEach(p => {
-        deployed += p.costUsd;
-        const est = calcSellExecution(p.tokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
+        deployed += Number(p.remainingCostUsd ?? p.costUsd);
+        const est = calcSellExecution(Number(p.remainingTokens ?? p.tokens), p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
         netOpenVal += est.netProceedsUsd;
         if (p.stale) anyStale = true;
       });
       const equity = state.cashUsd + netOpenVal;
       const unrPnl = netOpenVal - deployed;
-      const realPnl = state.closedTrades.reduce((a, t) => a + t.netPnlUsd, 0);
+      const realPnl = state.closedTrades.reduce((a, t) => a + t.netPnlUsd, 0) + state.openPositions.reduce((a, p) => a + Number(p.realizedPartialPnlUsd || 0), 0);
       const eqRoi = state.config.startingBankroll > 0 ? ((equity - state.config.startingBankroll) / state.config.startingBankroll) * 100 : 0;
 
       document.getElementById('at-cash').textContent = `$${state.cashUsd.toFixed(2)}`;
@@ -2101,9 +2101,12 @@ node meme-radar-autobot-24-7.mjs
       } else {
         empty.classList.add('hidden');
         tbody.innerHTML = state.openPositions.map(p => {
-          const est = calcSellExecution(p.tokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
-          const pnl = est.netProceedsUsd - p.costUsd;
-          const pnlPct = p.costUsd > 0 ? (pnl / p.costUsd) * 100 : 0;
+          const remainingTokens = Number(p.remainingTokens ?? p.tokens);
+          const remainingCost = Number(p.remainingCostUsd ?? p.costUsd);
+          const originalCost = Number(p.originalCostUsd ?? p.costUsd);
+          const est = calcSellExecution(remainingTokens, p.lastPrice, p.lastLiquidityUsd || p.entryLiquidityUsd);
+          const pnl = Number(p.realizedPartialPnlUsd || 0) + est.netProceedsUsd - remainingCost;
+          const pnlPct = originalCost > 0 ? (pnl / originalCost) * 100 : 0;
           const ch = getChainMeta(p.chainId);
           return `
             <tr class="hover:bg-term-hover/40">
@@ -2117,8 +2120,8 @@ node meme-radar-autobot-24-7.mjs
               </td>
               <td class="py-3 px-2.5 text-right text-slate-300">${formatPrice(p.buyPrice)}</td>
               <td class="py-3 px-2.5 text-right text-white font-semibold">${formatPrice(p.lastPrice)}</td>
-              <td class="py-3 px-2.5 text-right text-slate-200">${formatTokens(p.tokens)}</td>
-              <td class="py-3 px-2.5 text-right text-slate-200">$${p.costUsd.toFixed(2)} → $${est.netProceedsUsd.toFixed(2)}</td>
+              <td class="py-3 px-2.5 text-right text-slate-200">${formatTokens(remainingTokens)}</td>
+              <td class="py-3 px-2.5 text-right text-slate-200">${remainingCost.toFixed(2)} → ${est.netProceedsUsd.toFixed(2)}</td>
               <td class="py-3 px-2.5 text-right text-cyan-300">${formatUsd(p.lastLiquidityUsd || p.entryLiquidityUsd)}</td>
               <td class="py-3 px-2.5 text-right font-bold ${p.stale ? 'text-amber-400' : pctColor(pnl)}">
                 ${p.stale ? 'STALE (OFFLINE)' : `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)} (${formatPct(pnlPct)})`}
