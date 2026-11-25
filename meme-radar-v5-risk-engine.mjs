@@ -98,14 +98,12 @@ export function dueResearchIntervals(entryTime, observedAt) {
 }
 
 export function computeTradeMetrics(trades = []) {
-  const pnl = trades.map(t => Number(t.netPnlUsd)).filter(Number.isFinite);
-  const wins = pnl.filter(x => x > 0), losses = pnl.filter(x => x < 0);
-  const grossWins = wins.reduce((a,b)=>a+b,0), grossLosses = Math.abs(losses.reduce((a,b)=>a+b,0));
-  let equity=1, peak=1, maxDrawdownPct=0;
-  for(const x of pnl){equity*=Math.max(0,1+x/100);peak=Math.max(peak,equity);maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);}
-  const withoutLargest = pnl.length ? pnl.filter((_,i)=>i!==pnl.indexOf(Math.max(...pnl))).reduce((a,b)=>a+b,0) : 0;
-  const largest = pnl.length ? Math.max(...pnl) : 0;
-  const adjusted = pnl.filter(x => x !== largest);
-  const adjustedWins = adjusted.filter(x => x > 0).reduce((a,b)=>a+b,0), adjustedLosses = Math.abs(adjusted.filter(x => x < 0).reduce((a,b)=>a+b,0));
-  return { tradeCount:pnl.length, winRatePct:pnl.length?wins.length/pnl.length*100:null, profitFactor:grossLosses?grossWins/grossLosses:(grossWins>0?Infinity:null), maxDrawdownPct, netPnlUsd:pnl.reduce((a,b)=>a+b,0), pnlExcludingLargestTradeUsd:withoutLargest, outlierAdjustedProfitFactor:adjustedLosses?adjustedWins/adjustedLosses:(adjustedWins>0?Infinity:null), EDGE_VERIFIED:pnl.length>=100&&adjustedWins>adjustedLosses&&adjustedWins>0 };
+  const valid=trades.filter(t=>Number.isFinite(Number(t.netPnlUsd))),pnl=valid.map(t=>Number(t.netPnlUsd));
+  const wins=pnl.filter(x=>x>0),losses=pnl.filter(x=>x<0),grossWins=wins.reduce((a,b)=>a+b,0),grossLosses=Math.abs(losses.reduce((a,b)=>a+b,0));
+  let equity=1,peak=1,maxDrawdownPct=0;
+  for(const trade of valid){const ret=Number(trade.netPnlPct);if(Number.isFinite(ret))equity*=Math.max(0,1+ret/100);peak=Math.max(peak,equity);if(peak>0)maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);}
+  const largestWinning=valid.reduce((best,t)=>Number(t.netPnlUsd)>Number(best?.netPnlUsd??-Infinity)&&Number(t.netPnlUsd)>0?t:best,null);
+  const adjusted=largestWinning?valid.filter(t=>t!==largestWinning):valid;
+  const adjustedWins=adjusted.filter(t=>Number(t.netPnlUsd)>0).reduce((a,t)=>a+Number(t.netPnlUsd),0),adjustedLosses=Math.abs(adjusted.filter(t=>Number(t.netPnlUsd)<0).reduce((a,t)=>a+Number(t.netPnlUsd),0));
+  return {tradeCount:pnl.length,winRatePct:pnl.length?wins.length/pnl.length*100:null,profitFactor:grossLosses?grossWins/grossLosses:(grossWins>0?Infinity:null),maxDrawdownPct,netPnlUsd:pnl.reduce((a,b)=>a+b,0),outlierAdjustedPnlUsd:adjusted.reduce((a,t)=>a+Number(t.netPnlUsd),0),outlierAdjustedProfitFactor:adjustedLosses?adjustedWins/adjustedLosses:(adjustedWins>0?Infinity:null),EDGE_VERIFIED:pnl.length>=100&&adjustedWins>adjustedLosses&&adjustedWins>0};
 }
