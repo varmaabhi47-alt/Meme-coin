@@ -16,3 +16,10 @@ test('edge gate stays false below 100 closed trades',()=>{
 test('RPC guard hard limits configured RPS to six',()=>{
  const guard=new RpcCreditGuard({maxRps:10}); assert.equal(guard.maxRps,6);
 });
+
+test('outlier-adjusted edge proof excludes only the largest winning trade',()=>{
+ const trades=Array.from({length:100},(_,i)=>({netPnlUsd:i===99?1000:2,netPnlPct:i===99?100:2}));
+ const proof=computeEdgeProof(trades);
+ assert.equal(proof.closedTrades,100);assert.equal(proof.EDGE_VERIFIED,true);
+ assert.equal(proof.outlierAdjustedPnlUsd,198);assert.equal(proof.largestWinningTradePnlUsd,1000);
+});
