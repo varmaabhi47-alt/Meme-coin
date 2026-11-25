@@ -10,7 +10,10 @@
 - [x] Helius Worker mock: webhook auth header, allowlisted wallet and swap-only event accepted; unauthenticated request rejected.
 - [x] Telegram parser recognizes /kill; bot command handler accepts only TELEGRAM_CHAT_ID.
 - [x] Statistical proof gate: 99 closed trades cannot verify edge; 100-trade test excludes largest winner.
-- [x] CI result: Path 2 workflow passed 50 tests, 0 failures (2026-11-25).
+- [x] Live adapter tests: compiled-message `jitodontfront` readonly validation and Helius Sender HTTPS endpoint allowlist.
+- [x] Dashboard safety: untrusted pair IDs use dataset-based click handlers; external inspector URLs require HTTPS.
+- [x] Inline dashboard JavaScript syntax check runs in CI.
+- [x] CI result: Path 2 workflow passed 53 tests, 0 failures (2026-11-25); V5.1 upgrade checks passed.
 
 ## Required before enabling live services
 - [ ] Configure 15-30 verified smart-wallet addresses; current smart_wallets.json is intentionally empty.
