@@ -1043,35 +1043,51 @@ node meme-radar-autobot-24-7.mjs
     function renderV5Research() {
       const rows = v5ResearchRows;
       const unique = new Set(rows.map(row => row.token || row.pairAddress).filter(Boolean));
-      document.getElementById('v5-snapshot-count').textContent = rows.length;
-      document.getElementById('v5-candidate-count').textContent = rows.filter(row => row.tier === 'RESEARCH').length;
-      document.getElementById('v5-rejected-count').textContent = rows.filter(row => row.tier === 'REJECT' || row.tier === 'PREFILTER_REJECT').length;
-      document.getElementById('v5-token-count').textContent = unique.size;
-      document.getElementById('badge-research-count').textContent = rows.length;
+      document.getElementById('v5-snapshot-count').textContent = String(rows.length);
+      document.getElementById('v5-candidate-count').textContent = String(rows.filter(row => row.tier === 'RESEARCH').length);
+      document.getElementById('v5-rejected-count').textContent = String(rows.filter(row => row.tier === 'REJECT' || row.tier === 'PREFILTER_REJECT').length);
+      document.getElementById('v5-token-count').textContent = String(unique.size);
+      document.getElementById('badge-research-count').textContent = String(rows.length);
       const tbody = document.getElementById('v5-research-tbody');
       const empty = document.getElementById('v5-research-empty');
-      tbody.innerHTML = rows.slice(-150).reverse().map(row => {
+      tbody.replaceChildren();
+      const makeCell = (value, className = '') => {
+        const td = document.createElement('td');
+        td.className = className;
+        td.textContent = String(value ?? '—');
+        return td;
+      };
+      for (const row of rows.slice(-150).reverse()) {
+        const tr = document.createElement('tr');
         const date = row.recordedAt ? new Date(row.recordedAt).toLocaleString() : '—';
-        const holder = row.holderDistribution?.known ? row.holderDistribution.top10Pct.toFixed(2) + '%' : 'Unknown';
-        const creator = row.creatorSignals?.known ? [row.creatorSignals.mintAuthority ? 'Mint authority active' : '', row.creatorSignals.freezeAuthority ? 'Freeze authority active' : '', row.creatorSignals.authorityHolderOverlap?.length ? 'Authority in top holders' : '', row.creatorSignals.reusedMintAuthorityTokens ? 'Authority reused' : '', row.creatorSignals.repeatedHolderOwners?.length ? 'Repeated holder owner' : '', row.creatorSignals.crossTokenClusterCount ? ('Cross-token links: ' + row.creatorSignals.crossTokenClusterCount + ' cluster(s) / ' + row.creatorSignals.crossTokenTokensObserved + ' tokens') : ''].filter(Boolean).join('; ') || 'No flags' : 'Unknown';
-        const warnings = [...(row.warnings || []), ...(row.reasons || []), ...(row.creatorSignals?.warnings || [])].slice(0, 2).join('; ');
-        const color = row.tier === 'RESEARCH' ? 'text-emerald-300' : row.tier === 'REJECT' ? 'text-rose-300' : 'text-amber-300';
+        const holder = row.holderDistribution?.known ? Number(row.holderDistribution.top10Pct).toFixed(2) + '%' : 'Unknown';
+        const creator = row.creatorSignals?.known ? [
+          row.creatorSignals.mintAuthority ? 'Mint authority active' : '',
+          row.creatorSignals.freezeAuthority ? 'Freeze authority active' : '',
+          row.creatorSignals.authorityHolderOverlap?.length ? 'Authority in top holders' : '',
+          row.creatorSignals.reusedMintAuthorityTokens ? 'Authority reused' : '',
+          row.creatorSignals.repeatedHolderOwners?.length ? 'Repeated holder owner' : '',
+          row.creatorSignals.crossTokenClusterCount ? ('Cross-token links: ' + Number(row.creatorSignals.crossTokenClusterCount) + ' cluster(s) / ' + Number(row.creatorSignals.crossTokenTokensObserved || 0) + ' tokens') : ''
+        ].filter(Boolean).join('; ') || 'No flags' : 'Unknown';
+        const warnings = [...(Array.isArray(row.warnings) ? row.warnings : []), ...(Array.isArray(row.reasons) ? row.reasons : []), ...(Array.isArray(row.creatorSignals?.warnings) ? row.creatorSignals.warnings : [])].slice(0, 2).map(x => String(x)).join('; ');
+        const tier = String(row.tier || '—');
+        const tierClass = tier === 'RESEARCH' ? 'text-emerald-300' : tier === 'REJECT' ? 'text-rose-300' : 'text-amber-300';
         const liquidity = Number(row.liquidityUsd);
         const liquidityText = Number.isFinite(liquidity) && liquidity > 0 ? '$' + liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
-        return '<tr><td class="p-2.5 whitespace-nowrap text-slate-400">' + escapeHtml(date) +
-          '</td><td class="p-2.5"><div class="font-semibold text-white">' + escapeHtml(row.symbol || 'UNKNOWN') +
-          '</div><div class="text-[10px] text-slate-500 font-mono">' + escapeHtml((row.token || '').slice(0, 12)) +
-          '</div></td><td class="p-2.5 text-right font-mono text-white">' + (Number.isFinite(Number(row.score)) ? Number(row.score) : '—') +
-          '</td><td class="p-2.5 font-mono ' + color + '">' + escapeHtml(row.tier || '—') +
-          '</td><td class="p-2.5 text-right font-mono text-slate-300">' + escapeHtml(liquidityText) +
-          '</td><td class="p-2.5 text-slate-300">' + escapeHtml(holder) +
-          '</td><td class="p-2.5 text-slate-400 max-w-[260px]">' + escapeHtml(creator) +
-          '</td><td class="p-2.5 text-slate-400 max-w-[260px]">' + escapeHtml(warnings || '—') +
-          '</td></tr>';
-      }).join('');
+        tr.append(
+          makeCell(date, 'p-2.5 whitespace-nowrap text-slate-400'),
+          makeCell(String(row.symbol || 'UNKNOWN') + '\\n' + String(row.token || '').slice(0, 12), 'p-2.5 whitespace-pre-line font-semibold text-white'),
+          makeCell(Number.isFinite(Number(row.score)) ? Number(row.score) : '—', 'p-2.5 text-right font-mono text-white'),
+          makeCell(tier, 'p-2.5 font-mono ' + tierClass),
+          makeCell(liquidityText, 'p-2.5 text-right font-mono text-slate-300'),
+          makeCell(holder, 'p-2.5 text-slate-300'),
+          makeCell(creator, 'p-2.5 text-slate-400 max-w-[260px]'),
+          makeCell(warnings || '—', 'p-2.5 text-slate-400 max-w-[260px]')
+        );
+        tbody.appendChild(tr);
+      }
       empty.classList.toggle('hidden', rows.length > 0);
     }
-
 
     let v5ResearchLoadPromise = null;
 
