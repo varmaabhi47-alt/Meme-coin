@@ -22,7 +22,7 @@ export function backtestSnapshots(rows,options={}){
  const baseFraction=Math.max(0,finite(options.baseRiskFraction??0.06)),poolCap=Math.max(0,finite(options.poolLiquidityCapFraction??0.0035));
  const clean=(Array.isArray(rows)?rows:[]).map(r=>({...r,ts:Date.parse(r.recordedAt),price:finite(r.priceUsd),liq:finite(r.liquidityUsd),score:finite(r.score),token:String(r.token||r.pairAddress||'')}))
   .filter(r=>Number.isFinite(r.ts)&&r.price>0&&r.liq>0&&r.token).sort((a,b)=>a.ts-b.ts);
- const positions=new Map(),lastEntry=new Map(),trades=[];let cash=startEquity,missingExitSnapshots=0,entryCount=0;
+ const positions=new Map(),lastEntry=new Map(),trades=[];let cash=startEquity,missingExitSnapshots=0,entryCount=0,equityPeak=startEquity,maxDrawdownPct=0;const trackEquity=()=>{const e=equityAt();equityPeak=Math.max(equityPeak,e);maxDrawdownPct=Math.max(maxDrawdownPct,(equityPeak-e)/equityPeak*100);};
  const equityAt=()=>cash+[...positions.values()].reduce((sum,p)=>sum+p.remainingCost*(p.lastPrice/p.entryPrice),0);
  for(const row of clean){
   let pos=positions.get(row.token);
@@ -45,7 +45,7 @@ export function backtestSnapshots(rows,options={}){
     const trade={token:pos.token,symbol:pos.symbol,entryTime:pos.entryTime,exitTime:row.recordedAt,entryPrice:pos.entryPrice,exitPrice:row.price,entryScore:pos.score,entrySizeUsd:pos.originalSize,partialTpDone:pos.partial,partialExitTime:pos.partialAt||null,partialNetReturnPct:pos.partialNetPct??null,finalExitReason:reason,netPnlUsd:pnl,netReturnPct:pos.originalSize?pnl/pos.originalSize*100:0,quoteFallback:!!(pos.entryQuoteFallback||row.quoteFallback)};
     trades.push(trade);positions.delete(row.token);lastEntry.set(row.token,row.ts);
    }
-   pos.peakPrice=peak;pos.lastLiquidity=row.liq;continue;
+   pos.peakPrice=peak;pos.lastLiquidity=row.liq;trackEquity();continue;
   }
   if(row.score<minScore||row.decision==='REJECT'||row.decision==='PREFILTER_REJECT'||row.tier==='REJECT'||row.tier==='PREFILTER_REJECT'||row.security?.pass===false)continue;
   if(row.tier&&row.tier!=='RESEARCH')continue;
@@ -54,13 +54,13 @@ export function backtestSnapshots(rows,options={}){
   const equity=equityAt(),tierMult=row.score>=90?1:row.score>=80?0.8:0;
   const size=Math.min(equity*baseFraction*tierMult,row.liq*poolCap,cash);
   if(!(size>0))continue;
-  cash-=size;positions.set(row.token,{token:row.token,symbol:row.symbol||'UNKNOWN',entryTime:row.recordedAt,entryTs:row.ts,entryPrice:row.price,entryLiquidity:row.liq,lastLiquidity:row.liq,lastPrice:row.price,peakPrice:row.price,score:row.score,originalSize:size,remainingCost:size,partial:false,realizedPnlUsd:0,entryQuoteFallback:!!row.entryQuoteFallback});entryCount++;
+  cash-=size;positions.set(row.token,{token:row.token,symbol:row.symbol||'UNKNOWN',entryTime:row.recordedAt,entryTs:row.ts,entryPrice:row.price,entryLiquidity:row.liq,lastLiquidity:row.liq,lastPrice:row.price,peakPrice:row.price,score:row.score,originalSize:size,remainingCost:size,partial:false,realizedPnlUsd:0,entryQuoteFallback:!!row.entryQuoteFallback});entryCount++;trackEquity();
  }
  missingExitSnapshots=[...positions.values()].length;
  const equityCurve=[startEquity];let equity=startEquity,peak=startEquity,maxDrawdownPct=0;
  for(const t of trades){equity+=t.netPnlUsd;peak=Math.max(peak,equity);maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);equityCurve.push(equity);}
  const pnl=trades.map(t=>t.netPnlUsd),wins=pnl.filter(x=>x>0),losses=pnl.filter(x=>x<0),grossWin=wins.reduce((a,b)=>a+b,0),grossLoss=Math.abs(losses.reduce((a,b)=>a+b,0));
- const largest=pnl.length?Math.max(...pnl):0;
- return {mode:'observed-snapshot-staged-exit-replay',options:{minimumScore:minScore,maxOpenPositions:maxOpen,partialTakeProfitPct:tp,stopLossPct:sl,runnerTrailDropPct:trail,runnerWideTrailDropPct:wide,liquidityDropFromEntryPct:maxEntryLiqDrop,liquidityDropPerCheckPct:maxCheckDrop,baseRiskFraction:baseFraction,poolLiquidityCapFraction:poolCap},snapshotsUsed:clean.length,entryCount,trades:trades.length,openAtEnd:missingExitSnapshots,missingExitSnapshots,winRatePct:trades.length?wins.length/trades.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?null:null),netPnlUsd:pnl.reduce((a,b)=>a+b,0),pnlExcludingLargestTradeUsd:pnl.reduce((a,b)=>a+b,0)-largest,largestTradePnlUsd:trades.length?largest:null,maxDrawdownPct,endingEquityUsd:startEquity+pnl.reduce((a,b)=>a+b,0),results:trades};
+ const largest=pnl.length?Math.max(0,...pnl):0;
+ return {mode:'observed-snapshot-staged-exit-replay',options:{minimumScore:minScore,maxOpenPositions:maxOpen,partialTakeProfitPct:tp,stopLossPct:sl,runnerTrailDropPct:trail,runnerWideTrailDropPct:wide,liquidityDropFromEntryPct:maxEntryLiqDrop,liquidityDropPerCheckPct:maxCheckDrop,baseRiskFraction:baseFraction,poolLiquidityCapFraction:poolCap},snapshotsUsed:clean.length,entryCount,trades:trades.length,openAtEnd:missingExitSnapshots,missingExitSnapshots,winRatePct:trades.length?wins.length/trades.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?'Infinity':null),netPnlUsd:pnl.reduce((a,b)=>a+b,0),pnlExcludingLargestTradeUsd:pnl.reduce((a,b)=>a+b,0)-largest,largestTradePnlUsd:trades.length?largest:null,maxDrawdownPct,endingEquityUsd:equity,pnlFromClosedTradesUsd:pnl.reduce((a,b)=>a+b,0),results:trades};
 }
 export async function readJsonlSnapshots(filePath,fsModule){if(!fsModule)fsModule=await import('node:fs/promises');const content=await fsModule.readFile(filePath,'utf8').catch(e=>{if(e.code==='ENOENT')return'';throw e;});return content.split(/\r?\n/).filter(Boolean).flatMap(line=>{try{return[JSON.parse(line)];}catch{return[];}});}
