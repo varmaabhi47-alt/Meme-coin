@@ -8,7 +8,10 @@
     "test": "node --test *.test.mjs memeradar-state-api/*.test.mjs",
     "dry-run": "node meme-radar-bot.mjs --dry-run",
     "persistent": "RUN_MODE=persistent node meme-radar-bot.mjs",
-    "start": "RUN_MODE=persistent node meme-radar-bot.mjs"
+    "start": "RUN_MODE=persistent node meme-radar-bot.mjs",
+    "curate-wallets": "node smart-wallet-curator.mjs",
+    "sync-wallet-webhook": "node sync-helius-webhook.mjs",
+    "curator-dry-run": "node smart-wallet-curator.mjs --dry-run"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4"
