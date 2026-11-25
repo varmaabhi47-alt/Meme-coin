@@ -45,24 +45,19 @@ export default {
       return json({ok:true,portfolio,version:Number(row.version||0),updated_at:row.updated_at},200,request);
     }
     if(url.pathname==="/webhook/helius"&&request.method==="POST"){
-      const secret=String(env.HELIUS_WEBHOOK_SECRET||"");
-      if(!secret)return json({error:"webhook_secret_not_configured"},503,request);
+      const expected=String(env.HELIUS_WEBHOOK_SECRET||"");
+      const supplied=request.headers.get("Authorization")||"";
+      if(!expected||supplied.length!==expected.length)return json({error:"unauthorized_webhook"},401,request);
+      let authDiff=0;for(let i=0;i<expected.length;i++)authDiff|=expected.charCodeAt(i)^supplied.charCodeAt(i);
+      if(authDiff!==0)return json({error:"unauthorized_webhook"},401,request);
       const raw=await request.text();
-      const supplied=request.headers.get("X-Helius-Signature")||"";
-      const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
-      const digest=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(raw)));
-      const expected=[...digest].map(b=>b.toString(16).padStart(2,"0")).join("");
-      if(supplied.length!==expected.length)return json({error:"invalid_signature"},401,request);
-      // Fixed-length comparison without early exit.
-      let diff=0;for(let i=0;i<expected.length;i++)diff|=expected.charCodeAt(i)^supplied.charCodeAt(i);
-      if(diff!==0)return json({error:"invalid_signature"},401,request);
       let events;try{events=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,request);}
       if(!Array.isArray(events))events=[events];
       const allow=new Set(String(env.SMART_WALLETS||"").split(",").map(x=>x.trim()).filter(Boolean));
       if(!allow.size)return json({error:"smart_wallet_allowlist_empty"},400,request);
       let stored=0;
       for(const event of events){
-        if(String(event?.type||"").toUpperCase()!=="SWAP")continue;
+        if(String(event?.type||"").toUpperCase()!=="SWAP"||event?.transactionError)continue;
         const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[];
         const walletBuy=transfers.filter(t=>allow.has(String(t.toUserAccount||""))&&t.mint&&Number(t.tokenAmount||0)>0);
         for(const transfer of walletBuy){
