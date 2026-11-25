@@ -350,6 +350,7 @@ async function monitorResearchSnapshots(){
    }
   }catch(e){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot poll failed; no mark recorded: ${e.message}`);}
  }
+ for(const item of tracked){if(targets.every(m=>(item.intervalsLogged||[]).includes(m)))delete portfolio.researchTracked[item.token];}
  await saveState();
 }
 
