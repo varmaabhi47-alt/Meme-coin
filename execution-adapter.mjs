@@ -5,14 +5,14 @@
  */
 export class PaperExecutionAdapter {
   constructor({ quoteExit, quoteEntry } = {}) { this.quoteExit = quoteExit; this.quoteEntry = quoteEntry; this.mode = 'paper'; }
-  async buy(order) { if (!this.quoteEntry) throw new Error('Paper entry quote provider missing'); return this.quoteEntry(order); }
-  async sell(order) { if (!this.quoteExit) throw new Error('Paper exit quote provider missing'); return this.quoteExit(order); }
+  async buy({ usd, pair, security, decimals }) { if (!this.quoteEntry) throw new Error('Paper entry quote provider missing'); return this.quoteEntry(usd, pair, security, decimals); }
+  async sell({ position, price, liquidity }) { if (!this.quoteExit) throw new Error('Paper exit quote provider missing'); return this.quoteExit(position, price, liquidity); }
 }
 
 export class SolanaLiveExecutionAdapter {
   constructor({ signer, buildJupiterSwap, sendViaHeliusSender, confirmationKey = process.env.LIVE_CONFIRMATION_KEY, enabled = process.env.LIVE_TRADING === 'true', maxTradeSol = Number(process.env.MAX_TRADE_SOL || 0.05), maxDailySol = Number(process.env.MAX_DAILY_SOL || 0.25), telegramChatId = process.env.TELEGRAM_CHAT_ID } = {}) {
     this.enabled = enabled && Boolean(confirmationKey); this.confirmationKey = confirmationKey; this.signer = signer; this.buildJupiterSwap = buildJupiterSwap; this.sendViaHeliusSender = sendViaHeliusSender;
-    this.maxTradeSol = Math.max(0, maxTradeSol); this.maxDailySol = Math.max(0, maxDailySol); this.dailySpentSol = 0; this.day = new Date().toISOString().slice(0,10); this.telegramChatId = String(telegramChatId || ''); this.killed = false;
+    this.maxTradeSol = Math.min(0.05, Math.max(0, maxTradeSol)); this.maxDailySol = Math.min(0.25, Math.max(0, maxDailySol)); this.dailySpentSol = 0; this.day = new Date().toISOString().slice(0,10); this.telegramChatId = String(telegramChatId || ''); this.killed = false;
   }
   assertEnabled(chatId) {
     if (!this.enabled || process.env.LIVE_TRADING !== 'true' || !this.confirmationKey) throw new Error('Live execution disabled: LIVE_TRADING and LIVE_CONFIRMATION_KEY are both required');
@@ -31,5 +31,5 @@ export class SolanaLiveExecutionAdapter {
     this.dailySpentSol += amount; return { signature, amountSol: amount, live: true };
   }
   async sell(order, options = {}) { this.assertEnabled(options.chatId); const tx = await this.buildJupiterSwap({ ...order, dynamicSlippage: true, tightSlippageBps: 50, sandwichProtectionAccount: 'jitodontfront111111111111111111111111111111' }); const signed = await this.signer.signTransaction(tx); return { signature: await this.sendViaHeliusSender(signed), live: true }; }
-  handleTelegramCommand(command, chatId) { if (String(chatId) !== this.telegramChatId) return false; if (command === '/kill') { this.killed = true; return true; } return false; }
+  async handleTelegramCommand(command, chatId, { flattenOpenPositions } = {}) { if (String(chatId) !== this.telegramChatId) return false; if (command === '/kill') { this.killed = true; if (this.enabled && typeof flattenOpenPositions === 'function') await flattenOpenPositions(); return true; } return false; }
 }
