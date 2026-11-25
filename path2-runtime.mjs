@@ -11,7 +11,7 @@ export class RpcCreditGuard {
   constructor({ maxRps = 6, cacheMs = 15 * 60_000, stateFile = 'rpc-usage.json', monthlyLimit = 800_000, creditCost = 1, fetchImpl = fetch } = {}) {
     this.maxRps = Math.min(6, Math.max(1, Number(maxRps) || 6));
     this.cacheMs = cacheMs; this.stateFile = stateFile; this.monthlyLimit = monthlyLimit;
-    this.creditCost = creditCost; this.fetchImpl = fetchImpl; this.lastCall = 0;
+    this.creditCost = creditCost; this.fetchImpl = fetchImpl; this.lastCall = 0; this.rateTail = Promise.resolve();
     this.cache = new Map(); this.usage = { month: new Date().toISOString().slice(0, 7), calls: 0, estimatedCredits: 0, daily: {}, lastAt: null };
   }
   async load() {
@@ -19,6 +19,10 @@ export class RpcCreditGuard {
     try { const rows=JSON.parse(await fs.readFile(this.stateFile+'.cache','utf8')); for(const [key,row] of Object.entries(rows)) if(row&&now()-row.at<this.cacheMs)this.cache.set(key,row); } catch {}
   }
   async save() { await fs.writeFile(this.stateFile, JSON.stringify(this.usage), 'utf8'); }
+  async rateLimit(count=1) {
+    const run=this.rateTail.then(async()=>{const minGap=Math.max(1,Number(count)||1)*1000/this.maxRps;const wait=Math.max(0,minGap-(now()-this.lastCall));if(wait)await sleep(wait);this.lastCall=now();});
+    this.rateTail=run.catch(()=>{});await run;
+  }
   async cached(key, fn) {
     const row = this.cache.get(key);
     if (row && now() - row.at < this.cacheMs) return row.value;
@@ -33,11 +37,9 @@ export class RpcCreditGuard {
     if (projected * (30 / Math.max(1, new Date().getDate())) > this.monthlyLimit) {
       throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'), { code: 'RPC_BUDGET' });
     }
-    const minGap = 1000 / this.maxRps;
-    const wait = Math.max(0, minGap - (now() - this.lastCall)); if (wait) await sleep(wait);
     let attempt = 0;
     while (true) {
-      this.lastCall = now();
+      await this.rateLimit(1);
       try {
         const response = await this.fetchImpl(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: now(), method, params }) });
         if (response.status === 429) throw Object.assign(new Error('Solana RPC HTTP 429'), { status: 429 });
@@ -58,10 +60,9 @@ export class RpcCreditGuard {
     if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
     const projected=this.usage.estimatedCredits+Number(credits||0);
     if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit)throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});
-    const minGap=requests.length*1000/this.maxRps,wait=Math.max(0,minGap-(now()-this.lastCall));if(wait)await sleep(wait);
     let attempt=0;
     while(true){
-      this.lastCall=now();
+      await this.rateLimit(requests.length);
       try{
         const response=await this.fetchImpl(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
         if(response.status===429)throw Object.assign(new Error('Solana RPC HTTP 429'),{status:429});
