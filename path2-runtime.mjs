@@ -12,10 +12,10 @@ export class RpcCreditGuard {
     this.maxRps = Math.min(6, Math.max(1, Number(maxRps) || 6));
     this.cacheMs = cacheMs; this.stateFile = stateFile; this.monthlyLimit = monthlyLimit;
     this.creditCost = creditCost; this.fetchImpl = fetchImpl; this.lastCall = 0;
-    this.cache = new Map(); this.usage = { month: new Date().toISOString().slice(0, 7), calls: 0, estimatedCredits: 0, lastAt: null };
+    this.cache = new Map(); this.usage = { month: new Date().toISOString().slice(0, 7), calls: 0, estimatedCredits: 0, daily: {}, lastAt: null };
   }
   async load() {
-    try { const x = JSON.parse(await fs.readFile(this.stateFile, 'utf8')); if (x.month === this.usage.month) this.usage = x; } catch {}
+    try { const x = JSON.parse(await fs.readFile(this.stateFile, 'utf8')); if (x.month === this.usage.month) this.usage = { ...this.usage, ...x, daily: x.daily || {} }; } catch {}
     try { const rows=JSON.parse(await fs.readFile(this.stateFile+'.cache','utf8')); for(const [key,row] of Object.entries(rows)) if(row&&now()-row.at<this.cacheMs)this.cache.set(key,row); } catch {}
   }
   async save() { await fs.writeFile(this.stateFile, JSON.stringify(this.usage), 'utf8'); }
@@ -43,7 +43,7 @@ export class RpcCreditGuard {
         if (response.status === 429) throw Object.assign(new Error('Solana RPC HTTP 429'), { status: 429 });
         if (!response.ok) throw new Error('Solana RPC HTTP ' + response.status);
         const body = await response.json(); if (body.error) throw new Error('Solana RPC ' + body.error.code + ': ' + body.error.message);
-        this.usage.calls++; this.usage.estimatedCredits += Number(credits || 0); this.usage.lastAt = new Date().toISOString();
+        this.usage.calls++; this.usage.estimatedCredits += Number(credits || 0); this.usage.daily[new Date().toISOString().slice(0,10)]=(this.usage.daily[new Date().toISOString().slice(0,10)]||0)+Number(credits||0); this.usage.lastAt = new Date().toISOString();
         await this.save(); return body.result;
       } catch (error) {
         if (error.status !== 429 || attempt >= 5) throw error;
@@ -52,10 +52,13 @@ export class RpcCreditGuard {
     }
   }
   async batch(endpoint, requests, { credits = requests.length } = {}) {
+    const all=[]; for(let i=0;i<requests.length;i+=this.maxRps){const chunk=requests.slice(i,i+this.maxRps);all.push(...await this.batchChunk(endpoint,chunk,{credits:chunk.length}));} return all.sort((a,b)=>Number(a?.slot||0)-Number(b?.slot||0));
+  }
+  async batchChunk(endpoint, requests, { credits = requests.length } = {}) {
     if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
     const projected=this.usage.estimatedCredits+Number(credits||0);
     if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit)throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});
-    const minGap=1000/this.maxRps,wait=Math.max(0,minGap-(now()-this.lastCall));if(wait)await sleep(wait);
+    const minGap=requests.length*1000/this.maxRps,wait=Math.max(0,minGap-(now()-this.lastCall));if(wait)await sleep(wait);
     let attempt=0;
     while(true){
       this.lastCall=now();
@@ -65,12 +68,12 @@ export class RpcCreditGuard {
         if(!response.ok)throw new Error('Solana RPC HTTP '+response.status);
         const data=await response.json();if(!Array.isArray(data))throw new Error('Solana RPC batch response was not an array');
         const errors=data.filter(x=>x.error);if(errors.length)throw new Error('Solana RPC batch error: '+errors[0].error.message);
-        this.usage.calls++;this.usage.estimatedCredits+=Number(credits||0);this.usage.lastAt=new Date().toISOString();await this.save();
+        this.usage.calls++;this.usage.estimatedCredits+=Number(credits||0);this.usage.daily[new Date().toISOString().slice(0,10)]=(this.usage.daily[new Date().toISOString().slice(0,10)]||0)+Number(credits||0);this.usage.lastAt=new Date().toISOString();await this.save();
         return data.sort((a,b)=>Number(a.id)-Number(b.id)).map(x=>x.result);
       }catch(error){if(error.status!==429||attempt>=5)throw error;await sleep(Math.min(30000,500*2**attempt)+Math.floor(Math.random()*250));attempt++;}
     }
   }
-  telemetry() { return { ...this.usage, projectedMonthlyCredits: Math.round(this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate())), throttled: this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate()) > this.monthlyLimit }; }
+  telemetry() { const today=new Date().toISOString().slice(0,10);return { ...this.usage, dailyEstimatedCredits:Number(this.usage.daily?.[today]||0), projectedMonthlyCredits: Math.round(this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate())), throttled: this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate()) > this.monthlyLimit }; }
 }
 
 export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
