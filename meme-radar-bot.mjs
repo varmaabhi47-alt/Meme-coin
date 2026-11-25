@@ -420,6 +420,8 @@ async function monitorPositions({ discover = false } = {}) {
       byChain.get(c).add(it.tokenAddress);
     }
 
+    const queuedMints = [...eventMintQueue];
+    if (queuedMints.length) { if (!byChain.has('solana')) byChain.set('solana', new Set()); for (const mint of queuedMints) byChain.get('solana').add(mint); }
     const best = new Map();
     for (const [chain, set] of byChain.entries()) {
       const addrs = Array.from(set);
@@ -435,8 +437,6 @@ async function monitorPositions({ discover = false } = {}) {
       }
     }
 
-    const queuedMints = [...eventMintQueue];
-    if (queuedMints.length) { if (!byChain.has('solana')) byChain.set('solana', new Set()); for (const mint of queuedMints) byChain.get('solana').add(mint); }
     const held = new Set(portfolio.openPositions.map(x => x.pairId));
     let secChecks = 0;
     for (const [key, p] of best.entries()) {
