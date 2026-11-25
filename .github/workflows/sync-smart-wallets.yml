@@ -1,0 +1,28 @@
+name: Sync curated smart wallets to Helius
+on:
+  push:
+    branches: [main]
+    paths:
+      - smart_wallets.json
+      - sync-helius-webhook.mjs
+  workflow_dispatch:
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reconcile Helius webhook and Worker D1 metadata
+        if: ${{ env.HELIUS_API_KEY != '' && env.HELIUS_WEBHOOK_URL != '' && env.HELIUS_WEBHOOK_AUTH != '' && env.BOT_SYNC_SECRET != '' }}
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          HELIUS_WEBHOOK_ID: ${{ secrets.HELIUS_WEBHOOK_ID }}
+          HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: node sync-helius-webhook.mjs
+      - name: Explain skipped sync until secrets are configured
+        if: ${{ env.HELIUS_API_KEY == '' || env.HELIUS_WEBHOOK_URL == '' || env.HELIUS_WEBHOOK_AUTH == '' || env.BOT_SYNC_SECRET == '' }}
+        run: echo "Wallet sync skipped safely. Configure Helius and Worker secrets to activate webhook reconciliation."

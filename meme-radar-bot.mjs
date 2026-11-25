@@ -245,6 +245,8 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);
     const accountsWithOwners = accounts.map((account, index) => ({ ...account, owner: holderOwners[index] || null }));
     const info = mintInfo?.value?.data?.parsed?.info || {};
+    const tokenProgramId=String(mintInfo?.value?.owner||'');
+    const tokenExtensions=Array.isArray(info.extensions)?info.extensions.map(x=>String(x.extension||x.type||'')):null;
     const mintAuthority = info.mintAuthority || null;
     const freezeAuthority = info.freezeAuthority || null;
     let authoritySignatureCount = null;
@@ -269,6 +271,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     const creatorSignals = analyzeCreatorSignals({
       mintAuthority, freezeAuthority, authoritySignatureCount, holderOwners, priorAuthorityRows: priorRows
     });
+    creatorSignals.tokenProgramId=tokenProgramId;creatorSignals.tokenExtensions=tokenExtensions;
     const currentObservation = { token: tokenAddress, creatorSignals };
     const relatedClusters = summarizeCrossTokenClusters([...priorRows, currentObservation])
       .filter(cluster => cluster.tokens.includes(tokenAddress));
@@ -306,13 +309,13 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
     }
     const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
     const acquired=[...buyerAmounts.values()].reduce((sum,x)=>sum+x,0n),pct=Number(acquired*10000n/total)/100;
-    const reject=buyerAmounts.size>=4&&pct>20;
-    return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >20% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
+    const reject=buyerAmounts.size>=4&&pct>15;
+    return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >15% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
   }catch(error){return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: '+error.message};}
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
-  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=!!signal&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
+  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=signal?.source==='worker-gated'&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -320,7 +323,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
     security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked', buyTaxRate: security?.buyTaxRate ?? null, sellTaxRate: security?.sellTaxRate ?? null },
     networkFeeUsd: estimatedNetworkFeeUsd(pair.chainId), entryQuoteFallback: String(pair.chainId||'').toLowerCase()==='solana', quoteFallback: String(pair.chainId||'').toLowerCase()==='solana',
-    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED', smartMoneyConfluence: recentSignal,
+    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED', smartMoneyConfluence: recentSignal, smartWallets: recentSignal?(portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')]?.walletAddresses||[]):[],
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
@@ -332,9 +335,9 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     if (!portfolio.researchTracked[token]) portfolio.researchTracked[token] = {
       token, pairAddress: pair.pairAddress, chainId: pair.chainId, symbol: row.symbol,
       entryAt: Date.now(), entryPrice: row.priceUsd, score: row.score, tier: row.tier,
-      security: row.security, smartMoneyConfluence: row.smartMoneyConfluence, intervalsLogged: []
+      security: row.security, smartMoneyConfluence: row.smartMoneyConfluence, smartWallets: row.smartWallets||[], intervalsLogged: []
     };
-    else { portfolio.researchTracked[token].smartMoneyConfluence=!!row.smartMoneyConfluence; portfolio.researchTracked[token].score=row.score; portfolio.researchTracked[token].tier=row.tier; }
+    else { portfolio.researchTracked[token].smartMoneyConfluence=!!row.smartMoneyConfluence; portfolio.researchTracked[token].smartWallets=row.smartWallets||[]; portfolio.researchTracked[token].score=row.score; portfolio.researchTracked[token].tier=row.tier; }
   }
 }
 
@@ -378,16 +381,22 @@ async function auditSecurity(pair) {
 
 async function syncPortfolioToCloudflare(){const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret){console.error('D1 sync skipped: missing secret');return false;}try{const headers={'Authorization':`Bearer ${secret}`,'Content-Type':'application/json'};const read=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{headers,cache:'no-store'});if(!read.ok)throw Error('D1 read HTTP '+read.status);const current=await read.json();d1Version=Number(current.version??d1Version);const response=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{method:'POST',headers,body:JSON.stringify({portfolio,version:d1Version,updated_at:current.updated_at??null})});const result=await response.json().catch(()=>({}));if(!response.ok||result.success===false){if(response.status===409)d1Version=Number(result.version||d1Version);throw Error(result.error||'D1 write HTTP '+response.status);}d1Version=Number(result.version??d1Version+1);console.log('D1 sync OK version '+d1Version);return true;}catch(e){console.error('D1 sync failed: '+e.message);process.exitCode=1;return false;}}
 
+async function publishV6Gate(mint,passed,reasons=[]){
+  const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret){console.warn('V6 gate evidence not published: MEMERADAR_SYNC_SECRET missing');return false;}
+  const base=(process.env.MEMERADAR_WORKER_URL||'https://memeradar-state-api.varmaabhi47.workers.dev').replace(/\/$/,'');
+  try{const res=await fetch(base+'/v6-gates',{method:'POST',headers:{'content-type':'application/json',Authorization:'Bearer '+secret},body:JSON.stringify({mint,passed:!!passed,reasons})});const body=await res.json().catch(()=>({}));if(!res.ok||body.ok!==true){console.error('V6 gate evidence rejected HTTP '+res.status+': '+JSON.stringify(body).slice(0,300));return false;}return true;}catch(error){console.error('V6 gate evidence publish failed: '+error.message);return false;}
+}
 async function fetchSmartMoneySignal(mint) {
   portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
   for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>15*60*1000)delete portfolio.smartMoneySignals[oldMint];}
   const existing=portfolio.smartMoneySignals[mint],existingAt=Number(existing?.at||existing?.latest||0);
-  if(existing&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
+  if(existing?.source==='worker-gated'&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
+  if(existing)delete portfolio.smartMoneySignals[mint];
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
   try{
     const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
     const result=await fetchJsonStrict(url,7000,{Authorization:'Bearer '+secret});
-    if(result.signal==='SMART_MONEY_CONFLUENCE'){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:result.signal,wallets:Number(result.wallets||2),latest:result.latest};return true;}
+    if(result.signal==='SMART_MONEY_CONFLUENCE'){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:result.signal,wallets:Number(result.wallets||2),walletAddresses:Array.isArray(result.walletAddresses)?result.walletAddresses:[],latest:result.latest,source:'worker-gated',at:Number(result.latest||Date.now())};return true;}
     return false;
   }catch(error){console.warn('Smart-money D1 query unavailable; no confluence applied: '+error.message);return false;}
 }
@@ -409,7 +418,7 @@ async function monitorResearchSnapshots(){
    const data=await fetchJsonStrict(`https://api.dexscreener.com/latest/dex/pairs/${item.chainId}/${item.pairAddress}`,10000);
    const pair=(data?.pairs||[]).find(x=>String(x.pairAddress||'').toLowerCase()===String(item.pairAddress).toLowerCase());
    if(!pair||!(Number(pair.priceUsd)>0&&Number(pair.liquidity?.usd)>0))throw Error('live pair mark/liquidity unavailable');
-   const row={schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,smartMoneyConfluence:item.smartMoneyConfluence===true,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:elapsed,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
+   const row={schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,smartMoneyConfluence:item.smartMoneyConfluence===true,wallets:item.smartWallets||[],returnPct:Number(item.entryPrice)>0?(Number(pair.priceUsd)/Number(item.entryPrice)-1)*100:null,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:elapsed,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
    await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
   }catch(error){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot target ${target}m not recorded; no mark fabricated: ${error.message}`);}
  }
@@ -537,20 +546,26 @@ async function monitorPositions({ discover = false } = {}) {
       const intelligence = scoreCandidate(p, sec);
       const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
-      if(pairObj.chainId==='solana'){const gates=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData});if(!gates.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...gates.reasons);}}
-      if(pairObj.chainId==='solana'&&sec.pass&&intelligence.tier==='RESEARCH')await fetchSmartMoneySignal(String(p.baseToken.address));
-      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address)];
+      let hardGate={pass:true,reasons:[]},bundleGate={pass:true,reason:'not-applicable'};
+      if(pairObj.chainId==='solana'){
+        hardGate=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData,tokenProgramId:creatorData?.tokenProgramId,tokenExtensions:creatorData?.tokenExtensions});
+        if(!hardGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...hardGate.reasons);}
+        if(sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass){
+          bundleGate=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
+          if(!bundleGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundleGate.reason);}
+        }
+        const mintForGate=String(p.baseToken.address||''),gatePass=sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass&&bundleGate.pass;
+        const gateReasons=[...(sec.pass?[]:[sec.reason]),...hardGate.reasons,...(bundleGate.pass?[]:[bundleGate.reason])];
+        const gatePublished=await publishV6Gate(mintForGate,gatePass,gateReasons);
+        if(gatePass&&gatePublished)await fetchSmartMoneySignal(mintForGate);else if(portfolio.smartMoneySignals)delete portfolio.smartMoneySignals[mintForGate];
+      }
+      intelligence.smartMoneyConfluence=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')]?.source==='worker-gated';
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
       }
-      if(pairObj.chainId==='solana'){
-        const bundle=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
-        if(!bundle.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundle.reason);logDecision('REJECT',p.baseToken.symbol,'solana',bundle.reason);await recordResearch(p,sec,intelligence,'REJECT',holders);continue;}
-      }
-
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
@@ -622,7 +637,8 @@ async function persistentRunner(){
   if(process.env.SOLANA_RPC_WSS){
     try{
       const walletConfig=JSON.parse(await fs.readFile(process.env.SMART_WALLETS_FILE||'smart_wallets.json','utf8'));
-      const wallets=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>typeof x==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.trim())).slice(0,30):[];
+      const walletRecords=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>x&&x.status==='ACTIVE'&&typeof x.address==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.address.trim())).slice(0,50):[];
+      const wallets=walletRecords.map(x=>x.address);
       if(wallets.length<15)console.warn('Smart-money wallet tracker has '+wallets.length+' valid addresses; configure 15-30 verified wallets to enable meaningful confluence.');
       eventListener=new SolanaEventListener({
         wallets,
@@ -637,8 +653,7 @@ async function persistentRunner(){
             if(!(tx?.meta?.logMessages||[]).some(line=>/swap/i.test(line)))return;
             for(const mint of extractWalletTokenBuys(tx,event.wallet)){
               if([USDC_MINT,'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB','So11111111111111111111111111111111111111112'].includes(mint))continue;
-              const signal=smartMoneyConfluence(event.wallet,mint);
-              if(signal){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]=signal;portfolio.eventDiscoveryRequested=true;logDecision(signal.signal,mint,'solana',signal.wallets+' tracked wallets bought within 15m');await runnerLock(async()=>{await saveState();await syncPortfolioToCloudflare();});}
+              portfolio.eventDiscoveryRequested=true;logDecision('SMART_WALLET_BUY_OBSERVED',mint,'solana','wallet swap observed; waiting for Worker-qualified independent confluence and V6 hard gates');
             }
           }catch(error){console.error('Smart-wallet transaction lookup failed; no signal inferred: '+error.message);}
         }

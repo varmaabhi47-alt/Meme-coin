@@ -351,8 +351,14 @@ export function summarizePaperLearning(closedTrades = [], minSamples = 20) {
  * Fail-closed Solana authority/holder hard blockers.
  * Caller supplies only observed RPC-derived fields; unknown values are rejected.
  */
-export function evaluateSolanaHardSecurityGates({ mintAuthority = null, freezeAuthority = null, holderDistribution = null, creatorSignals = null } = {}) {
+export function evaluateSolanaHardSecurityGates({ mintAuthority = null, freezeAuthority = null, holderDistribution = null, creatorSignals = null, tokenProgramId = null, tokenExtensions = null } = {}) {
   const reasons = [];
+  const SPL_TOKEN_PROGRAM='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',TOKEN_2022_PROGRAM='TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+  if(!tokenProgramId||![SPL_TOKEN_PROGRAM,TOKEN_2022_PROGRAM].includes(tokenProgramId))reasons.push('token program unknown or unsupported');
+  if(tokenProgramId===TOKEN_2022_PROGRAM){
+    if(!Array.isArray(tokenExtensions))reasons.push('Token-2022 extensions unknown');
+    else if(tokenExtensions.some(x=>/transfer.?hook|permanent.?delegate|confidential/i.test(String(x))))reasons.push('unsupported Token-2022 hook/privileged extension');
+  }
   if (mintAuthority) reasons.push('active mint authority');
   if (freezeAuthority) reasons.push('active freeze authority');
   if (!holderDistribution?.known) reasons.push('holder concentration unknown');

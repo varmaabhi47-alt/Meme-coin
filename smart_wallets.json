@@ -1,5 +1,19 @@
 {
-  "version": 1,
+  "version": 2,
+  "updated_at": null,
+  "policy": {
+    "active_cap": 50,
+    "target_active_min": 30,
+    "target_active_max": 50,
+    "lookback_days": 30,
+    "active_status": "ACTIVE",
+    "statuses": [
+      "ACTIVE",
+      "WATCH",
+      "MUTED"
+    ],
+    "metrics_are_rpc_derived": true
+  },
   "wallets": [],
-  "note": "Populate with 15-30 verified public Solana wallet addresses. No wallet list is fabricated or assumed."
+  "note": "No wallet addresses are seeded. Populate only after live RPC vetting; unknown metrics must remain null and cannot pass hard gates."
 }
