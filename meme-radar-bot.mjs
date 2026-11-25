@@ -249,7 +249,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     let authoritySignatureCount = null;
     if (mintAuthority) {
       try {
-        const signatures = await rpc('getSignaturesForAddress', [mintAuthority, { limit: 1000, commitment: 'confirmed' }], 5);
+        const signatures = await rpc('getSignaturesForAddress', [mintAuthority, { limit: 25, commitment: 'confirmed' }], 5);
         authoritySignatureCount = Array.isArray(signatures) ? signatures.length : null;
       } catch {}
     }
@@ -318,7 +318,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
     security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked', buyTaxRate: security?.buyTaxRate ?? null, sellTaxRate: security?.sellTaxRate ?? null },
     networkFeeUsd: estimatedNetworkFeeUsd(pair.chainId), entryQuoteFallback: String(pair.chainId||'').toLowerCase()==='solana', quoteFallback: String(pair.chainId||'').toLowerCase()==='solana',
-    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
+    score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED', smartMoneyConfluence: !!portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),
     warnings: detectBasicMarketWarnings(pair), holderDistribution: holders?.holderDistribution || holders, creatorSignals: holders?.creatorSignals || null, decision
@@ -330,7 +330,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     if (!portfolio.researchTracked[token]) portfolio.researchTracked[token] = {
       token, pairAddress: pair.pairAddress, chainId: pair.chainId, symbol: row.symbol,
       entryAt: Date.now(), entryPrice: row.priceUsd, score: row.score, tier: row.tier,
-      security: row.security, intervalsLogged: []
+      security: row.security, smartMoneyConfluence: row.smartMoneyConfluence, intervalsLogged: []
     };
   }
 }
@@ -402,7 +402,7 @@ async function monitorResearchSnapshots(){
    const data=await fetchJsonStrict(`https://api.dexscreener.com/latest/dex/pairs/${item.chainId}/${item.pairAddress}`,10000);
    const pair=(data?.pairs||[]).find(x=>String(x.pairAddress||'').toLowerCase()===String(item.pairAddress).toLowerCase());
    if(!pair||!(Number(pair.priceUsd)>0&&Number(pair.liquidity?.usd)>0))throw Error('live pair mark/liquidity unavailable');
-   const row={schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:elapsed,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
+   const row={schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,smartMoneyConfluence:item.smartMoneyConfluence===true,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:elapsed,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
    await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
   }catch(error){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot target ${target}m not recorded; no mark fabricated: ${error.message}`);}
  }
@@ -531,6 +531,8 @@ async function monitorPositions({ discover = false } = {}) {
       const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
       if(pairObj.chainId==='solana'){const gates=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData});if(!gates.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...gates.reasons);}}
+      if(pairObj.chainId==='solana'&&sec.pass&&intelligence.tier==='RESEARCH')await fetchSmartMoneySignal(String(p.baseToken.address));
+      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address)];
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
@@ -547,7 +549,7 @@ async function monitorPositions({ discover = false } = {}) {
         continue;
       }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
-      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const mintAddress=String(p.baseToken.address);const webhookConfluence=pairObj.chainId==='solana'?await fetchSmartMoneySignal(mintAddress):false;const smartMoneySignal=!!portfolio.smartMoneySignals?.[mintAddress]||webhookConfluence;const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await paperExecution.buy({usd:sizeUsd,pair:p,security:sec,decimals:holderData?.decimals});const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
+      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const mintAddress=String(p.baseToken.address);const smartMoneySignal=!!portfolio.smartMoneySignals?.[mintAddress];const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await paperExecution.buy({usd:sizeUsd,pair:p,security:sec,decimals:holderData?.decimals});const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
