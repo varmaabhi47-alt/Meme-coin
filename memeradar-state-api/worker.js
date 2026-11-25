@@ -9,7 +9,8 @@ const cors = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Cache-Control": "no-store"
 };
-const json=(body,status=200)=>Response.json(body,{status,headers:cors});
+const responseHeaders=request=>{const origin=request.headers.get("Origin")||"";const allowed=origin==="https://memeradar-v4.pages.dev"||origin.endsWith(".memeradar-v4.pages.dev");return {...cors,"Access-Control-Allow-Origin":allowed?origin:"https://memeradar-v4.pages.dev","Vary":"Origin"};};
+const json=(body,status=200,request=null)=>Response.json(body,{status,headers:request?responseHeaders(request):cors});
 function authorized(request,env){const expected=String(env.BOT_SYNC_SECRET||"");return expected.length>0&&(request.headers.get("Authorization")||"")===`Bearer ${expected}`;}
 export default {
   async fetch(request,env){
@@ -18,8 +19,8 @@ export default {
     if(url.pathname==="/health"&&request.method==="GET")return json({service:"MEME.RADAR state API",status:"ok",storage:"Cloudflare D1",trading:"paper-only"});
     if(url.pathname==="/public-state"&&request.method==="GET"){
       const row=await env.DB.prepare("SELECT payload,version,updated_at FROM portfolio_state WHERE id=?").bind("main").first();
-      if(!row)return json({ok:true,portfolio:null,version:0,updated_at:null});
-      let raw;try{raw=JSON.parse(row.payload);}catch{return json({error:"corrupt_state_json"},500);}
+      if(!row)return json({ok:true,portfolio:null,version:0,updated_at:null},200,request);
+      let raw;try{raw=JSON.parse(row.payload);}catch{return json({error:"corrupt_state_json"},500,request);}
       const cleanText=v=>String(v??"").split("").filter(ch=>{const n=ch.charCodeAt(0);return n>=32&&n!==127;}).join("").replace(/<[^>]*>/g,"").slice(0,160);
       const portfolio={
         cashUsd:Number(raw.cashUsd||0),startingBankroll:Number(raw.startingBankroll||0),
@@ -41,7 +42,7 @@ export default {
         })),
         cooldowns:raw.cooldowns||{},decisionLog:(Array.isArray(raw.decisionLog)?raw.decisionLog:[]).slice(0,150).map(d=>({ts:Number(d.ts||0),timeStr:cleanText(d.timeStr),action:cleanText(d.action),symbol:cleanText(d.symbol),chainId:cleanText(d.chainId),reason:cleanText(d.reason)}))
       };
-      return json({ok:true,portfolio,version:Number(row.version||0),updated_at:row.updated_at});
+      return json({ok:true,portfolio,version:Number(row.version||0),updated_at:row.updated_at},200,request);
     }
     if(url.pathname!=="/state")return json({error:"not_found"},404);
     if(!authorized(request,env))return json({error:"unauthorized"},401);
