@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter, calculateJupiterQuoteExit, analyzeNarrativeFootprint, summarizePaperLearning, evaluateSolanaHardSecurityGates } from './meme-radar-v5-intelligence.mjs';
 import { evaluatePositionRisk, calculatePositionSize, checkCircuitBreakers, parseTelegramCommand, makeStateLock } from './meme-radar-v5-risk-engine.mjs';
 import { RpcCreditGuard, SolanaEventListener, extractMintsFromTransaction, extractWalletTokenBuys, createSmartMoneyConfluence, computeEdgeProof } from './path2-runtime.mjs';
+import { PaperExecutionAdapter, SolanaLiveExecutionAdapter } from './execution-adapter.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -207,6 +208,9 @@ async function calcPaperExit(pos, price, liq) {
     return fallback();
   }
 }
+
+const paperExecution = new PaperExecutionAdapter({ quoteEntry: calcPaperEntry, quoteExit: calcPaperExit });
+const liveExecutionAdapter = new SolanaLiveExecutionAdapter();
 
 function calcSell(tokens, price, liq) {
   const result = calculatePaperSell(tokens, price, liq, CONFIG.DEX_FEE_RATE);
@@ -441,14 +445,14 @@ async function monitorPositions({ discover = false } = {}) {
     const risk=pos.manualCloseRequested?{action:'EXIT_ALL',reason:'MANUAL_TELEGRAM_CLOSE',peakPrice:pos.peakPrice}:evaluatePositionRisk(pos,{markPrice:pos.lastPrice,liquidityUsd:currentLiquidityUsd,now:Date.now(),frictionRate:CONFIG.DEX_FEE_RATE,netPnlPctOverride:Number(pos.remainingCostUsd??pos.costUsd)>0?((ex.netProceeds-Number(pos.remainingCostUsd??pos.costUsd))/Number(pos.remainingCostUsd??pos.costUsd))*100:0});
     if(risk.peakPrice)pos.peakPrice=risk.peakPrice;pos.lastLiquidityUsd=currentLiquidityUsd;
     if(risk.action==='PARTIAL_EXIT'){
-      const qty=Number(pos.remainingTokens??pos.tokens),sellQty=qty*.5,ex=await calcPaperExit({...pos,tokens:sellQty,remainingTokens:sellQty},pos.lastPrice,currentLiquidityUsd);
+      const qty=Number(pos.remainingTokens??pos.tokens),sellQty=qty*.5,ex=await paperExecution.sell({position:{...pos,tokens:sellQty,remainingTokens:sellQty},price:pos.lastPrice,liquidity:currentLiquidityUsd});
       const remCost=Number(pos.remainingCostUsd??pos.costUsd),soldCost=remCost*.5,realized=ex.netProceeds-soldCost;
       portfolio.cashUsd+=ex.netProceeds;pos.remainingTokens=qty-sellQty;pos.remainingCostUsd=remCost-soldCost;pos.realizedPartialPnlUsd=Number(pos.realizedPartialPnlUsd||0)+realized;pos.partialExitProceedsUsd=Number(pos.partialExitProceedsUsd||0)+ex.netProceeds;pos.partialFeesImpactUsd=Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd;pos.partialTpDone=true;pos.breakevenStopNetPct=2;
       pos.partialExits=[...(pos.partialExits||[]),{at:Date.now(),tokensSold:sellQty,proceedsUsd:ex.netProceeds,allocatedCostUsd:soldCost,realizedPnlUsd:realized,quoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,reason:'PARTIAL_TP_40'}];
       await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,entryQuoteFallback:!!pos.entryQuoteFallback,exitReason:'PARTIAL_TP_40'});
       logDecision('PARTIAL_SELL',pos.symbol,pos.chainId,'50% sold at +40% net; runner stop +2% net');await sendTelegram(`PARTIAL TP ${pos.symbol}: sold half; realized $${realized.toFixed(2)}; remaining ${pos.remainingTokens.toFixed(4)}`);
     }else if(risk.action==='EXIT_ALL'){
-      const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await calcPaperExit({...pos,tokens:qty,remainingTokens:qty},pos.lastPrice,currentLiquidityUsd),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
+      const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await paperExecution.sell({position:{...pos,tokens:qty,remainingTokens:qty},price:pos.lastPrice,liquidity:currentLiquidityUsd}),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
       portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
       portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else{consecutiveRiskExits=0;if(portfolio.breaker)portfolio.breaker.triggeredLossCount=0;}portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(`AUTO-SELL [${risk.reason}] ${pos.symbol}: net $${pnl.toFixed(2)} incl partials; fallback ${!!ex.quoteFallback}`);
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
@@ -535,7 +539,7 @@ async function monitorPositions({ discover = false } = {}) {
         continue;
       }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
-      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const mintAddress=String(p.baseToken.address);const webhookConfluence=pairObj.chainId==='solana'?await fetchSmartMoneySignal(mintAddress):false;const smartMoneySignal=!!portfolio.smartMoneySignals?.[mintAddress]||webhookConfluence;const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
+      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const mintAddress=String(p.baseToken.address);const webhookConfluence=pairObj.chainId==='solana'?await fetchSmartMoneySignal(mintAddress):false;const smartMoneySignal=!!portfolio.smartMoneySignals?.[mintAddress]||webhookConfluence;const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await paperExecution.buy({usd:sizeUsd,pair:p,security:sec,decimals:holderData?.decimals});const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
@@ -649,6 +653,7 @@ async function persistentRunner(){
   await Promise.all([fastPositionLoop(),discoveryControlLoop()]);
 }
 async function main(){
+ if(process.env.LIVE_TRADING==='true')throw new Error('LIVE_TRADING=true is blocked: live swap builder/Sender integration has not passed verification. Paper adapter remains the only active execution path.');
  if(process.argv.includes('--dry-run')){
   try{await fs.access(CONFIG.PORTFOLIO_FILE);console.log('Existing bot portfolio file detected; dry run will not read or write its contents.');}catch(e){if(e.code!=='ENOENT')throw e;console.log('No local bot portfolio file; dry run will not initialize one.');}
   const feed=await fetchJsonStrict(CONFIG.FEED_URL);
