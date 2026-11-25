@@ -7,10 +7,10 @@ const pct=(price,entry,size,options,friction={})=>{
  const gross=price/entry;
  const sellFee=Math.max(0,finite(options.sellFeeRate??0.003));
  const sellTax=Math.max(0,finite(friction.sellTaxRate??friction.security?.sellTaxRate??options.sellTaxRate??0));
- const slip=(friction.quoteFallback||friction.entryQuoteFallback)?Math.max(0,finite(options.fallbackSlippagePct??5))/100:0;
+ const slip=(friction.quoteFallback||friction.entryQuoteFallback)?Math.max(0,finite(options.fallbackSlippagePct??8))/100:0;
  const liq=Math.max(0,finite(friction.liquidityUsd));
  const exitImpact=liq>0?Math.min(0.75,size/(2*liq)):0.75;
- const fixed=Math.max(0,finite(friction.networkFeeUsd??options.fixedFeeUsd??0.35));
+ const fixed=Math.max(0,finite(friction.networkFeeUsd??options.fixedFeeUsd??0.55));
  const fixedPct=size>0?fixed/size:0;
  return (gross*(1-exitImpact)*(1-sellFee)*(1-sellTax)*(1-slip)-1-fixedPct)*100;
 };
@@ -19,10 +19,10 @@ export function backtestSnapshots(rows,options={}){
  const cooldownMs=Math.max(0,finite(options.tokenCooldownMinutes??60))*60000;
  const maxHoldMs=Math.max(1,finite(options.maxHoldHours??24))*3600000;
  const sl= Math.abs(finite(options.stopLossPct??18)),tp=finite(options.partialTakeProfitPct??40);
- const trail=finite(options.runnerTrailDropPct??15),wide=finite(options.runnerWideTrailDropPct??20);
- const maxEntryLiqDrop=finite(options.liquidityDropFromEntryPct??35),maxCheckDrop=finite(options.liquidityDropPerCheckPct??20);
+ const trail=finite(options.runnerTrailDropPct??15),wide=finite(options.runnerWideTrailDropPct??22);
+ const maxEntryLiqDrop=finite(options.liquidityDropFromEntryPct??30),maxCheckDrop=finite(options.liquidityDropPerCheckPct??15);
  const startEquity=Math.max(1,finite(options.startingEquityUsd??1000));
- const baseFraction=Math.max(0,finite(options.baseRiskFraction??0.06)),poolCap=Math.max(0,finite(options.poolLiquidityCapFraction??0.0035));
+ const baseFraction=Math.max(0,finite(options.baseRiskFraction??0.05)),poolCap=Math.max(0,finite(options.poolLiquidityCapFraction??0.003));
  const clean=(Array.isArray(rows)?rows:[]).map(r=>({...r,ts:Date.parse(r.recordedAt),price:finite(r.priceUsd),liq:finite(r.liquidityUsd),score:finite(r.score),token:String(r.token||r.pairAddress||'')}))
   .filter(r=>Number.isFinite(r.ts)&&r.price>0&&r.liq>0&&r.token).sort((a,b)=>a.ts-b.ts);
  const positions=new Map(),lastEntry=new Map(),trades=[];let cash=startEquity,missingExitSnapshots=0,entryCount=0,equityPeak=startEquity,maxDrawdownPct=0;const trackEquity=()=>{const e=equityAt();equityPeak=Math.max(equityPeak,e);maxDrawdownPct=Math.max(maxDrawdownPct,(equityPeak-e)/equityPeak*100);};
@@ -55,7 +55,7 @@ export function backtestSnapshots(rows,options={}){
   if(row.decision!=='RESEARCH')continue;
   if(row.ts-(lastEntry.get(row.token)??-Infinity)<cooldownMs)continue;
   if(positions.size>=maxOpen)continue;
-  const equity=equityAt(),tierMult=row.score>=90?1:row.score>=80?0.8:0;
+  const equity=equityAt(),tierMult=row.smartMoneyConfluence===true?1:0.75;
   const size=Math.min(equity*baseFraction*tierMult,row.liq*poolCap,cash);
   if(!(size>0))continue;
   const entryImpact=Math.min(0.75,size/(2*row.liq)),entryFee=Math.max(0,finite(options.entryFeeRate??0.003)),buyTax=Math.max(0,finite(row.buyTaxRate??row.security?.buyTaxRate??options.buyTaxRate??0)),entrySlip=row.entryQuoteFallback?Math.max(0,finite(options.fallbackSlippagePct??5))/100:0,entryGas=Math.max(0,finite(row.networkFeeUsd??options.fixedFeeUsd??0.35));
@@ -66,6 +66,7 @@ export function backtestSnapshots(rows,options={}){
  const equityCurve=[startEquity];let equity=equityAt();equityCurve.push(equity);
  const pnl=trades.map(t=>t.netPnlUsd),wins=pnl.filter(x=>x>0),losses=pnl.filter(x=>x<0),grossWin=wins.reduce((a,b)=>a+b,0),grossLoss=Math.abs(losses.reduce((a,b)=>a+b,0));
  const largest=pnl.length?Math.max(0,...pnl):0;
- return {mode:'observed-snapshot-staged-exit-replay',options:{minimumScore:minScore,maxOpenPositions:maxOpen,partialTakeProfitPct:tp,stopLossPct:sl,runnerTrailDropPct:trail,runnerWideTrailDropPct:wide,liquidityDropFromEntryPct:maxEntryLiqDrop,liquidityDropPerCheckPct:maxCheckDrop,baseRiskFraction:baseFraction,poolLiquidityCapFraction:poolCap},snapshotsUsed:clean.length,entryCount,trades:trades.length,openAtEnd:missingExitSnapshots,missingExitSnapshots,winRatePct:trades.length?wins.length/trades.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?'Infinity':null),netPnlUsd:pnl.reduce((a,b)=>a+b,0),pnlExcludingLargestTradeUsd:pnl.reduce((a,b)=>a+b,0)-largest,largestTradePnlUsd:trades.length?largest:null,maxDrawdownPct,endingEquityUsd:equity,pnlFromClosedTradesUsd:pnl.reduce((a,b)=>a+b,0),results:trades};
+ const largestIndex=pnl.length?pnl.indexOf(largest):-1,adjustedTrades=trades.filter((_,i)=>i!==largestIndex),adjustedWins=adjustedTrades.filter(t=>t.netPnlUsd>0).reduce((s,t)=>s+t.netPnlUsd,0),adjustedLosses=Math.abs(adjustedTrades.filter(t=>t.netPnlUsd<0).reduce((s,t)=>s+t.netPnlUsd,0)),outlierAdjustedProfitFactor=adjustedLosses?adjustedWins/adjustedLosses:(adjustedWins>0?'Infinity':null);
+ return {mode:'observed-snapshot-staged-exit-replay',options:{minimumScore:minScore,maxOpenPositions:maxOpen,partialTakeProfitPct:tp,stopLossPct:sl,runnerTrailDropPct:trail,runnerWideTrailDropPct:wide,liquidityDropFromEntryPct:maxEntryLiqDrop,liquidityDropPerCheckPct:maxCheckDrop,baseRiskFraction:baseFraction,poolLiquidityCapFraction:poolCap},snapshotsUsed:clean.length,entryCount,trades:trades.length,openAtEnd:missingExitSnapshots,missingExitSnapshots,winRatePct:trades.length?wins.length/trades.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?'Infinity':null),netPnlUsd:pnl.reduce((a,b)=>a+b,0),pnlExcludingLargestTradeUsd:pnl.reduce((a,b)=>a+b,0)-largest,outlierAdjustedProfitFactor,EDGE_VERIFIED:trades.length>=100&&adjustedWins>adjustedLosses&&adjustedWins>0,largestTradePnlUsd:trades.length?largest:null,maxDrawdownPct,endingEquityUsd:equity,pnlFromClosedTradesUsd:pnl.reduce((a,b)=>a+b,0),results:trades};
 }
 export async function readJsonlSnapshots(filePath,fsModule){if(!fsModule)fsModule=await import('node:fs/promises');const content=await fsModule.readFile(filePath,'utf8').catch(e=>{if(e.code==='ENOENT')return'';throw e;});return content.split(/\r?\n/).filter(Boolean).flatMap(line=>{try{return[JSON.parse(line)];}catch{return[];}});}
