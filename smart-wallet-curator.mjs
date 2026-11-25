@@ -13,14 +13,15 @@ import { reconstructSolSwap } from './swap-reconstruction.mjs';
 import { selectWinningResearchMints } from './research-mint-source.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
-const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
+const RPC=process.env.HELIUS_RPC_URL||process.env.SOLANA_RPC_URL||'https://mainnet.helius-rpc.com/';
 const KEY=process.env.HELIUS_API_KEY||'';
 const RPC_URL=(()=>{if(!KEY||!/helius/i.test(RPC))return RPC;const url=new URL(RPC);url.searchParams.set('api-key',KEY);return url.toString();})();
 const WALLETS=path.join(ROOT,'smart_wallets.json');
 const QUEUE=path.join(ROOT,'candidate_wallets.json');
 const USAGE=path.join(ROOT,'rpc-curator-usage.json');
 const DAY=86400, LOOKBACK=30*DAY;
-const MAX_RPS=Math.min(6,Math.max(1,Number(process.env.RPC_MAX_RPS||6)));
+const requestedRps=Number(process.env.RPC_MAX_RPS||6);
+const MAX_RPS=Number.isFinite(requestedRps)?Math.min(6,Math.max(1,Math.floor(requestedRps))):6;
 const MONTHLY_LIMIT=1_000_000;
 function canSpendRpcCredits(used,requested=1){return Number.isSafeInteger(used)&&Number.isSafeInteger(requested)&&used>=0&&requested>=0&&used+requested<=MONTHLY_LIMIT;}
 const DEX_PROGRAMS=new Set([
@@ -41,6 +42,7 @@ const writeJson=async(p,v)=>fs.writeFile(p,JSON.stringify(v,null,2)+'\n');
 function monthKey(){const d=new Date();return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');}
 let lastReq=0, rpcId=0;
 async function rpc(method,params){
+  if(!KEY||!/helius/i.test(RPC))throw new Error('Live curator RPC requires HELIUS_API_KEY and a Helius RPC URL; refusing an unmetered/unknown provider fallback.');
   const usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
   if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
   if(!canSpendRpcCredits(Number(usage.credits||0),1))throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
@@ -59,6 +61,7 @@ async function rpc(method,params){
 }
 const RPC_BATCH_SIZE=6;
 async function rpcBatch(method,paramsList){
+  if(!KEY||!/helius/i.test(RPC))throw new Error('Live curator RPC requires HELIUS_API_KEY and a Helius RPC URL; refusing an unmetered/unknown provider fallback.');
   const results=[];
   for(let offset=0;offset<paramsList.length;offset+=RPC_BATCH_SIZE){
     const params=paramsList.slice(offset,offset+RPC_BATCH_SIZE),usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
