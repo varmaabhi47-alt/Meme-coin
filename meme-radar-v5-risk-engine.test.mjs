@@ -17,8 +17,8 @@ test('emergency liquidity exits use entry and consecutive-check thresholds',()=>
  assert.equal(evaluatePositionRisk(p,{markPrice:1,liquidityUsd:0}).reason,'LIQ_DROP_ENTRY');
 });
 test('risk-adjusted size uses score tier and pool cap',()=>{
- assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:85,cashUsd:100}),48);
- assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:10000,score:95,cashUsd:100}),35);
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:85,cashUsd:100}),37.5);
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:10000,score:95,cashUsd:100}),30);
 });
 test('Telegram commands parse only supported command shapes',()=>{
  assert.deepEqual(parseTelegramCommand('/status'),{command:'status'});
@@ -40,13 +40,13 @@ test('net live exit quote overrides spot-only PnL for TP/SL decisions',()=>{
 
 test('daily drawdown and three consecutive risk exits pause new entries',()=>{
  const daily=checkCircuitBreakers({realizedUnrealizedPnlUsd:-121,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:0});
- assert.equal(daily.pauseBuys,true);assert.equal(daily.reason,'DAILY_DRAWDOWN_12');assert.ok(daily.pauseUntil>=1000+12*3600000);
- const belowLimit=checkCircuitBreakers({realizedUnrealizedPnlUsd:-100,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:0});assert.equal(belowLimit.pauseBuys,false);
+ assert.equal(daily.pauseBuys,true);assert.equal(daily.reason,'DAILY_DRAWDOWN_10');assert.ok(daily.pauseUntil>=1000+12*3600000);
+ const belowLimit=checkCircuitBreakers({realizedUnrealizedPnlUsd:-99,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:0});assert.equal(belowLimit.pauseBuys,false);
  const streak=checkCircuitBreakers({realizedUnrealizedPnlUsd:0,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:3});
  assert.equal(streak.pauseBuys,true);assert.ok(streak.pauseUntil>=1000+2*3600000);
 });
 
-test('score 90+ uses six-percent base with 0.35% pool cap',()=>{
- assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'RESEARCH',smartMoneyConfluence:true}),60);
+test('smart-money uses five-percent base; standard research 0.75x and 0.30% pool cap',()=>{
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'RESEARCH',smartMoneyConfluence:true}),50);
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'WATCH'}),0);
 });
