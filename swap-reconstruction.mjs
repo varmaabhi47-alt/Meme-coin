@@ -94,10 +94,11 @@ export function reconstructSolSwap(tx,wallet) {
   if(walletIndex<0) return {swap:null,reason:'wallet missing from resolved account keys'};
   const pre=tx.meta.preBalances||[],post=tx.meta.postBalances||[];
   if(!Number.isFinite(pre[walletIndex])||!Number.isFinite(post[walletIndex])) return {swap:null,reason:'wallet native balance missing'};
-  let solDelta=(post[walletIndex]-pre[walletIndex])/1e9;
+  // Keep the wallet's observed native-balance delta fee-inclusive. Removing
+  // the network fee would overstate realized PnL and buy-size eligibility.
+  const solDelta=(post[walletIndex]-pre[walletIndex])/1e9;
   const fee=Number(tx.meta.fee||0);
   if(!Number.isFinite(fee)||fee<0) return {swap:null,reason:'invalid transaction fee'};
-  if(keys[0]===wallet) solDelta+=fee/1e9;
   // Reject unrelated native transfers. A parsed system transfer is accepted only
   // when its counterparty is an account explicitly touched by the DEX instruction.
   for(const ix of instructions){
