@@ -204,7 +204,7 @@ async function pruneWallets(){
     if(w.status==='MUTED'){mutedExisting.push(w);continue;}
     let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
     const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Number(r.entryTime)>=Date.now()-14*DAY*1000),h4=recent.map(r=>r.outcomes?.['4h']?.returnPct).filter(Number.isFinite),allHorizons=recent.flatMap(r=>['15m','60m','4h'].map(h=>r.outcomes?.[h]?.returnPct).filter(Number.isFinite));
-    const hitRate=h4.length?h4.filter(x=>x>0).length/h4.length*100:(allHorizons.length?allHorizons.filter(x=>x>0).length/allHorizons.length*100:null);
+    const hitRate=h4.length>=10?h4.filter(x=>x>0).length/h4.length*100:(allHorizons.length>=30?allHorizons.filter(x=>x>0).length/allHorizons.length*100:null);
     const rugCount=recent.filter(r=>r.rug===true).length;
     const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
