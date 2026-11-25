@@ -7,6 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { reconstructSolSwap } from './swap-reconstruction.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
@@ -100,15 +101,8 @@ function solDeltaByAccount(tx){
   return d;
 }
 function decodeSwap(tx,owner){
-  if(!tx?.meta||tx.meta.err) return [];
-  const programs=instructionProgramIds(tx);if(!programs.some(p=>DEX_PROGRAMS.has(p)))return [];
-  const t=tokenDeltaByOwner(tx),sol=solDeltaByAccount(tx),out=[];
-  for(const [key,delta] of t){const [wallet,mint]=key.split('|');if(wallet!==owner||!mint||!Number.isFinite(delta)||delta===0)continue;
-    const solChange=sol.get(owner);if(!Number.isFinite(solChange)||Math.abs(solChange)<1e-9)continue;
-    // SOL-funded token acquisition or token disposal with SOL received; non-SOL pairs are intentionally not valued.
-    if(delta>0&&solChange<0)out.push({mint,side:'BUY',tokenAmount:delta,solAmount:Math.abs(solChange),slot:Number(tx.slot||0),blockTime:Number(tx.blockTime||0),signature:tx.signature||''});
-    if(delta<0&&solChange>0)out.push({mint,side:'SELL',tokenAmount:Math.abs(delta),solAmount:solChange,slot:Number(tx.slot||0),blockTime:Number(tx.blockTime||0),signature:tx.signature||''});
-  }return out;
+  const result=reconstructSolSwap(tx,owner);
+  return result.swap?[result.swap]:[];
 }
 async function signatures(address,before,until){
   const all=[];let cursor;
