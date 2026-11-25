@@ -40,19 +40,53 @@ function monthKey(){const d=new Date();return d.getUTCFullYear()+'-'+String(d.ge
 let lastReq=0, rpcId=0;
 async function rpc(method,params){
   const usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
-  if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;}
+  if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
   if(usage.credits>=MONTHLY_LIMIT)throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
   const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
   let attempt=0;
   while(true){
     lastReq=Date.now();
     const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++rpcId,method,params})});
-    if(res.status===429){if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');await sleep(Math.min(60000,1000*2**attempt)+Math.floor(Math.random()*500));continue;}
+    if(res.status===429){if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
     const raw=await res.text();let body;try{body=JSON.parse(raw);}catch{throw new Error('RPC returned non-JSON HTTP '+res.status);}
-    usage.credits++;usage.requests++;await writeJson(USAGE,usage);
+    usage.credits++;usage.requests++;usage.httpRequests=(usage.httpRequests||0)+1;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
     if(!res.ok||body.error)throw new Error('RPC '+method+' failed HTTP '+res.status+': '+JSON.stringify(body.error||body).slice(0,500));
     if(!Object.hasOwn(body,'result'))throw new Error('RPC '+method+' response missing result');
     return body.result;
+  }
+}
+const RPC_BATCH_SIZE=25;
+async function rpcBatch(method,paramsList){
+  const results=[];
+  for(let offset=0;offset<paramsList.length;offset+=RPC_BATCH_SIZE){
+    const params=paramsList.slice(offset,offset+RPC_BATCH_SIZE),usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
+    if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
+    if(usage.credits+params.length>MONTHLY_LIMIT)throw new Error('RPC monthly credit budget would be exceeded by batch; refusing calls.');
+    const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
+    const requests=params.map(p=>({jsonrpc:'2.0',id:++rpcId,method,params:p})),ids=requests.map(x=>x.id);
+    let attempt=0,body;
+    while(true){
+      lastReq=Date.now();
+      const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
+      if(res.status===429){if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
+      const raw=await res.text();try{body=JSON.parse(raw);}catch{throw new Error('RPC provider rejected JSON-RPC batch request (non-JSON HTTP '+res.status+').');}
+      if(!res.ok)throw new Error('RPC batch failed HTTP '+res.status+': '+JSON.stringify(body).slice(0,500));
+      break;
+    }
+    if(!Array.isArray(body))throw new Error('RPC provider rejected JSON-RPC batch request (response was not an array).');
+    usage.credits+=requests.length;usage.requests+=requests.length;usage.httpRequests=(usage.httpRequests||0)+1;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+requests.length;await writeJson(USAGE,usage);
+    const byId=new Map(body.map(item=>[item.id,item]));
+    for(const id of ids){const item=byId.get(id);if(!item){results.push({error:{message:'batch response omitted request id '+id}});continue;}results.push(Object.hasOwn(item,'error')?{error:item.error}:item.result);}
+  }
+  return results;
+}
+async function transactionsBySignatures(signatures,encoding='json'){
+  const params=signatures.map(signature=>[signature,{encoding,maxSupportedTransactionVersion:1,commitment:'confirmed'}]);
+  try{return await rpcBatch('getTransaction',params);}
+  catch(error){
+    if(!String(error.message).includes('rejected JSON-RPC batch'))throw error;
+    const rows=[];for(const p of params){try{rows.push(await rpc('getTransaction',p));}catch(e){rows.push({error:{message:String(e.message)}});}}
+    return rows;
   }
 }
 function parseCsvLine(line){const out=[];let value='',quoted=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){out.push(value.trim());value='';}else value+=ch;}out.push(value.trim());return out;}
@@ -116,23 +150,28 @@ async function signatures(address,before,until){
   }return all.filter(s=>Number(s.blockTime||0)>=before&&!s.err);
 }
 async function txBySignature(signature){
-  return rpc('getTransaction',[signature,{encoding:'json',maxSupportedTransactionVersion:0,commitment:'confirmed'}]);
+  return rpc('getTransaction',[signature,{encoding:'json',maxSupportedTransactionVersion:1,commitment:'confirmed'}]);
 }
 async function discoverFromMint(mint){
   if(!validAddress(mint))throw new Error('Invalid mint: '+mint);
-  const sigs=await signatures(mint,Date.now()/1000-LOOKBACK);
-  const candidates=new Map();
-  for(const s of sigs){const tx=await txBySignature(s.signature);if(!tx)continue;
-    const keys=resolvedKeys(tx),deltas=tokenDeltaByOwner(tx);
-    for(const [key,delta] of deltas){const [owner,token]=key.split('|');if(token===mint&&delta>0&&validAddress(owner))candidates.set(owner,{address:owner,label:'graduated-token-discovery',source:'winning-mint:'+mint,firstSeen:s.blockTime||0});}
+  const sigs=await signatures(mint,Date.now()/1000-LOOKBACK),candidates=new Map();
+  for(let offset=0;offset<sigs.length;offset+=RPC_BATCH_SIZE){
+    const batch=sigs.slice(offset,offset+RPC_BATCH_SIZE),txs=await transactionsBySignatures(batch.map(s=>s.signature),'json');
+    for(let i=0;i<batch.length;i++){const s=batch[i],tx=txs[i];if(!tx||tx.error)continue;
+      try{resolvedKeys(tx);const deltas=tokenDeltaByOwner(tx);
+        for(const [key,delta] of deltas){const [owner,token]=key.split('|');if(token===mint&&delta>0&&validAddress(owner))candidates.set(owner,{address:owner,label:'graduated-token-discovery',source:'winning-mint:'+mint,firstSeen:s.blockTime||0});}
+      }catch{/* unresolved/unsupported transaction: no inferred candidate evidence */}
+    }
   }return [...candidates.values()];
 }
 async function recentWalletSwaps(address,cutoff){
   const sigs=await signatures(address,cutoff),rows=[];
-  for(const s of sigs){const tx=await txBySignature(s.signature);if(!tx)continue;
-    // Use fully resolved account keys; any versioned tx lacking loaded address metadata is skipped.
-    const msg=tx.transaction?.message;if((msg?.addressTableLookups?.length||0)>0&&!tx.meta?.loadedAddresses)continue;
-    const swaps=decodeSwap(tx,address);for(const x of swaps){x.signature=s.signature;x.blockTime=Number(tx.blockTime||s.blockTime||0);rows.push(x);}
+  for(let offset=0;offset<sigs.length;offset+=RPC_BATCH_SIZE){
+    const batch=sigs.slice(offset,offset+RPC_BATCH_SIZE),txs=await transactionsBySignatures(batch.map(s=>s.signature),'json');
+    for(let i=0;i<batch.length;i++){const s=batch[i],tx=txs[i];if(!tx||tx.error)continue;
+      const msg=tx.transaction?.message;if((msg?.addressTableLookups?.length||0)>0&&!tx.meta?.loadedAddresses)continue;
+      const swaps=decodeSwap(tx,address);for(const x of swaps){x.signature=s.signature;x.blockTime=Number(tx.blockTime||s.blockTime||0);rows.push(x);}
+    }
   }return rows.sort((a,b)=>a.blockTime-b.blockTime);
 }
 function analyzeTrades(swaps){
@@ -179,7 +218,8 @@ async function findFundingSource(address){
   // Scan the earliest signatures available in the bounded 10k-signature window;
   // initial wallet funding often predates the 30-day trading lookback.
   const sigs=await signatures(address,0),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,30);
-  for(const s of oldest){const tx=await rpc('getTransaction',[s.signature,{encoding:'jsonParsed',maxSupportedTransactionVersion:0,commitment:'confirmed'}]);if(!tx?.meta||tx.meta.err)continue;
+  const txs=await transactionsBySignatures(oldest.map(s=>s.signature),'jsonParsed');
+  for(let i=0;i<oldest.length;i++){const tx=txs[i];if(!tx?.meta||tx.meta.err||tx.error)continue;
     const msg=tx.transaction?.message,inner=(tx.meta.innerInstructions||[]).flatMap(x=>x.instructions||[]);
     for(const ix of [...(msg?.instructions||[]),...inner]){if(ix.program==='system'&&ix.parsed?.type==='transfer'){const info=ix.parsed.info;if(String(info.destination)===address&&String(info.source)!==address&&Number(info.lamports)>0)return String(info.source);}}
   }return null;
