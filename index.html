@@ -2264,6 +2264,8 @@ node meme-radar-autobot-24-7.mjs
           </tr>
         `;
       }).join('');
+      tbody.querySelectorAll('[data-ledger-symbol]').forEach((el,i)=>{el.textContent=String(filtered[i]?.symbol??'');});
+
     }
 
     function renderTelemetryTable() {
