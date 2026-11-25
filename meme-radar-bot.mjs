@@ -537,20 +537,26 @@ async function monitorPositions({ discover = false } = {}) {
       const intelligence = scoreCandidate(p, sec);
       const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
-      if(pairObj.chainId==='solana'){const gates=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData});if(!gates.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...gates.reasons);}}
-      if(pairObj.chainId==='solana'&&sec.pass&&intelligence.tier==='RESEARCH')await fetchSmartMoneySignal(String(p.baseToken.address));
-      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address)];
+      let hardGate={pass:true,reasons:[]},bundleGate={pass:true,reason:'not-applicable'};
+      if(pairObj.chainId==='solana'){
+        hardGate=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData,tokenProgramId:creatorData?.tokenProgramId,tokenExtensions:creatorData?.tokenExtensions});
+        if(!hardGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...hardGate.reasons);}
+        if(sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass){
+          bundleGate=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
+          if(!bundleGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundleGate.reason);}
+        }
+        const mintForGate=String(p.baseToken.address||''),gatePass=sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass&&bundleGate.pass;
+        const gateReasons=[...(sec.pass?[]:[sec.reason]),...hardGate.reasons,...(bundleGate.pass?[]:[bundleGate.reason])];
+        const gatePublished=await publishV6Gate(mintForGate,gatePass,gateReasons);
+        if(gatePass&&gatePublished)await fetchSmartMoneySignal(mintForGate);
+      }
+      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
       }
-      if(pairObj.chainId==='solana'){
-        const bundle=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
-        if(!bundle.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundle.reason);logDecision('REJECT',p.baseToken.symbol,'solana',bundle.reason);await recordResearch(p,sec,intelligence,'REJECT',holders);continue;}
-      }
-
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
