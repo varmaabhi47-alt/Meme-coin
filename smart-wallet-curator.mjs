@@ -140,9 +140,9 @@ function analyzeTrades(swaps){
   for(const s of swaps){if(s.side==='BUY'){const q=open.get(s.mint)||[];q.push(s);open.set(s.mint,q);continue;}
     const q=open.get(s.mint);if(!q?.length)continue;
     // FIFO proportional lot closure. SOL amounts are actual wallet SOL deltas, including fees/tips.
-    let remaining=s.tokenAmount,proceeds=s.solAmount,matchedCost=0,matchedTokens=0,first=Infinity,firstSlot=Infinity;
-    while(remaining>1e-12&&q.length){const lot=q[0],take=Math.min(remaining,lot.tokenAmount),ratio=take/lot.tokenAmount;matchedCost+=lot.solAmount*ratio;matchedTokens+=take;first=Math.min(first,lot.blockTime);firstSlot=Math.min(firstSlot,Number(lot.slot||Infinity));lot.tokenAmount-=take;lot.solAmount*=1-ratio;remaining-=take;if(lot.tokenAmount<=1e-12)q.shift();}
-    if(matchedTokens>0){const sellMatched=s.tokenAmount?proceeds*(matchedTokens/s.tokenAmount):0;closed.push({mint:s.mint,buyTime:first,buySlot:firstSlot,sellTime:s.blockTime,sellSlot:Number(s.slot||0),holdMins:(s.blockTime-first)/60,costSol:matchedCost,proceedsSol:sellMatched,pnlSol:sellMatched-matchedCost});}
+    let remaining=s.tokenAmount,proceeds=s.solAmount,matchedCost=0,matchedTokens=0,weightedBuyTime=0,firstSlot=Infinity;
+    while(remaining>1e-12&&q.length){const lot=q[0],take=Math.min(remaining,lot.tokenAmount),ratio=take/lot.tokenAmount;matchedCost+=lot.solAmount*ratio;matchedTokens+=take;weightedBuyTime+=Number(lot.blockTime||0)*take;firstSlot=Math.min(firstSlot,Number(lot.slot||Infinity));lot.tokenAmount-=take;lot.solAmount*=1-ratio;remaining-=take;if(lot.tokenAmount<=1e-12)q.shift();}
+    if(matchedTokens>0){const sellMatched=s.tokenAmount?proceeds*(matchedTokens/s.tokenAmount):0;const buyTime=matchedTokens>0?weightedBuyTime/matchedTokens:s.blockTime;closed.push({mint:s.mint,buyTime,buySlot:firstSlot,sellTime:s.blockTime,sellSlot:Number(s.slot||0),holdMins:(s.blockTime-buyTime)/60,costSol:matchedCost,proceedsSol:sellMatched,pnlSol:sellMatched-matchedCost});}
   }return closed;
 }
 function median(a){if(!a.length)return null;const x=[...a].sort((a,b)=>a-b),m=Math.floor(x.length/2);return x.length%2?x[m]:(x[m-1]+x[m])/2;}
@@ -173,7 +173,7 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   if(!Number.isFinite(pnl)||pnl<=0)reasons.push('non-positive-realized-pnl');
   const recent7=trades.filter(t=>t.sellTime>=now-7*DAY),win7=recent7.length?recent7.filter(t=>t.pnlSol>0).length/recent7.length*100:null,weightedWin=win7===null?(winRate||0):(win7*0.65+(winRate||0)*0.35);
   const confidence=Math.max(0,Math.min(100,Math.round(weightedWin*0.45+Math.min(3,pf||0)*12+Math.min(30,profitableMints.size)*0.8+(days7.length?8:0))));
-  return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,realizedWinRate7d:win7,profitFactor30d:pf,medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,realizedPnl7dSol:recent7.reduce((s,t)=>s+t.pnlSol,0),confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
+  return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,realizedWinRate7d:win7,profitFactor30d:Number.isFinite(pf)?pf:(pf===Infinity?'Infinity':null),medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,realizedPnl7dSol:recent7.reduce((s,t)=>s+t.pnlSol,0),confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
 }
 async function findFundingSource(address){
   // Scan the earliest signatures available in the bounded 10k-signature window;
