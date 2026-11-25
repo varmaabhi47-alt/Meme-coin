@@ -7,6 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { summarizeWalletOutcomes } from './curator-outcomes.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
@@ -197,22 +198,21 @@ async function sourceResearchMints(file){
   return [...mints];
 }
 async function pruneWallets(){
-  const j=await readJson(WALLETS,{version:1,wallets:[]}),research=(await fs.readFile(path.join(ROOT,'paper_research.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean);
-  const outcomes=new Map();
-  for(const line of research){try{const r=JSON.parse(line),addresses=Array.isArray(r.wallets)?r.wallets:[r.wallet||r.sourceWallet].filter(Boolean);for(const a of addresses){if(!a)continue;const arr=outcomes.get(a)||[];arr.push(r);outcomes.set(a,arr);}}catch{}}
+  const j=await readJson(WALLETS,{version:1,wallets:[]}),outcomeLines=(await fs.readFile(path.join(ROOT,'paper_wallet_outcomes.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean),outcomeRows=[];
+  for(const line of outcomeLines){try{outcomeRows.push(JSON.parse(line));}catch{}}
+  const outcomes=new Map();for(const row of outcomeRows){const arr=outcomes.get(row.wallet)||[];arr.push(row);outcomes.set(row.wallet,arr);}
   const muted=[],active=[],promoted=[],telemetryErrors=[],mutedExisting=[];
   for(const w of j.wallets||[]){
     if(w.status==='MUTED'){mutedExisting.push(w);continue;}
     let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
-    const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
-    const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));const interval=Number(r.researchIntervalMin),ret=r.returnPct;if([15,60,240].includes(interval)&&ret!==null&&ret!==undefined&&Number.isFinite(Number(ret)))horizons.push(Number(ret));}
-    const hitRate=horizons.length?horizons.filter(x=>x>0).length/horizons.length*100:null;
-    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true||/rug|rugged/i.test(String(r.security?.reason||''))).length;
+    const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Number(r.entryTime)>=Date.now()-14*DAY*1000),walletSummary=summarizeWalletOutcomes(recent)[0],h4=recent.map(r=>r.outcomes?.['4h']?.returnPct).filter(Number.isFinite),allHorizons=recent.flatMap(r=>['15m','60m','4h'].map(h=>r.outcomes?.[h]?.returnPct).filter(Number.isFinite));
+    const hitRate=h4.length?h4.filter(x=>x>0).length/h4.length*100:(allHorizons.length?allHorizons.filter(x=>x>0).length/allHorizons.length*100:null);
+    const rugCount=recent.filter(r=>r.rug===true).length;
     const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
     if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
-    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:(()=>{const rows=recent.filter(r=>Number(r.researchIntervalMin)===240&&r.returnPct!==null&&r.returnPct!==undefined&&Number.isFinite(Number(r.returnPct)));return rows.length?rows.reduce((s,r)=>s+Number(r.returnPct),0)/rows.length:null;})()};
+    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:h4.length?h4.reduce((s,v)=>s+v,0)/h4.length:null};
     if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
