@@ -254,7 +254,7 @@ async function main(){
     const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
-  curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));for(let i=0;i<curated.wallets.length;i++)curated.wallets[i].status=i<50?'ACTIVE':'WATCH';curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
+  const eligible=curated.wallets.filter(w=>w.status==='ACTIVE').sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));const activeSet=new Set(eligible.slice(0,50));for(const w of curated.wallets)if(w.status!=='MUTED')w.status=activeSet.has(w)?'ACTIVE':'WATCH';curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
