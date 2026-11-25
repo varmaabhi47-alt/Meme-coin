@@ -35,27 +35,47 @@ export class PaperExecutionAdapter {
 }
 
 export class SolanaLiveExecutionAdapter {
-  constructor({ signer, buildJupiterSwap, sendViaHeliusSender: sender = sendViaHeliusSender, confirmationKey = process.env.LIVE_CONFIRMATION_KEY, enabled = process.env.LIVE_TRADING === 'true', maxTradeSol = Number(process.env.MAX_TRADE_SOL || 0.05), maxDailySol = Number(process.env.MAX_DAILY_SOL || 0.25), telegramChatId = process.env.TELEGRAM_CHAT_ID } = {}) {
-    this.enabled = enabled && Boolean(confirmationKey); this.confirmationKey = confirmationKey; this.signer = signer; this.buildJupiterSwap = buildJupiterSwap; this.sendViaHeliusSender = sender;
+  constructor({ jupiterSwap, confirmationKey = process.env.LIVE_CONFIRMATION_KEY, enabled = process.env.LIVE_TRADING === 'true', maxTradeSol = Number(process.env.MAX_TRADE_SOL || 0.05), maxDailySol = Number(process.env.MAX_DAILY_SOL || 0.25), telegramChatId = process.env.TELEGRAM_CHAT_ID } = {}) {
+    this.enabled = enabled && Boolean(confirmationKey); this.confirmationKey = confirmationKey; this.jupiterSwap = jupiterSwap;
     this.maxTradeSol = Math.min(0.05, Math.max(0, maxTradeSol)); this.maxDailySol = Math.min(0.25, Math.max(0, maxDailySol)); this.dailySpentSol = 0; this.day = new Date().toISOString().slice(0,10); this.telegramChatId = String(telegramChatId || ''); this.killed = false;
   }
   assertEnabled(chatId) {
     if (!this.enabled || process.env.LIVE_TRADING !== 'true' || !this.confirmationKey) throw new Error('Live execution disabled: LIVE_TRADING and LIVE_CONFIRMATION_KEY are both required');
-    if (!this.signer || !this.buildJupiterSwap || !this.sendViaHeliusSender) throw new Error('Live adapter requires signer, Jupiter transaction builder and Helius Sender client');
-    if (this.killed) throw new Error('LIVE_KILL_SWITCH: new buys halted and live adapter locked');
+    if (!this.jupiterSwap || typeof this.jupiterSwap.swap !== 'function') throw new Error('Live adapter requires the Jupiter V2 order/sign/execute client');
+    if (this.killed) throw new Error('LIVE_KILL_SWITCH: new buys halted; live adapter remains locked');
     if (chatId != null && String(chatId) !== this.telegramChatId) throw new Error('Unauthorized Telegram control');
   }
-  async buy({ amountSol, ...order }, { chatId } = {}) {
+  async buy({ amountSol, mint, decimals, amountUsd }, { chatId } = {}) {
     this.assertEnabled(chatId);
     const day = new Date().toISOString().slice(0,10); if (day !== this.day) { this.day = day; this.dailySpentSol = 0; }
     const amount = Number(amountSol);
     if (!(amount > 0) || amount > this.maxTradeSol || this.dailySpentSol + amount > this.maxDailySol) throw new Error('LIVE_SAFETY_CAP: SOL per-trade/daily cap exceeded');
-    const built = await this.buildJupiterSwap({ ...order, amountSol: amount, dynamicSlippage: true, tightSlippageBps: 50, sandwichProtectionAccount: 'jitodontfront111111111111111111111111111111', requireReadOnlySandwichAccount: true });
-    if(!built?.transaction||built.dynamicSlippageApplied!==true||!validateJitodontfrontReadonly(built.transaction))throw new Error('Live swap builder must return a transaction with dynamic slippage applied and jitodontfront verified read-only in the compiled message');
-    const signed = await this.signer.signTransaction(built.transaction);
-    const signature = await this.sendViaHeliusSender(signed);
-    this.dailySpentSol += amount; return { signature, amountSol: amount, live: true };
+    if (!mint || !Number.isInteger(Number(decimals)) || Number(decimals)<0 || Number(decimals)>18) throw new Error('Live buy requires mint and verified token decimals');
+    const raw = BigInt(Math.floor(amount * 1e9)).toString();
+    const result = await this.jupiterSwap.swap({ inputMint: this.jupiterSwap.solMint || 'So11111111111111111111111111111111111111112', outputMint: mint, amount: raw });
+    const tokens = Number(result.outputAmountResult || result.outAmount) / (10 ** Number(decimals));
+    if (!(tokens > 0) || !Number.isFinite(tokens)) throw new Error('Jupiter confirmed buy but output token amount is invalid');
+    this.dailySpentSol += amount;
+    const usd = Number(amountUsd || 0);
+    return { signature: result.signature, amountSol: amount, tokens, effPrice: usd > 0 ? usd / tokens : 0, feeUsd: 0, impactUsd: 0, quoteSource: 'jupiter-v2-execute', quoteFallback: false, live: true, router: result.router };
   }
-  async sell(order, options = {}) { this.assertEnabled(options.chatId); const built = await this.buildJupiterSwap({ ...order, dynamicSlippage: true, tightSlippageBps: 50, sandwichProtectionAccount: 'jitodontfront111111111111111111111111111111', requireReadOnlySandwichAccount: true }); if(!built?.transaction||built.dynamicSlippageApplied!==true||!validateJitodontfrontReadonly(built.transaction))throw new Error('Live swap builder must return a transaction with dynamic slippage applied and jitodontfront verified read-only in the compiled message'); const signed = await this.signer.signTransaction(built.transaction); return { signature: await this.sendViaHeliusSender(signed), live: true }; }
-  async handleTelegramCommand(command, chatId, { flattenOpenPositions } = {}) { if (String(chatId) !== this.telegramChatId) return false; if (command === '/kill') { this.killed = true; if (this.enabled && typeof flattenOpenPositions === 'function') await flattenOpenPositions(); return true; } return false; }
+  async sell({ mint, tokens, decimals, amountUsd }, { chatId } = {}) {
+    this.assertEnabled(chatId);
+    if (!mint || !Number.isInteger(Number(decimals)) || Number(decimals)<0 || Number(decimals)>18) throw new Error('Live sell requires mint and verified token decimals');
+    const quantity = Number(tokens);
+    if (!(quantity > 0) || !Number.isFinite(quantity)) throw new Error('Live sell token amount must be positive');
+    const raw = BigInt(Math.floor(quantity * (10 ** Number(decimals)))).toString();
+    if (raw === '0') throw new Error('Live sell amount rounds to zero base units');
+    const result = await this.jupiterSwap.swap({ inputMint: mint, outputMint: this.jupiterSwap.usdcMint || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: raw });
+    const proceeds = Number(result.outputAmountResult) / 1e6;
+    if (!(proceeds >= 0) || !Number.isFinite(proceeds) || !result.signature) throw new Error('Jupiter sell execution returned invalid proceeds/signature');
+    return { signature: result.signature, netProceeds: proceeds, effPrice: quantity > 0 ? proceeds / quantity : 0, feeUsd: 0, impactUsd: 0, quoteSource: 'jupiter-v2-execute', quoteFallback: false, live: true, router: result.router };
+  }
+  async handleTelegramCommand(command, chatId, { flattenOpenPositions } = {}) {
+    if (String(chatId) !== this.telegramChatId) return { authorized: false, flattened: 0, failed: 0 };
+    if (command !== '/kill') return { authorized: true, flattened: 0, failed: 0 };
+    this.killed = true;
+    if (typeof flattenOpenPositions !== 'function') return { authorized: true, flattened: 0, failed: 0, error: 'flatten callback missing' };
+    return { authorized: true, ...(await flattenOpenPositions()) };
+  }
 }
