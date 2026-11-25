@@ -7,11 +7,11 @@ export const EXIT_RULES = Object.freeze({
   partialTakeProfitFraction: 0.5,
   breakevenNetPct: 2,
   runnerTrailDropPct: 15,
-  runnerTrailDropAbove100Pct: 20,
+  runnerTrailDropAbove100Pct: 22,
   runnerWideTrailGainPct: 100,
   stopLossNetPct: -18,
-  liquidityDropFromEntryPct: 35,
-  liquidityDropPerCheckPct: 20,
+  liquidityDropFromEntryPct: 30,
+  liquidityDropPerCheckPct: 15,
   maxHoldHours: 24
 });
 
@@ -63,14 +63,16 @@ export function evaluatePositionRisk(position, options = {}) {
 export function calculatePositionSize({ equityUsd, poolLiquidityUsd, score, cashUsd }) {
   const equity = Number(equityUsd), liquidity = Number(poolLiquidityUsd), cash = Number(cashUsd);
   if (!(equity > 0 && liquidity > 0 && cash > 0)) return 0;
-  const base = equity * 0.06;
-  const tierMultiplier = Number(score) >= 90 ? 1 : Number(score) >= 80 ? 0.8 : 0;
-  return Math.max(0, Math.min(base * tierMultiplier, liquidity * 0.0035, cash));
+  const base = equity * 0.05;
+  const smartMoney = arguments[0]?.smartMoneyConfluence === true;
+  const tier = String(arguments[0]?.tier || 'RESEARCH').toUpperCase();
+  const tierMultiplier = tier === 'RESEARCH' ? (smartMoney ? 1 : 0.75) : 0;
+  return Math.max(0, Math.min(base * tierMultiplier, liquidity * 0.003, cash));
 }
 
 export function checkCircuitBreakers({ realizedUnrealizedPnlUsd, dailyStartingEquityUsd, now = Date.now(), breaker = {}, consecutiveRiskExits = 0 }) {
   const dailyPct = Number(dailyStartingEquityUsd) > 0 ? Number(realizedUnrealizedPnlUsd) / Number(dailyStartingEquityUsd) * 100 : 0;
-  if (dailyPct <= -12) return { pauseBuys: true, reason: 'DAILY_DRAWDOWN_12', pauseUntil: Math.max(Number(breaker.pauseUntil || 0), now + 12 * 3600000), dailyDrawdownPct: dailyPct };
+  if (dailyPct <= -10) return { pauseBuys: true, reason: 'DAILY_DRAWDOWN_10', pauseUntil: Math.max(Number(breaker.pauseUntil || 0), now + 12 * 3600000), dailyDrawdownPct: dailyPct };
   if (Number(consecutiveRiskExits) >= 3) return { pauseBuys: true, reason: 'CONSECUTIVE_RISK_EXITS', pauseUntil: Math.max(Number(breaker.pauseUntil || 0), now + 2 * 3600000), dailyDrawdownPct: dailyPct };
   return { pauseBuys: Number(breaker.pauseUntil || 0) > now, reason: breaker.reason || null, pauseUntil: Number(breaker.pauseUntil || 0), dailyDrawdownPct: dailyPct };
 }
@@ -103,5 +105,8 @@ export function computeTradeMetrics(trades = []) {
   let equity=1, peak=1, maxDrawdownPct=0;
   for(const x of pnl){equity*=Math.max(0,1+x/100);peak=Math.max(peak,equity);maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);}
   const withoutLargest = pnl.length ? pnl.filter((_,i)=>i!==pnl.indexOf(Math.max(...pnl))).reduce((a,b)=>a+b,0) : 0;
-  return { tradeCount:pnl.length, winRatePct:pnl.length?wins.length/pnl.length*100:null, profitFactor:grossLosses?grossWins/grossLosses:(grossWins>0?Infinity:null), maxDrawdownPct, netPnlUsd:pnl.reduce((a,b)=>a+b,0), pnlExcludingLargestTradeUsd:withoutLargest };
+  const largest = pnl.length ? Math.max(...pnl) : 0;
+  const adjusted = pnl.filter(x => x !== largest);
+  const adjustedWins = adjusted.filter(x => x > 0).reduce((a,b)=>a+b,0), adjustedLosses = Math.abs(adjusted.filter(x => x < 0).reduce((a,b)=>a+b,0));
+  return { tradeCount:pnl.length, winRatePct:pnl.length?wins.length/pnl.length*100:null, profitFactor:grossLosses?grossWins/grossLosses:(grossWins>0?Infinity:null), maxDrawdownPct, netPnlUsd:pnl.reduce((a,b)=>a+b,0), pnlExcludingLargestTradeUsd:withoutLargest, outlierAdjustedProfitFactor:adjustedLosses?adjustedWins/adjustedLosses:(adjustedWins>0?Infinity:null), EDGE_VERIFIED:pnl.length>=100&&adjustedWins>adjustedLosses&&adjustedWins>0 };
 }
