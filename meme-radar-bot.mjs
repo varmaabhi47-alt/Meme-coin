@@ -332,6 +332,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
       entryAt: Date.now(), entryPrice: row.priceUsd, score: row.score, tier: row.tier,
       security: row.security, smartMoneyConfluence: row.smartMoneyConfluence, intervalsLogged: []
     };
+    else { portfolio.researchTracked[token].smartMoneyConfluence=!!row.smartMoneyConfluence; portfolio.researchTracked[token].score=row.score; portfolio.researchTracked[token].tier=row.tier; }
   }
 }
 
