@@ -1,3 +1,5 @@
+import {evaluateSmartMoneyConfluence} from '../smart-money-confluence.mjs';
+
 /**
  * MEME.RADAR authoritative D1 state API.
  * Authenticates all state reads/writes and uses optimistic version checks.
@@ -12,16 +14,10 @@ const cors = {
 const responseHeaders=request=>{const origin=request.headers.get("Origin")||"";const allowed=origin==="https://memeradar-v4.pages.dev"||origin.endsWith(".memeradar-v4.pages.dev");return {...cors,"Access-Control-Allow-Origin":allowed?origin:"https://memeradar-v4.pages.dev","Vary":"Origin"};};
 const json=(body,status=200,request=null)=>Response.json(body,{status,headers:request?responseHeaders(request):cors});
 async function getConfluence(env,mint){
-  const active=await env.DB.prepare("SELECT address,median_buy_sol,correlation_group FROM curated_smart_wallets WHERE status='ACTIVE'").all();
-  const meta=new Map((active.results||[]).map(w=>[w.address,w]));
+  const active=await env.DB.prepare("SELECT address,status,median_buy_sol,correlation_group FROM curated_smart_wallets WHERE status='ACTIVE'").all();
   const rows=await env.DB.prepare("SELECT wallet,slot,occurred_at,sol_amount,correlation_group FROM smart_wallet_buys WHERE mint=? AND occurred_at>=? ORDER BY occurred_at DESC").bind(mint,Date.now()-15*60*1000).all();
-  const eligible=(rows.results||[]).filter(r=>{const w=meta.get(r.wallet);return w&&Number(w.median_buy_sol)>0&&Number(r.sol_amount)>=Number(w.median_buy_sol)*0.5;});
-  const byGroup=new Map();for(const r of eligible){const g=String(meta.get(r.wallet)?.correlation_group||r.correlation_group||r.wallet);if(!byGroup.has(g))byGroup.set(g,r);}
-  const unique=[...byGroup.values()],slots=new Set(unique.map(r=>Number(r.slot))),minimum=Math.max(2,Math.min(3,Number(env.SMART_WALLET_MIN_CONFLUENCE||2)));
   const gate=await env.DB.prepare("SELECT passed,checked_at,reasons FROM token_gate_status WHERE mint=?").bind(mint).first();
-  const gateFresh=!!gate&&Number(gate.passed)===1&&Date.now()-Number(gate.checked_at)<=5*60*1000;
-  const ready=unique.length>=minimum&&slots.size>=minimum&&gateFresh;
-  return {mint,wallets:new Set(unique.map(r=>r.wallet)).size,walletAddresses:[...new Set(unique.map(r=>r.wallet))],independentGroups:unique.length,distinctSlots:slots.size,required:minimum,gateFresh,signal:ready?"SMART_MONEY_CONFLUENCE":null,latest:Math.max(0,...unique.map(r=>Number(r.occurred_at||0)))};
+  return {mint,...evaluateSmartMoneyConfluence({wallets:active.results||[],buys:rows.results||[],gate,now:Date.now(),windowMs:15*60*1000,gateMaxAgeMs:5*60*1000,minConfluence:env.SMART_WALLET_MIN_CONFLUENCE||2})};
 }
 function authorized(request,env){const expected=String(env.BOT_SYNC_SECRET||"");return expected.length>0&&(request.headers.get("Authorization")||"")===`Bearer ${expected}`;}
 export default {
@@ -79,10 +75,17 @@ export default {
             .bind(wallet,mint,signature,Number(event.slot||0),Math.floor(timestamp),solAmount,group).run();stored+=Number(write.meta?.changes||0);
         }
       }
-      await env.DB.prepare("DELETE FROM smart_wallet_buys WHERE occurred_at<?").bind(Date.now()-24*60*60*1000).run();
+      await env.DB.prepare("DELETE FROM smart_wallet_buys WHERE occurred_at<?").bind(Date.now()-30*24*60*60*1000).run();
       const recent=await env.DB.prepare("SELECT DISTINCT mint FROM smart_wallet_buys WHERE occurred_at>=?").bind(Date.now()-15*60*1000).all();
       const confluence=[];for(const row of recent.results||[]){const result=await getConfluence(env,row.mint);if(result.signal)confluence.push({signal:result.signal,...result});}
       return json({ok:true,stored,underSize,confluence,gateRequired:true},200,request);
+    }
+    if(url.pathname==="/smart-wallet-buys"&&request.method==="GET"){
+      if(!authorized(request,env))return json({error:"unauthorized"},401,request);
+      const requested=Number(url.searchParams.get("since")||Date.now()-30*24*60*60*1000),since=Number.isFinite(requested)?Math.max(Date.now()-30*24*60*60*1000,Math.min(Date.now(),requested)):Date.now()-30*24*60*60*1000;
+      const limit=Math.max(1,Math.min(10000,Number(url.searchParams.get("limit")||10000)));
+      const rows=await env.DB.prepare("SELECT wallet,mint,signature,slot,occurred_at,sol_amount,correlation_group FROM smart_wallet_buys WHERE occurred_at>=? ORDER BY occurred_at ASC LIMIT ?").bind(since,limit).all();
+      return json({ok:true,since,returned:(rows.results||[]).length,buys:rows.results||[]},200,request);
     }
     if(url.pathname==="/smart-wallets"&&request.method==="POST"){
       if(!authorized(request,env))return json({error:"unauthorized"},401,request);
