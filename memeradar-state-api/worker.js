@@ -83,9 +83,10 @@ export default {
     if(url.pathname==="/smart-wallet-buys"&&request.method==="GET"){
       if(!authorized(request,env))return json({error:"unauthorized"},401,request);
       const requested=Number(url.searchParams.get("since")||Date.now()-30*24*60*60*1000),since=Number.isFinite(requested)?Math.max(Date.now()-30*24*60*60*1000,Math.min(Date.now(),requested)):Date.now()-30*24*60*60*1000;
-      const limit=Math.max(1,Math.min(10000,Number(url.searchParams.get("limit")||10000)));
-      const rows=await env.DB.prepare("SELECT wallet,mint,signature,slot,occurred_at,sol_amount,correlation_group FROM smart_wallet_buys WHERE occurred_at>=? ORDER BY occurred_at ASC LIMIT ?").bind(since,limit).all();
-      return json({ok:true,since,returned:(rows.results||[]).length,buys:rows.results||[]},200,request);
+      const limit=Math.max(1,Math.min(10000,Number(url.searchParams.get("limit")||10000))),offset=Math.max(0,Math.min(1000000,Number(url.searchParams.get("offset")||0)));
+      const rows=await env.DB.prepare("SELECT wallet,mint,signature,slot,occurred_at,sol_amount,correlation_group FROM smart_wallet_buys WHERE occurred_at>=? ORDER BY occurred_at ASC LIMIT ? OFFSET ?").bind(since,limit+1,offset).all();
+      const fetched=rows.results||[],hasMore=fetched.length>limit,buys=fetched.slice(0,limit);
+      return json({ok:true,since,offset,returned:buys.length,hasMore,nextOffset:hasMore?offset+buys.length:null,buys},200,request);
     }
     if(url.pathname==="/smart-wallets"&&request.method==="POST"){
       if(!authorized(request,env))return json({error:"unauthorized"},401,request);
