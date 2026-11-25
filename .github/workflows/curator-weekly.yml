@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   weekly-curation:
@@ -54,3 +54,13 @@ jobs:
           HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
           BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
         run: node sync-helius-webhook.mjs
+
+      - name: Persist wallet state and monthly RPC credit ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add smart_wallets.json smart_wallet_buys.json paper_wallet_outcomes.jsonl rpc-curator-usage.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: persist weekly smart-wallet curator state [skip ci]"
+            git push
+          fi
