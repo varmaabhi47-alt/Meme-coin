@@ -57,8 +57,7 @@ export function backtestSnapshots(rows,options={}){
   cash-=size;positions.set(row.token,{token:row.token,symbol:row.symbol||'UNKNOWN',entryTime:row.recordedAt,entryTs:row.ts,entryPrice:row.price,entryLiquidity:row.liq,lastLiquidity:row.liq,lastPrice:row.price,peakPrice:row.price,score:row.score,originalSize:size,remainingCost:size,partial:false,realizedPnlUsd:0,entryQuoteFallback:!!row.entryQuoteFallback});entryCount++;trackEquity();
  }
  missingExitSnapshots=[...positions.values()].length;
- const equityCurve=[startEquity];let equity=startEquity,peak=startEquity,maxDrawdownPct=0;
- for(const t of trades){equity+=t.netPnlUsd;peak=Math.max(peak,equity);maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);equityCurve.push(equity);}
+ const equityCurve=[startEquity];let equity=equityAt();equityCurve.push(equity);
  const pnl=trades.map(t=>t.netPnlUsd),wins=pnl.filter(x=>x>0),losses=pnl.filter(x=>x<0),grossWin=wins.reduce((a,b)=>a+b,0),grossLoss=Math.abs(losses.reduce((a,b)=>a+b,0));
  const largest=pnl.length?Math.max(0,...pnl):0;
  return {mode:'observed-snapshot-staged-exit-replay',options:{minimumScore:minScore,maxOpenPositions:maxOpen,partialTakeProfitPct:tp,stopLossPct:sl,runnerTrailDropPct:trail,runnerWideTrailDropPct:wide,liquidityDropFromEntryPct:maxEntryLiqDrop,liquidityDropPerCheckPct:maxCheckDrop,baseRiskFraction:baseFraction,poolLiquidityCapFraction:poolCap},snapshotsUsed:clean.length,entryCount,trades:trades.length,openAtEnd:missingExitSnapshots,missingExitSnapshots,winRatePct:trades.length?wins.length/trades.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?'Infinity':null),netPnlUsd:pnl.reduce((a,b)=>a+b,0),pnlExcludingLargestTradeUsd:pnl.reduce((a,b)=>a+b,0)-largest,largestTradePnlUsd:trades.length?largest:null,maxDrawdownPct,endingEquityUsd:equity,pnlFromClosedTradesUsd:pnl.reduce((a,b)=>a+b,0),results:trades};
