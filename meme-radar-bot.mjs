@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MEME.RADAR v4 — 24/7 Autonomous Paper-Trading Node.js Bot (Zero Simulation)
+ * MEME.RADAR Path 2 — Persistent Paper-Trading Node.js Bot (Zero Simulation)
  * GitHub Actions mode: one paper-trading scan per scheduled run.
  *
  * Features:
@@ -707,7 +707,7 @@ async function main(){
  if(process.argv.includes('--sync-check')){let raw;try{raw=await fs.readFile(CONFIG.PORTFOLIO_FILE,'utf8');}catch{throw Error('D1 sync-check requires an existing bot portfolio file; refusing to initialize/overwrite from defaults.');}const parsed=JSON.parse(raw);portfolio={...portfolio,...parsed};lastHourlySummaryMs=Number(parsed.lastHourlySummaryMs||0);consecutiveRiskExits=Number(parsed.consecutiveRiskExits||0);telegramOffset=Number(parsed.telegramOffset||0);const ok=await syncPortfolioToCloudflare();if(!ok)throw Error('D1 sync check failed');console.log(`D1 versioned sync check passed at version ${d1Version}.`);return;}
  await loadState();
  if(process.env.TELEGRAM_TEST==='true'){const ok=await sendTelegram('MEME.RADAR Telegram connection test. Paper-only.');if(!ok)process.exitCode=1;}
- if(process.env.RUN_MODE==='persistent'){console.log('Persistent mode: 12s position monitor / 180s discovery scanner.');await persistentRunner();return;}
+ if(process.env.RUN_MODE==='persistent'){console.log('Persistent mode: 10s position monitor / 180s discovery scanner.');await persistentRunner();return;}
  try{await pollCycle();failures=0;console.log('Completed one paper-trading scan.');}
  catch(err){failures++;lastError=err?.message||String(err);console.error('[ERROR] '+lastError);await saveState();process.exitCode=1;}
 }
