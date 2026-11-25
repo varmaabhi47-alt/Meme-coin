@@ -148,7 +148,7 @@ export function extractWalletTokenBuys(tx, wallet) {
   const keys = tx?.transaction?.message?.accountKeys || [];
   const index = keys.findIndex(x => (typeof x === 'string' ? x : x.pubkey) === wallet);
   if (index < 0) return [];
-  const before = new Map((tx?.meta?.preTokenBalances || []).filter(x => Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
-  const after = new Map((tx?.meta?.postTokenBalances || []).filter(x => Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
+  const before = new Map((tx?.meta?.preTokenBalances || []).filter(x => x.owner === wallet && Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
+  const after = new Map((tx?.meta?.postTokenBalances || []).filter(x => x.owner === wallet && Number(x.accountIndex) >= 0).map(x => [x.mint, Number(x.uiTokenAmount?.uiAmountString || 0)]));
   return [...after].filter(([mint, amount]) => amount > (before.get(mint) || 0)).map(([mint]) => mint);
 }
