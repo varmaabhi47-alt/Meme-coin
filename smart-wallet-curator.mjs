@@ -162,11 +162,19 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   const confidence=Math.max(0,Math.min(100,Math.round((winRate||0)*0.35+Math.min(3,pf||0)*12+Math.min(30,profitableMints.size)*0.8+(days7.length?10:0))));
   return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,profitFactor30d:pf,medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
 }
-async function vetCandidate(c){
+async function findFundingSource(address){
+  const sigs=await signatures(address,Date.now()/1000-LOOKBACK),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,12);
+  for(const s of oldest){const tx=await rpc('getTransaction',[s.signature,{encoding:'jsonParsed',maxSupportedTransactionVersion:0,commitment:'confirmed'}]);if(!tx?.meta||tx.meta.err)continue;
+    const msg=tx.transaction?.message;for(const ix of msg?.instructions||[]){if(ix.program==='system'&&ix.parsed?.type==='transfer'){const info=ix.parsed.info;if(String(info.destination)===address&&String(info.source)!==address&&Number(info.lamports)>0)return String(info.source);}}
+  }return null;
+}
+async function vetCandidate(c,{fundingSource=null,fundingLinked=false}={}){
   if(!validAddress(c.address))return {candidate:c,pass:false,reasons:['invalid-solana-address']};
   const cutoff=Date.now()/1000-LOOKBACK,swaps=await recentWalletSwaps(c.address,cutoff),trades=analyzeTrades(swaps);
-  const result=vetWallet(c.address,trades,swaps);
-  return {...result,candidate:c,swaps,trades};
+  const result=vetWallet(c.address,trades,swaps,{knownBad:fundingLinked?new Set([c.address]):new Set()});
+  if(fundingLinked&&!result.reasons.includes('funding/deployer-linked'))result.reasons.push('funding/deployer-linked');
+  result.pass=result.reasons.length===0;
+  return {...result,candidate:c,swaps,trades,fundingSource};
 }
 async function sourceResearchMints(file){
   const txt=await fs.readFile(file,'utf8'),mints=new Set();
@@ -205,8 +213,11 @@ async function main(){
   for(const c of candidates)if(validAddress(c.address))by.set(c.address,{...by.get(c.address),...c,queued_at:iso(Date.now()),status:'PENDING'});
   q.candidates=[...by.values()];await writeJson(QUEUE,q);
   const curated=await readJson(WALLETS,{version:1,wallets:[]}),tracked=new Set(curated.wallets.filter(w=>w.status==='ACTIVE').map(w=>w.address)),promoted=[],rejected=[];
-  for(const c of candidates){if(!validAddress(c.address))continue;try{const v=await vetCandidate(c);if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics});continue;}
-    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',metrics:m};
+  const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map();
+  for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){rejected.push({address:c.address,fundingScanError:String(e)});}}
+  const sourceCounts=new Map();for(const source of sources.values())if(source)sourceCounts.set(source,(sourceCounts.get(source)||0)+1);
+  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,fundingLinked=!!source&&(knownDeployers.has(source)||tracked.has(source)||(sourceCounts.get(source)||0)>1),v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics});continue;}
+    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:source||'',metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
   curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.wallets=curated.wallets.slice(0,50);curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
