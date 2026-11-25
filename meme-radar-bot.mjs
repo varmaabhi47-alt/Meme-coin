@@ -314,13 +314,13 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
     }
     const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
     const acquired=[...buyerAmounts.values()].reduce((sum,x)=>sum+x,0n),pct=Number(acquired*10000n/total)/100;
-    const reject=buyerAmounts.size>=4&&pct>15;
-    return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >15% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
+    const reject=buyerAmounts.size>=4&&pct>20;
+    return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >20% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
   }catch(error){return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: '+error.message};}
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
-  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=signal?.source==='worker-gated'&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
+  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=['worker-gated','standard-wss-wallet-events'].includes(signal?.source)&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -661,7 +661,7 @@ async function persistentRunner(){
               const signal=smartMoneyConfluence(event.wallet,mint,Date.now());
               if(signal){
                 portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
-                portfolio.smartMoneySignals[mint]={signal:signal.signal,wallets:signal.wallets,walletAddresses:[],source:'standard-wss-wallet-events',at:signal.at};
+                portfolio.smartMoneySignals[mint]={signal:signal.signal,wallets:signal.wallets,walletAddresses:signal.walletAddresses||[],source:'standard-wss-wallet-events',at:signal.at};
                 logDecision('SMART_MONEY_CONFLUENCE',mint,'solana',signal.wallets+' distinct tracked wallet buys within 15 minutes');
               }else logDecision('SMART_WALLET_BUY_OBSERVED',mint,'solana','one tracked wallet buy observed; awaiting a second distinct wallet within 15 minutes');
               eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
