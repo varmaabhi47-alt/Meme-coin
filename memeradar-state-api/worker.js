@@ -63,7 +63,9 @@ export default {
       let stored=0,underSize=0;
       for(const event of events){
         if(String(event?.type||"").toUpperCase()!=="SWAP"||event?.transactionError)continue;
-        const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[],walletBuy=transfers.filter(t=>meta.has(String(t.toUserAccount||""))&&t.mint&&Number(t.tokenAmount||0)>0);
+        const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[],walletBuyMap=new Map();
+        for(const t of transfers){const wallet=String(t.toUserAccount||""),mint=String(t.mint||""),amount=Number(t.tokenAmount||0);if(!meta.has(wallet)||!mint||!Number.isFinite(amount)||amount<=0)continue;const key=wallet+"|"+mint,prior=walletBuyMap.get(key);if(prior)prior.tokenAmount=Number(prior.tokenAmount||0)+amount;else walletBuyMap.set(key,{...t,toUserAccount:wallet,mint,tokenAmount:amount});}
+        const walletBuy=[...walletBuyMap.values()];
         for(const transfer of walletBuy){
           const wallet=String(transfer.toUserAccount),mint=String(transfer.mint),signature=String(event.signature||""),w=meta.get(wallet);
           if(!signature||!mint||!(Number(w.median_buy_sol)>0))continue;
