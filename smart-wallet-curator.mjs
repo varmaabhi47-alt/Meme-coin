@@ -44,7 +44,7 @@ let lastReq=0, rpcId=0;
 async function rpc(method,params){
   if(!KEY||!/helius/i.test(RPC))throw new Error('Live curator RPC requires HELIUS_API_KEY and a Helius RPC URL; refusing an unmetered/unknown provider fallback.');
   const usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
-  if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
+  if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;usage.rateLimitResponses=0;}
   if(!canSpendRpcCredits(Number(usage.credits||0),1))throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
   const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
   let attempt=0;
@@ -66,7 +66,7 @@ async function rpcBatch(method,paramsList){
   const results=[];
   for(let offset=0;offset<paramsList.length;offset+=RPC_BATCH_SIZE){
     const params=paramsList.slice(offset,offset+RPC_BATCH_SIZE),usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
-    if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;}
+    if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;usage.rateLimitResponses=0;}
     if(!canSpendRpcCredits(Number(usage.credits||0),params.length))throw new Error('RPC monthly credit budget would be exceeded by batch; refusing calls.');
     const wait=Math.max(0,Math.ceil(params.length*1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
     const requests=params.map(p=>({jsonrpc:'2.0',id:++rpcId,method,params:p})),ids=requests.map(x=>x.id);
