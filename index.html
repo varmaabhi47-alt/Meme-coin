@@ -2114,9 +2114,13 @@ node meme-radar-autobot-24-7.mjs
                 <div class="flex items-center gap-1.5">
                   <span class="font-bold text-white">${esc(p.symbol)}</span>
                   <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${ch.cls}">${ch.label}</span>
+                  ${p.partialTpDone ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">50% TP</span>' : ''}
+                  ${p.entryQuoteFallback ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40">ENTRY FALLBACK</span>' : ''}
+                  ${p.emergencyNoLiquidity ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40">NO LIQUIDITY</span>' : ''}
                   ${p.stale ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40">STALE</span>' : ''}
                 </div>
                 <div class="text-[10px] text-slate-500">${formatDateTime(p.entryTime)}</div>
+                ${p.dataStaleReason ? `<div class="text-[10px] text-amber-300">${esc(p.dataStaleReason)}</div>` : ''}
               </td>
               <td class="py-3 px-2.5 text-right text-slate-300">${formatPrice(p.buyPrice)}</td>
               <td class="py-3 px-2.5 text-right text-white font-semibold">${formatPrice(p.lastPrice)}</td>
