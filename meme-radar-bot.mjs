@@ -86,7 +86,8 @@ async function loadState() {
     const raw = await fs.readFile(CONFIG.PORTFOLIO_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     portfolio = { ...portfolio, ...parsed };
-    lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);\n    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
+    lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);
+    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
     console.log(`[${nowIso()}] Loaded ${CONFIG.PORTFOLIO_FILE} | Cash: $${portfolio.cashUsd.toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
   } catch {
     await saveState();
