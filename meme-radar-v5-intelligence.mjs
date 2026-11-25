@@ -173,12 +173,18 @@ export function detectBasicMarketWarnings(pair) {
 export function calculateTopHolderConcentration(largestAccounts,totalSupplyRaw,excludedAddresses=[]){
  let supply;try{supply=BigInt(String(totalSupplyRaw||'0'));}catch{supply=0n;}
  if(supply<=0n||!Array.isArray(largestAccounts))return{known:false,top5Pct:null,top10Pct:null,reason:'holder data unavailable'};
- const knownBurn=new Set(['1nc1nerator11111111111111111111111111111111']);
+ const knownBurn=new Set(['1nc1nerator11111111111111111111111111111111','11111111111111111111111111111111']);
  const excluded=new Set([...knownBurn,...(Array.isArray(excludedAddresses)?excludedAddresses:[])].filter(Boolean).map(String));
- const eligible=largestAccounts.filter(a=>!excluded.has(String(a.address||''))&&!excluded.has(String(a.owner||'')));
- const amounts=eligible.map(a=>{try{return BigInt(String(a.amount||'0'));}catch{return 0n;}}).filter(x=>x>0n).sort((a,b)=>a>b?-1:a<b?1:0);
+ const aggregate=new Map();let excludedCount=0;
+ largestAccounts.forEach((account,index)=>{
+  const address=String(account.address||''),owner=String(account.owner||''),key=owner||address||'account-'+index;
+  if(excluded.has(address)||excluded.has(owner)){excludedCount++;return;}
+  let amount=0n;try{amount=BigInt(String(account.amount||'0'));}catch{}
+  if(amount>0n)aggregate.set(key,(aggregate.get(key)||0n)+amount);
+ });
+ const amounts=[...aggregate.values()].sort((a,b)=>a>b?-1:a<b?1:0);
  const sum=list=>list.reduce((total,amount)=>total+amount,0n),pct=amount=>Number((amount*1000000n)/supply)/10000;
- return{known:true,top5Pct:pct(sum(amounts.slice(0,5))),top10Pct:pct(sum(amounts.slice(0,10))),accountsObserved:amounts.length,excludedAccounts:largestAccounts.length-eligible.length,interpretation:'Largest token accounts after excluding known burn addresses and supplied LP/pool addresses; unlabelled custodial/LP accounts may remain'};
+ return{known:true,top5Pct:pct(sum(amounts.slice(0,5))),top10Pct:pct(sum(amounts.slice(0,10))),holdersObserved:amounts.length,excludedAccounts:excludedCount,interpretation:'Largest observed token holders aggregated by owner; known burn and supplied pool addresses excluded. LP identification is conservative and may not classify every pool token account.'};
 }
 
 /**
