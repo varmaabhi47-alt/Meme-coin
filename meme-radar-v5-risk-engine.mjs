@@ -27,11 +27,11 @@ export function netReturnPct(position, markPrice, friction = 0) {
 /** Return actions for one position mark. Mutates position state only after caller confirms simulated fill. */
 export function evaluatePositionRisk(position, { markPrice, liquidityUsd, now = Date.now(), frictionRate = 0 } = {}) {
   const price = Number(markPrice), liq = Number(liquidityUsd);
-  if (!(price > 0 && liq > 0)) return { action: 'HOLD_STALE', reason: 'live mark/liquidity unavailable' };
+  if (!(price > 0) || !Number.isFinite(liq) || liq < 0) return { action: 'HOLD_STALE', reason: 'live mark/liquidity unavailable' };
   const entryLiq = Number(position.entryLiquidityUsd);
   const previousLiq = Number(position.lastLiquidityUsd);
-  const dropEntry = entryLiq > 0 ? (entryLiq - liq) / entryLiq * 100 : 0;
-  const dropCheck = previousLiq > 0 ? (previousLiq - liq) / previousLiq * 100 : 0;
+  const dropEntry = entryLiq > 0 ? (liq <= 0 ? 100 : (entryLiq - liq) / entryLiq * 100) : 0;
+  const dropCheck = previousLiq > 0 ? (liq <= 0 ? 100 : (previousLiq - liq) / previousLiq * 100) : 0;
   const entry = Number(position.buyPrice);
   const peak = Math.max(Number(position.peakPrice || entry), price);
   const gainPeak = entry > 0 ? (peak / entry - 1) * 100 : 0;
