@@ -71,7 +71,7 @@ test('token PnL concentration is measured against positive net token profits',()
 });
 
 test('rejects a near-instant same/adjacent-slot round trip as sniper-like evidence',()=>{
-  const now=Date.now()/1000,trades=Array.from({length:10},(_,i)=>({mint:'M'+i,pnlSol:0.3,holdMins:20,buyTime:now-1800,sellTime:now-600,buySlot:100,sellSlot:101}));
+  const now=Date.now()/1000,trades=Array.from({length:10},(_,i)=>({mint:'M'+i,pnlSol:0.3,holdMins:0.5,buyTime:now-60,sellTime:now-30,buySlot:100,sellSlot:101}));
   const swaps=Array.from({length:20},(_,i)=>({mint:'mint'+i,side:i%2?'SELL':'BUY',solAmount:0.4,blockTime:now-600,slot:200+i}));
   const result=vetWallet('wallet',trades,swaps);
   assert.ok(result.reasons.includes('same-slot-or-next-slot-roundtrip'));
