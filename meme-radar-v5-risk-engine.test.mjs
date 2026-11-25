@@ -30,3 +30,9 @@ test('state lock serializes concurrent writes',async()=>{
  await Promise.all([lock(async()=>{order.push('a-start');await Promise.resolve();order.push('a-end');}),lock(async()=>{order.push('b');})]);
  assert.deepEqual(order,['a-start','a-end','b']);
 });
+
+test('net live exit quote overrides spot-only PnL for TP/SL decisions',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
+ const risk=evaluatePositionRisk(p,{markPrice:1.5,liquidityUsd:100000,netPnlPctOverride:-20});
+ assert.equal(risk.action,'EXIT_ALL');assert.equal(risk.reason,'STOP_LOSS');
+});
