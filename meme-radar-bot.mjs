@@ -309,13 +309,13 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
     }
     const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
     const acquired=[...buyerAmounts.values()].reduce((sum,x)=>sum+x,0n),pct=Number(acquired*10000n/total)/100;
-    const reject=buyerAmounts.size>=4&&pct>20;
+    const reject=buyerAmounts.size>=4&&pct>15;
     return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >20% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
   }catch(error){return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: '+error.message};}
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
-  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=!!signal&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
+  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=signal?.source==='worker-gated'&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -559,7 +559,7 @@ async function monitorPositions({ discover = false } = {}) {
         const gatePublished=await publishV6Gate(mintForGate,gatePass,gateReasons);
         if(gatePass&&gatePublished)await fetchSmartMoneySignal(mintForGate);
       }
-      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
+      intelligence.smartMoneyConfluence=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')]?.source==='worker-gated';
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
       if (!sec.pass || intelligence.tier !== 'RESEARCH') {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
