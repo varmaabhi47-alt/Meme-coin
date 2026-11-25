@@ -371,20 +371,21 @@ async function monitorPositions() {
   for (let i = portfolio.openPositions.length - 1; i >= 0; i--) {
     const pos = portfolio.openPositions[i];
     const lp = livePosMap.get(pos.pairAddress.toLowerCase());
-    if (!lp || !Number(lp.priceUsd) || !Number(lp.liquidity?.usd)) {
-      pos.dataStale = true;
-      pos.dataStaleReason = 'Pair missing or price/liquidity unavailable; no fabricated exit price used';
-      logDecision('STALE', pos.symbol, pos.chainId, pos.dataStaleReason);
-      continue;
+    const currentLiquidityUsd=Number(lp?.liquidity?.usd||0);
+    const livePrice=Number(lp?.priceUsd||0);
+    if(!lp){
+      pos.emergencyNoLiquidity=true;pos.dataStale=true;pos.dataStaleReason='Live pair disappeared from DexScreener; zero recoverable liquidity assumed, no quote fabricated.';
+      logDecision('LIQUIDITY_EXIT',pos.symbol,pos.chainId,pos.dataStaleReason);
+    }else if(!(livePrice>0)){
+      if(currentLiquidityUsd<=0){pos.emergencyNoLiquidity=true;pos.dataStale=true;pos.dataStaleReason='Live pair has no price and zero liquidity; emergency zero-recovery exit.';}
+      else{pos.dataStale=true;pos.dataStaleReason='Live price unavailable; no fabricated exit price used';logDecision('STALE',pos.symbol,pos.chainId,pos.dataStaleReason);continue;}
+    }else{
+      pos.dataStale=false;pos.dataStaleReason='';pos.lastPrice=livePrice;pos.emergencyNoLiquidity=currentLiquidityUsd<=0;
     }
-    pos.dataStale = false;
-    pos.dataStaleReason = '';
-    pos.lastPrice = Number(lp.priceUsd);
-    const currentLiquidityUsd=Number(lp.liquidity?.usd||0);
-    if (pos.lastPrice > pos.peakPrice) pos.peakPrice = pos.lastPrice;
-    if (CONFIG.TRAIL_ARM_PCT > 0 && ((pos.peakPrice - pos.buyPrice) / pos.buyPrice) * 100 >= CONFIG.TRAIL_ARM_PCT) pos.trailArmed = true;
+    if(pos.lastPrice>pos.peakPrice)pos.peakPrice=pos.lastPrice;
+    if(CONFIG.TRAIL_ARM_PCT>0&&((pos.peakPrice-pos.buyPrice)/pos.buyPrice)*100>=CONFIG.TRAIL_ARM_PCT)pos.trailArmed=true;
 
-    const ex = await calcPaperExit(pos, pos.lastPrice, pos.lastLiquidityUsd || pos.entryLiquidityUsd);
+    const ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await calcPaperExit(pos,pos.lastPrice,currentLiquidityUsd);
     const pnlPct = ((ex.netProceeds - pos.costUsd) / pos.costUsd) * 100;
     const holdHrs = (Date.now() - pos.entryTime) / 3600000;
     const dropPeak = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
@@ -400,7 +401,7 @@ async function monitorPositions() {
       await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,entryQuoteFallback:!!pos.entryQuoteFallback,exitReason:'PARTIAL_TP_40'});
       logDecision('PARTIAL_SELL',pos.symbol,pos.chainId,'50% sold at +40% net; runner stop +2% net');await sendTelegram(`PARTIAL TP ${pos.symbol}: sold half; realized $${realized.toFixed(2)}; remaining ${pos.remainingTokens.toFixed(4)}`);
     }else if(risk.action==='EXIT_ALL'){
-      const qty=Number(pos.remainingTokens??pos.tokens),ex=await calcPaperExit({...pos,tokens:qty,remainingTokens:qty},pos.lastPrice,currentLiquidityUsd),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
+      const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await calcPaperExit({...pos,tokens:qty,remainingTokens:qty},pos.lastPrice,currentLiquidityUsd),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
       portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
       portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else consecutiveRiskExits=0;portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(`AUTO-SELL [${risk.reason}] ${pos.symbol}: net $${pnl.toFixed(2)} incl partials; fallback ${!!ex.quoteFallback}`);
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
