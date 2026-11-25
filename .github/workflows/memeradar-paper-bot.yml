@@ -15,7 +15,7 @@ concurrency:
 jobs:
   paper-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - name: Check out latest portfolio state
         uses: actions/checkout@v4
@@ -27,8 +27,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Check bot JavaScript syntax
-        run: node --check meme-radar-bot.mjs
+      - name: Check bot, modules and Worker syntax
+        run: npm run check
 
       - name: Run v5 intelligence unit tests
         run: node --test meme-radar-v5-*.test.mjs
