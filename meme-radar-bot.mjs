@@ -360,6 +360,17 @@ async function auditSecurity(pair) {
 
 async function syncPortfolioToCloudflare(){const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret){console.error('D1 sync skipped: missing secret');return false;}try{const headers={'Authorization':`Bearer ${secret}`,'Content-Type':'application/json'};const read=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{headers,cache:'no-store'});if(!read.ok)throw Error('D1 read HTTP '+read.status);const current=await read.json();d1Version=Number(current.version??d1Version);const response=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{method:'POST',headers,body:JSON.stringify({portfolio,version:d1Version})});const result=await response.json().catch(()=>({}));if(!response.ok||result.success===false){if(response.status===409)d1Version=Number(result.version||d1Version);throw Error(result.error||'D1 write HTTP '+response.status);}d1Version=Number(result.version??d1Version+1);console.log('D1 sync OK version '+d1Version);return true;}catch(e){console.error('D1 sync failed: '+e.message);process.exitCode=1;return false;}}
 
+async function fetchSmartMoneySignal(mint) {
+  if(portfolio.smartMoneySignals?.[mint])return true;
+  const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
+  try{
+    const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
+    const result=await fetchJsonStrict(url,7000,{Authorization:'Bearer '+secret});
+    if(result.signal==='SMART_MONEY_CONFLUENCE'){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:result.signal,wallets:Number(result.wallets||2),latest:result.latest};return true;}
+    return false;
+  }catch(error){console.warn('Smart-money D1 query unavailable; no confluence applied: '+error.message);return false;}
+}
+
 async function monitorResearchSnapshots(){
  const tracked=Object.values(portfolio.researchTracked||{});if(!tracked.length)return;
  const targets=[5,15,30,60,240],now=Date.now();
