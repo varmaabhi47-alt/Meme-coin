@@ -14,7 +14,7 @@ function mockDb(){
    if(sql.startsWith('UPDATE portfolio_state')){const [payload,updated,id,version,updatedAt]=args;if(row.version===version&&row.updated_at===updatedAt){row={...row,payload,updated_at:updated,version:version+1};return{meta:{changes:1}};}return{meta:{changes:0}};}
    if(sql.startsWith('INSERT OR IGNORE INTO smart_wallet_buys')){const key=args.join('|');const before=buys.size;buys.add(key);return{meta:{changes:buys.size>before?1:0}};}
    return{meta:{changes:1}};
-  },async all(){if(sql.includes('FROM curated_smart_wallets WHERE status=\\'ACTIVE\\''))return{results:[{address:'WALLET_A',median_buy_sol:0.5,correlation_group:'group-a'}]};return{results:[]};}};}};
+  },async all(){if(sql.includes("FROM curated_smart_wallets WHERE status='ACTIVE'"))return{results:[{address:'WALLET_A',median_buy_sol:0.5,correlation_group:'group-a'}]};return{results:[]};}};}};
 }
 
 test('Worker GET /state requires bearer auth and POST checks version plus updated_at',async()=>{
