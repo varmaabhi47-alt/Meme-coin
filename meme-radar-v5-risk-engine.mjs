@@ -60,14 +60,13 @@ export function evaluatePositionRisk(position, options = {}) {
   return { action: 'HOLD', netPct, peakPrice: peak, dropEntryPct: dropEntry, dropCheckPct: dropCheck };
 }
 
-export function calculatePositionSize({ equityUsd, poolLiquidityUsd, score, cashUsd }) {
+export function calculatePositionSize({ equityUsd, poolLiquidityUsd, score, cashUsd, tier = 'RESEARCH', smartMoneyConfluence = false }) {
   const equity = Number(equityUsd), liquidity = Number(poolLiquidityUsd), cash = Number(cashUsd);
   if (!(equity > 0 && liquidity > 0 && cash > 0)) return 0;
+  if (String(tier).toUpperCase() !== 'RESEARCH') return 0;
   const base = equity * 0.05;
-  const smartMoney = arguments[0]?.smartMoneyConfluence === true;
-  const tier = String(arguments[0]?.tier || 'RESEARCH').toUpperCase();
-  const tierMultiplier = tier === 'RESEARCH' ? (smartMoney ? 1 : 0.75) : 0;
-  return Math.max(0, Math.min(base * tierMultiplier, liquidity * 0.003, cash));
+  const conviction = smartMoneyConfluence === true ? 1 : 0.75;
+  return Math.max(0, Math.min(base * conviction, liquidity * 0.003, cash));
 }
 
 export function checkCircuitBreakers({ realizedUnrealizedPnlUsd, dailyStartingEquityUsd, now = Date.now(), breaker = {}, consecutiveRiskExits = 0 }) {
