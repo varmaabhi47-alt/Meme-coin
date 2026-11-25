@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check meme-radar-bot.mjs && node --check meme-radar-v5-intelligence.mjs && node --check meme-radar-v5-risk-engine.mjs && node --check meme-radar-v5-backtest.mjs && node --check memeradar-state-api/worker.js && node --check path2-runtime.mjs && node --check execution-adapter.mjs && node --check smart-wallet-curator.mjs && node --check sync-helius-webhook.mjs && node check-inline-html.mjs",
+    "check": "node --check meme-radar-bot.mjs && node --check meme-radar-v5-intelligence.mjs && node --check meme-radar-v5-risk-engine.mjs && node --check meme-radar-v5-backtest.mjs && node --check memeradar-state-api/worker.js && node --check path2-runtime.mjs && node --check execution-adapter.mjs && node --check smart-wallet-curator.mjs && node --check curator-outcomes.mjs && node --check attribute-curator-outcomes.mjs && node --check sync-helius-webhook.mjs && node check-inline-html.mjs",
     "test": "node --test *.test.mjs memeradar-state-api/*.test.mjs",
     "dry-run": "node meme-radar-bot.mjs --dry-run",
     "persistent": "RUN_MODE=persistent node meme-radar-bot.mjs",
@@ -12,7 +12,9 @@
     "curate-wallets": "node smart-wallet-curator.mjs",
     "sync-wallet-webhook": "node sync-helius-webhook.mjs",
     "curator-dry-run": "node smart-wallet-curator.mjs --dry-run",
-    "curator-self-test": "node --test smart-wallet-curator.test.mjs && node smart-wallet-curator.mjs --dry-run"
+    "curator-self-test": "node --test smart-wallet-curator.test.mjs && node smart-wallet-curator.mjs --dry-run",
+    "attribute-wallet-outcomes": "node attribute-curator-outcomes.mjs",
+    "attribute-wallet-outcomes-dry-run": "node attribute-curator-outcomes.mjs --dry-run"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4"
