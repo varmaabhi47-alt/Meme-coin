@@ -42,6 +42,26 @@ jobs:
       - name: Run v5 intelligence unit tests
         run: node --test meme-radar-v5-*.test.mjs
 
+      - name: Require authenticated D1 state before bot run
+        env:
+          MEMERADAR_SYNC_SECRET: ${{ secrets.MEMERADAR_SYNC_SECRET }}
+        run: |
+          node --input-type=module <<'NODE'
+          const secret = process.env.MEMERADAR_SYNC_SECRET;
+          if (!secret) throw new Error('MEMERADAR_SYNC_SECRET is missing in GitHub Actions repository secrets.');
+          const response = await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state', {
+            headers: { Authorization: 'Bearer ' + secret, 'Cache-Control': 'no-store' }
+          });
+          if (!response.ok) throw new Error('Authenticated D1 state check failed: HTTP ' + response.status);
+          const data = await response.json();
+          if (!data.portfolio || !Number.isSafeInteger(Number(data.version))) {
+            throw new Error('D1 state row/version missing or invalid; refusing to run against local fallback.');
+          }
+          console.log('Authenticated D1 state OK | version ' + Number(data.version) +
+            ' | open positions ' + (Array.isArray(data.portfolio.openPositions) ? data.portfolio.openPositions.length : 'invalid') +
+            ' | closed trades ' + (Array.isArray(data.portfolio.closedTrades) ? data.portfolio.closedTrades.length : 'invalid'));
+          NODE
+
       - name: Versioned D1 sync check after source update
         if: github.event_name == 'push' && vars.MEMERADAR_D1_SYNC_ENABLED == 'true'
         env:
