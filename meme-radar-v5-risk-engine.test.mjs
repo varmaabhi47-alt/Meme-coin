@@ -50,3 +50,12 @@ test('smart-money uses five-percent base; standard research 0.75x and 0.30% pool
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'RESEARCH',smartMoneyConfluence:true}),50);
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'WATCH'}),0);
 });
+
+test('Path 2 runner trail widens to 22% above +100% peak gain',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:5,costUsd:10,remainingCostUsd:5,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:2.1,partialTpDone:true};
+ const hold=evaluatePositionRisk(p,{markPrice:1.65,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:30});
+ assert.equal(hold.action,'HOLD');
+ const exit=evaluatePositionRisk(p,{markPrice:1.63,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:30});
+ assert.equal(exit.action,'EXIT_ALL');
+ assert.equal(exit.trailDropPct,22);
+});
