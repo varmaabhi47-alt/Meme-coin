@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
@@ -19,9 +19,15 @@ const DAY=86400, LOOKBACK=30*DAY;
 const MAX_RPS=Math.min(6,Math.max(1,Number(process.env.RPC_MAX_RPS||6)));
 const MONTHLY_LIMIT=1_000_000;
 const DEX_PROGRAMS=new Set([
- 'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB','JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
- '675kPX9MHTjS2zt1qfr1NYHuzefG8uW1vZ8wzY5zYz','whirLbMiicVdio4qvUfM5KAg6Ct3V7x5k3h4n9v2',
- 'CPMMoo8L3F4NbTegBCKVN5p9P7qj9V7fJ8W5b8p','6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
+ 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+ 'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB',
+ '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+ 'CPMMoo8L3F4NbTegBCKVN5p9P7qj9V7fJ8W5b8p',
+ 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+ 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+ 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+ '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+ 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
 ]);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const iso=ms=>new Date(ms).toISOString();
@@ -147,7 +153,7 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   if(profitableMints.size<5)reasons.push('less-than-5-profitable-tokens');
   if(largest>0.6)reasons.push('single-token-pnl-concentration');
   if(medianHold===null||medianHold<10)reasons.push('median-hold-under-10m');
-  if(swaps.some((s,i)=>i&&s.mint===swaps[i-1].mint&&s.blockTime-swaps[i-1].blockTime<60&&s.side!==swaps[i-1].side))reasons.push('wash-loop-under-1m');
+  if(swaps.some((s,i)=>swaps.slice(0,i).some(p=>p.mint===s.mint&&p.side!==s.side&&(p.slot===s.slot||(s.blockTime-p.blockTime)>=0&&(s.blockTime-p.blockTime)<60))))reasons.push('wash-loop-under-1m-or-same-slot');
   if(trades.length<10)reasons.push('less-than-10-closed-trades');
   if(medianBuy===null||medianBuy<0.25)reasons.push('median-buy-under-0.25-sol');
   if(winRate===null||winRate<45)reasons.push('win-rate-under-45pct');
@@ -206,5 +212,5 @@ async function main(){
   curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.wallets=curated.wallets.slice(0,50);curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
-if(import.meta.url===`file://${process.argv[1]}`)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
+if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
 export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,decodeSwap,analyzeTrades,vetWallet,validAddress};
