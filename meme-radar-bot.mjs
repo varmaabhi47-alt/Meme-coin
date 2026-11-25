@@ -243,7 +243,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     const holderDistribution = {
       ...calculateTopHolderConcentration(accountsWithOwners, supply?.value?.amount, [pairAddress]),
       decimals: supply?.value?.decimals ?? null,
-      source: 'Solana public RPC'
+      source: 'Solana RPC', totalSupplyRaw: String(supply?.value?.amount || '0')
     };
     let priorRows = [];
     try {
@@ -265,6 +265,34 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
   } catch (error) {
     const value = { holderDistribution: { known: false, reason: error.message, source: 'Solana RPC' }, creatorSignals: { known: false, warnings: [], reason: error.message } }; holderAuditCache.set(tokenAddress, { ts: Date.now(), value }); return value;
   }
+}
+
+
+async function checkLaunchBundle(pair, totalSupplyRaw) {
+  try {
+    const endpoint=process.env.SOLANA_RPC_HTTP;
+    if(!endpoint)throw new Error('SOLANA_RPC_HTTP required for bundle evidence');
+    const signatures=await rpcGuard.rpc(endpoint,'getSignaturesForAddress',[pair.pairAddress,{limit:25,commitment:'confirmed'}],{credits:1,cacheKey:'bundle-sigs:'+pair.pairAddress});
+    if(!Array.isArray(signatures)||!signatures.length)throw new Error('pool signatures unavailable');
+    const creationSlot=Math.min(...signatures.map(x=>Number(x.slot)).filter(Number.isFinite));
+    if(!Number.isFinite(creationSlot))throw new Error('pool creation slot unavailable');
+    const sameSlot=signatures.filter(x=>Number(x.slot)===creationSlot&&x.signature);
+    if(!sameSlot.length)return {pass:true,reason:'No same-slot launch bundle evidence'};
+    const requests=sameSlot.map((x,i)=>({jsonrpc:'2.0',id:i+1,method:'getTransaction',params:[x.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]}));
+    const txs=await rpcGuard.batch(endpoint,requests,{credits:requests.length});
+    const buyerAmounts=new Map();
+    for(const tx of txs){
+      if(!tx||Number(tx.slot)!==creationSlot)continue;
+      const pre=new Map((tx.meta?.preTokenBalances||[]).filter(x=>x.mint===pair.address&&x.owner).map(x=>[x.owner,BigInt(x.uiTokenAmount?.amount||'0')]));
+      const post=new Map((tx.meta?.postTokenBalances||[]).filter(x=>x.mint===pair.address&&x.owner).map(x=>[x.owner,BigInt(x.uiTokenAmount?.amount||'0')]));
+      for(const [owner,amount] of post){const delta=amount-(pre.get(owner)||0n);if(delta>0n)buyerAmounts.set(owner,(buyerAmounts.get(owner)||0n)+delta);}
+    }
+    const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
+    const acquired=[...buyerAmounts.values()].reduce((s,x)=>s+x,0n);
+    const pct=Number(acquired*10000n/total)/100;
+    const reject=buyerAmounts.size>=4&&pct>20;
+    return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >20% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
+  }catch(error){return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: '+error.message};}
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
@@ -449,6 +477,10 @@ async function monitorPositions({ discover = false } = {}) {
       portfolio.lastLiquidityByPair = portfolio.lastLiquidityByPair || {};
       const priorLiq = Number(portfolio.lastLiquidityByPair[key] || 0);
       if (priorLiq > 0) p.previousLiquidityUsd = priorLiq;
+      portfolio.firstLiquidityByPair = portfolio.firstLiquidityByPair || {};
+      if (!(Number(portfolio.firstLiquidityByPair[key]) > 0) && liq > 0) portfolio.firstLiquidityByPair[key] = liq;
+      const firstLiq = Number(portfolio.firstLiquidityByPair[key] || liq);
+      if (firstLiq > 0 && liq < firstLiq * 0.95) { await recordResearch(p,{pass:false,checked:false,reason:'Liquidity declined >5% from first observed snapshot'},{score:null,tier:'REJECT',components:{},metrics:{firstLiquidityUsd:firstLiq,currentLiquidityUsd:liq},reasons:['liquidity decay >5%']},'REJECT'); logDecision('REJECT',p.baseToken.symbol,p.chainId,'liquidity decay >5% since first observed'); continue; }
       portfolio.lastLiquidityByPair[key] = liq;
       const prefilter = evaluateDiscoveryPrefilter(p, CONFIG);
       if (!prefilter.pass) {
@@ -473,6 +505,10 @@ async function monitorPositions({ discover = false } = {}) {
         logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
+      }
+      if(pairObj.chainId==='solana'){
+        const bundle=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
+        if(!bundle.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundle.reason);logDecision('REJECT',p.baseToken.symbol,'solana',bundle.reason);await recordResearch(p,sec,intelligence,'REJECT',holders);continue;}
       }
 
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
