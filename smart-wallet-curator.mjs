@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { analyzeFundingLinks } from './funding-link-detection.mjs';
 import { summarizeWalletOutcomes } from './curator-outcomes.mjs';
 import { reconstructSolSwap } from './swap-reconstruction.mjs';
+import { selectWinningResearchMints } from './research-mint-source.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
@@ -233,9 +234,13 @@ async function vetCandidate(c,{fundingSource=null,fundingLinked=false}={}){
   return {...result,candidate:c,swaps,trades,fundingSource};
 }
 async function sourceResearchMints(file){
-  const txt=await fs.readFile(file,'utf8'),mints=new Set();
-  for(const line of txt.split(/\r?\n/)){try{const r=JSON.parse(line);if(r.chainId==='solana'&&r.token&&Number(r.paperLearning?.totalPnlUsd)>0&&Number(r.paperLearning?.sampleSize)>=5)mints.add(r.token);}catch{}}
-  return [...mints];
+  const txt=await fs.readFile(file,'utf8'),rows=[];
+  for(const line of txt.split(/\r?\n/)){if(!line.trim())continue;try{rows.push(JSON.parse(line));}catch{}}
+  const portfolio=await readJson(path.join(ROOT,'paper_portfolio.json'),{closedTrades:[]});
+  const closed=Array.isArray(portfolio.closedTrades)?portfolio.closedTrades:[];
+  const mints=selectWinningResearchMints(rows,closed,{minSamples:5});
+  if(!mints.length)console.error('[curator] Research source found no mint with passing security, a listed pair, and >=5 individually profitable closed paper trades; no aggregate portfolio PnL was used.');
+  return mints;
 }
 async function pruneWallets(){
   const j=await readJson(WALLETS,{version:1,wallets:[]}),outcomeLines=(await fs.readFile(path.join(ROOT,'paper_wallet_outcomes.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean),outcomeRows=[];
