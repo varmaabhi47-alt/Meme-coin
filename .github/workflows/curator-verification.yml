@@ -29,3 +29,5 @@ jobs:
         run: npm test
       - name: Curator no-RPC dry run
         run: npm run curator-dry-run
+      - name: Outcome attribution dry run
+        run: npm run attribute-wallet-outcomes-dry-run
