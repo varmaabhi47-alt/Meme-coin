@@ -28,13 +28,23 @@ test('Sender refuses non-Helius or non-HTTPS endpoints before transmitting signe
   assert.equal(calls, 0);
 });
 
-test('live adapter rejects builder boolean claims without a compiled readonly account', async () => {
+test('live adapter refuses orders without a real Jupiter V2 request id', async () => {
   const adapter = new SolanaLiveExecutionAdapter({
     enabled: true, confirmationKey: 'confirm', signer: { signTransaction: async tx => tx },
-    buildJupiterSwap: async () => ({ transaction: { message: { staticAccountKeys: [key('payer')] } }, dynamicSlippageApplied: true, jitodontfrontReadOnly: true }),
-    sendViaHeliusSender: async () => 'sig', telegramChatId: 'authorized'
+    jupiterSwap: { swap: async () => { throw new Error('incomplete order'); } }, telegramChatId: 'authorized'
   });
   process.env.LIVE_TRADING = 'true';
-  await assert.rejects(adapter.buy({ amountSol: 0.01 }, { chatId: 'authorized' }), /compiled message/);
+  await assert.rejects(adapter.buy({ amountSol: 0.01, mint: 'So11111111111111111111111111111111111111112', decimals: 9 }, { chatId: 'authorized' }), /incomplete order/);
   delete process.env.LIVE_TRADING;
+});
+
+test('live /kill latches the adapter and awaits its flatten callback', async () => {
+  const adapter = new SolanaLiveExecutionAdapter({ enabled: false, confirmationKey: '', telegramChatId: 'authorized' });
+  let flattened = 0;
+  const result = await adapter.handleTelegramCommand('/kill', 'authorized', { flattenOpenPositions: async () => { flattened++; return { flattened: 2, failed: 1 }; } });
+  assert.equal(adapter.killed, true);
+  assert.equal(flattened, 1);
+  assert.deepEqual(result, { authorized: true, flattened: 2, failed: 1 });
+  const denied = await adapter.handleTelegramCommand('/kill', 'other', { flattenOpenPositions: async () => { throw new Error('must not run'); } });
+  assert.equal(denied.authorized, false);
 });
