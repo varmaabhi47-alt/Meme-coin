@@ -86,7 +86,7 @@ export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
     const key = String(mint); const rows = (buys.get(key) || []).filter(x => at - x.at <= windowMs && x.wallet !== wallet);
     rows.push({ wallet: String(wallet), at }); buys.set(key, rows);
     const distinct = [...new Set(rows.map(x => x.wallet))];
-    return distinct.length >= 2 ? { signal: 'SMART_MONEY_CONFLUENCE', mint: key, wallets: distinct.length, windowMinutes: 15, at } : null;
+    return distinct.length >= 2 ? { signal: 'SMART_MONEY_CONFLUENCE', mint: key, wallets: distinct.length, walletAddresses: distinct, windowMinutes: 15, at } : null;
   };
 }
 
