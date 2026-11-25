@@ -6,7 +6,7 @@ test('smart-money confluence requires two distinct wallets within 15 minutes',()
  const signal=createSmartMoneyConfluence();
  assert.equal(signal('A','M',1000),null);
  assert.equal(signal('A','M',2000),null);
- assert.equal(signal('B','M',3000).signal,'SMART_MONEY_CONFLUENCE');
+ const confirmed=signal('B','M',3000);assert.equal(confirmed.signal,'SMART_MONEY_CONFLUENCE');assert.deepEqual(confirmed.walletAddresses,['A','B']);
  assert.equal(signal('C','N',4000),null);
 });
 test('edge gate stays false below 100 closed trades',()=>{
@@ -50,4 +50,12 @@ test('standard WebSocket listener triggers only migration and configured pool-in
  socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:101,result:{context:{slot:2},value:{signature:'sig2b',err:null,logs:['Program log: Trade Migrate']}}}})});
  socket.emit('message',{data:JSON.stringify({method:'logsNotification',params:{subscription:102,result:{context:{slot:3},value:{signature:'sig3',err:null,logs:['Program log: Initialize Pool']}}}})});
  assert.equal(mints.length,2);assert.equal(mints[0].trigger,'pump-migration');assert.equal(mints[1].trigger,'raydium-pool-init');listener.stop();
+});
+
+test('RPC audit cache reuses a successful mint audit for 15 minutes',async()=>{
+ let calls=0;
+ const guard=new RpcCreditGuard({stateFile:'/tmp/path2-rpc-cache-test.json',fetchImpl:async()=>{calls++;return {status:200,ok:true,json:async()=>({result:{observed:true}})};}});
+ const first=await guard.rpc('https://rpc.invalid','getTokenSupply',['M'],{credits:1,cacheKey:'audit:M'});
+ const second=await guard.rpc('https://rpc.invalid','getTokenSupply',['M'],{credits:1,cacheKey:'audit:M'});
+ assert.deepEqual(first,{observed:true});assert.deepEqual(second,{observed:true});assert.equal(calls,1);assert.equal(guard.telemetry().estimatedCredits,1);
 });
