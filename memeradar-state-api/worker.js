@@ -44,6 +44,42 @@ export default {
       };
       return json({ok:true,portfolio,version:Number(row.version||0),updated_at:row.updated_at},200,request);
     }
+    if(url.pathname==="/webhook/helius"&&request.method==="POST"){
+      const secret=String(env.HELIUS_WEBHOOK_SECRET||"");
+      if(!secret)return json({error:"webhook_secret_not_configured"},503,request);
+      const raw=await request.text();
+      const supplied=request.headers.get("X-Helius-Signature")||"";
+      const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+      const digest=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(raw)));
+      const expected=[...digest].map(b=>b.toString(16).padStart(2,"0")).join("");
+      if(supplied.length!==expected.length||!crypto.subtle.timingSafeEqual) {
+        // Workers WebCrypto lacks timingSafeEqual; compare fixed-length bytes without early exit.
+        if(supplied.length!==expected.length)return json({error:"invalid_signature"},401,request);
+      }
+      let diff=0;for(let i=0;i<expected.length;i++)diff|=expected.charCodeAt(i)^supplied.charCodeAt(i);
+      if(diff!==0)return json({error:"invalid_signature"},401,request);
+      let events;try{events=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,request);}
+      if(!Array.isArray(events))events=[events];
+      const allow=new Set(String(env.SMART_WALLETS||"").split(",").map(x=>x.trim()).filter(Boolean));
+      if(!allow.size)return json({error:"smart_wallet_allowlist_empty"},400,request);
+      let stored=0;
+      for(const event of events){
+        if(String(event?.type||"").toUpperCase()!=="SWAP")continue;
+        const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[];
+        const walletBuy=transfers.filter(t=>allow.has(String(t.toUserAccount||""))&&t.mint&&Number(t.tokenAmount||0)>0);
+        for(const transfer of walletBuy){
+          const wallet=String(transfer.toUserAccount),mint=String(transfer.mint),signature=String(event.signature||"");
+          if(!signature||!mint)continue;
+          const timestamp=Number(event.timestamp||Date.now()/1000)*1000;
+          await env.DB.prepare("INSERT OR IGNORE INTO smart_wallet_buys(wallet,mint,signature,slot,occurred_at) VALUES(?,?,?,?,?)")
+            .bind(wallet,mint,signature,Number(event.slot||0),Math.floor(timestamp)).run();
+          stored++;
+        }
+      }
+      const recent=await env.DB.prepare("SELECT mint,COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE occurred_at>=? GROUP BY mint HAVING COUNT(DISTINCT wallet)>=2")
+        .bind(Date.now()-15*60*1000).all();
+      return json({ok:true,stored,confluence:(recent.results||[]).map(x=>({signal:"SMART_MONEY_CONFLUENCE",mint:x.mint,wallets:Number(x.wallets),latest:Number(x.latest)}))},200,request);
+    }
     if(url.pathname!=="/state")return json({error:"not_found"},404);
     if(!authorized(request,env))return json({error:"unauthorized"},401);
     if(request.method==="GET"){
