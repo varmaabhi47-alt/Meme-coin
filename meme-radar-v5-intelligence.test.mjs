@@ -132,7 +132,7 @@ test('discovery prefilter explains every failed cheap gate', () => {
 });
 
 test('discovery prefilter passes a candidate meeting configured thresholds', () => {
-  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, pairCreatedAt: Date.now() - 3600000, priceChange: { m5: 3, h1: 10 }, txns: { m5: { buys: 60, sells: 40 }, h1: { sells: 20 }, h24: { buys: 70, sells: 30 } } });
+  const result = evaluateDiscoveryPrefilter({ liquidity: { usd: 100000 }, fdv: 1000000, volume: { h24: 100000 }, pairCreatedAt: Date.now() - 3600000, priceChange: { m5: 3, h1: 10 }, txns: { m5: { buys: 60, sells: 40 }, h1: { buys: 30, sells: 20 }, h24: { buys: 70, sells: 30 } } }, { PREVIOUS_LIQUIDITY_USD: 100000, REQUIRE_LIQUIDITY_STABILITY: true });
   assert.equal(result.pass, true);
   assert.deepEqual(result.reasons, []);
 });
@@ -200,4 +200,14 @@ test('Solana hard security gates reject active authorities, concentration, overl
  });
  assert.equal(result.pass,false);
  assert.ok(result.reasons.length>=5);
+});
+
+test('discovery prefilter fails closed on 5m buy pressure, spikes and liquidity decay',()=>{
+ const base={liquidity:{usd:100000},fdv:1000000,volume:{h24:100000},pairCreatedAt:Date.now()-3600000,priceChange:{m5:3,h1:10},txns:{m5:{buys:55,sells:45},h1:{buys:60,sells:40},h24:{buys:70,sells:30}}};
+ const weak=evaluateDiscoveryPrefilter({...base,txns:{...base.txns,m5:{buys:50,sells:50}}},{PREVIOUS_LIQUIDITY_USD:100000,REQUIRE_LIQUIDITY_STABILITY:true});
+ assert.ok(weak.reasons.includes('5m buy ratio below minimum'));
+ const spike=evaluateDiscoveryPrefilter({...base,priceChange:{m5:36,h1:10}},{PREVIOUS_LIQUIDITY_USD:100000,REQUIRE_LIQUIDITY_STABILITY:true});
+ assert.ok(spike.reasons.includes('5m price spike exceeds maximum'));
+ const decay=evaluateDiscoveryPrefilter({...base,liquidity:{usd:94000}},{PREVIOUS_LIQUIDITY_USD:100000,REQUIRE_LIQUIDITY_STABILITY:true});
+ assert.ok(decay.reasons.includes('liquidity fell more than 5% from previous observation'));
 });
