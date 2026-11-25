@@ -941,7 +941,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     const savedCfg = { ...DEFAULT_CONFIG, ...loadJson(STORE_KEYS.CONFIG, {}) };
-    const savedPort = loadJson(STORE_KEYS.STATE, null);
+    const savedPort = null; // Portfolio is authoritative in Cloudflare D1; browser storage is never a portfolio source.
 
     const state = {
       activeTab: 'radar',
@@ -958,13 +958,13 @@ node meme-radar-autobot-24-7.mjs
       securityCache: new Map(), // key: "chain:addr" -> { ts, pass, reason, summary, provider }
 
       // Auto-Trader & Portfolio (Persisted)
-      autoTradeEnabled: savedPort?.autoTradeEnabled ?? false,
+      autoTradeEnabled: false,
       config: savedCfg,
-      cashUsd: savedPort?.cashUsd ?? savedCfg.startingBankroll,
-      openPositions: Array.isArray(savedPort?.openPositions) ? savedPort.openPositions : [],
-      closedTrades: Array.isArray(savedPort?.closedTrades) ? savedPort.closedTrades : [],
-      cooldowns: savedPort?.cooldowns || {}, // pairId -> soldTimestampMs
-      decisionLog: Array.isArray(savedPort?.decisionLog) ? savedPort.decisionLog : [],
+      cashUsd: 0,
+      openPositions: [],
+      closedTrades: [],
+      cooldowns: {}, // hydrated only from authoritative D1
+      decisionLog: [],
 
       // Polling & Health
       sessionStartMs: Date.now(),
@@ -1163,14 +1163,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     function persistPortfolio() {
-      saveJson(STORE_KEYS.STATE, {
-        autoTradeEnabled: state.autoTradeEnabled,
-        cashUsd: state.cashUsd,
-        openPositions: state.openPositions,
-        closedTrades: state.closedTrades,
-        cooldowns: state.cooldowns,
-        decisionLog: state.decisionLog.slice(0, 150)
-      });
+      // Intentionally disabled: this dashboard never writes a local paper portfolio.
     }
 
     function persistConfig() {
@@ -1178,7 +1171,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     // Shared portfolio sync: Cloudflare D1 is the central source of truth.
-    const PORTFOLIO_API_URL = 'https://memeradar-state-api.varmaabhi47.workers.dev/state';
+    const PORTFOLIO_API_URL = 'https://memeradar-state-api.varmaabhi47.workers.dev/public-state';
     let remotePortfolioUpdatedAt = '';
     let portfolioSyncStatus = 'WAITING FOR TELEGRAM PORTFOLIO';
     let portfolioSyncStatusClass = 'text-cyan-300';
@@ -1218,10 +1211,19 @@ node meme-radar-autobot-24-7.mjs
         addTelemetry('OK', 'D1', 0, 0, 'portfolio-sync', 'Shared portfolio loaded from Cloudflare D1.');
         return true;
       } catch (err) {
-        portfolioSyncStatus = `SYNC FAILED • LOCAL DATA SHOWN • ${err.message}`;
+        state.cashUsd = 0;
+        state.openPositions = [];
+        state.closedTrades = [];
+        state.cooldowns = {};
+        state.decisionLog = [];
+        state.positionsStale = true;
+        state.positionsStaleReason = 'Authoritative Worker/D1 state unavailable; local portfolio is disabled.';
+        portfolioSyncStatus = `SYNC FAILED • NO LOCAL FALLBACK • ${err.message}`;
         portfolioSyncStatusClass = 'text-rose-300';
         window.renderPortfolioSyncStatus();
-        addTelemetry('WARN', 'D1', 0, 0, 'portfolio-sync', `Cloud sync unavailable; using this device's saved portfolio. ${err.message}`);
+        addTelemetry('ERROR', 'D1', 0, 0, 'portfolio-sync', `Authoritative state unavailable; local portfolio disabled. ${err.message}`);
+        renderAutoTraderView();
+        renderLedger();
         return false;
       }
     }
@@ -2913,31 +2915,8 @@ main();
     }
 
     function handleImportBotJson(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const raw = JSON.parse(String(reader.result));
-          const data = raw.portfolio ? raw.portfolio : raw;
-          if (typeof data.cashUsd !== 'number' || !Array.isArray(data.closedTrades)) {
-            throw new Error('JSON does not match paper_portfolio.json format');
-          }
-          state.cashUsd = data.cashUsd;
-          state.openPositions = Array.isArray(data.openPositions) ? data.openPositions : [];
-          state.closedTrades = data.closedTrades;
-          state.cooldowns = data.cooldowns || {};
-          state.decisionLog = Array.isArray(data.decisionLog) ? data.decisionLog : state.decisionLog;
-          persistPortfolio();
-          renderAutoTraderView();
-          renderLedger();
-          showToast(`Imported ${state.openPositions.length} open & ${state.closedTrades.length} closed trades!`, 'success');
-        } catch (err) {
-          showToast(`Import failed: ${err.message}`, 'error');
-        }
-        event.target.value = '';
-      };
-      reader.readAsText(file);
+      if (event?.target) event.target.value = '';
+      showToast('Import disabled: the bot/D1 portfolio is authoritative.', 'info');
     }
 
     function exportLedgerCsv() {
@@ -3215,7 +3194,7 @@ main();
         default: return { label: String(c).toUpperCase(), cls: 'bg-slate-800 text-slate-300 border-slate-700' };
       }
     }
-    function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function esc(s) { return escapeHtml(String(s ?? '').replace(/[\\u0000-\\u001f\\u007f]/g, '')); }
 
     /*************************************************************************
      * 10. MASTER 1-SECOND HEARTBEAT & BOOT
