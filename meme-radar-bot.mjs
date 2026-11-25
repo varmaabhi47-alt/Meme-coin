@@ -274,11 +274,17 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
     const endpoint=process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com';
     const signatures=await rpcGuard.rpc(endpoint,'getSignaturesForAddress',[pair.pairAddress,{limit:25,commitment:'confirmed'}],{credits:1,cacheKey:'bundle-sigs:'+pair.pairAddress});
     if(!Array.isArray(signatures)||!signatures.length)throw new Error('pool signatures unavailable');
-    const requests=signatures.filter(x=>x.signature).map((x,i)=>({jsonrpc:'2.0',id:i+1,method:'getTransaction',params:[x.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]}));
-    const txs=await rpcGuard.batch(endpoint,requests,{credits:requests.length});
-    const creation=txs.find(tx=>(tx?.meta?.logMessages||[]).some(line=>/initialize.*pool|init.*pool|create.*pool|migrat/i.test(line)));
-    if(!creation||!Number.isFinite(Number(creation.slot)))throw new Error('pool creation transaction not found within latest 25 signatures');
-    const creationSlot=Number(creation.slot),buyerAmounts=new Map();
+    const oldest=signatures[signatures.length-1];
+    if(!oldest?.signature)throw new Error('oldest pool signature unavailable');
+    const creation=await rpcGuard.rpc(endpoint,'getTransaction',[oldest.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1,cacheKey:'bundle-create-tx:'+oldest.signature});
+    const creationLogs=creation?.meta?.logMessages||[];
+    if(!creation||!creationLogs.some(line=>/initialize.*pool|init.*pool|create.*pool|migrat/i.test(line)))return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: pool creation not found in latest 25 signatures'};
+    const creationSlot=Number(creation.slot);
+    const sameSlot=signatures.filter(x=>Number(x.slot)===creationSlot&&x.signature&&x.signature!==oldest.signature);
+    const requests=sameSlot.map((x,i)=>({jsonrpc:'2.0',id:i+1,method:'getTransaction',params:[x.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]}));
+    const txs=requests.length?await rpcGuard.batch(endpoint,requests,{credits:requests.length}):[];
+    txs.push(creation);
+    const buyerAmounts=new Map();
     for(const tx of txs){
       if(!tx||Number(tx.slot)!==creationSlot)continue;
       const pre=new Map((tx.meta?.preTokenBalances||[]).filter(x=>x.mint===pair.address&&x.owner).map(x=>[x.owner,BigInt(x.uiTokenAmount?.amount||'0')]));
@@ -286,7 +292,7 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
       for(const [owner,amount] of post){const delta=amount-(pre.get(owner)||0n);if(delta>0n)buyerAmounts.set(owner,(buyerAmounts.get(owner)||0n)+delta);}
     }
     const total=BigInt(String(totalSupplyRaw||'0'));if(total<=0n)throw new Error('mint supply unavailable for bundle ratio');
-    const acquired=[...buyerAmounts.values()].reduce((s,x)=>s+x,0n),pct=Number(acquired*10000n/total)/100;
+    const acquired=[...buyerAmounts.values()].reduce((sum,x)=>sum+x,0n),pct=Number(acquired*10000n/total)/100;
     const reject=buyerAmounts.size>=4&&pct>20;
     return {pass:!reject,reason:reject?'LAUNCH_BUNDLE_REJECT: >=4 same-slot buyers control >20% supply':'No launch bundle threshold breach',sameSlotBuyerWallets:buyerAmounts.size,sameSlotAcquiredSupplyPct:pct,creationSlot};
   }catch(error){return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: '+error.message};}
@@ -504,7 +510,7 @@ async function monitorPositions({ discover = false } = {}) {
         continue;
       }
 
-      if (secChecks >= 12) break;
+      if (secChecks >= 6) break;
       secChecks++;
       await sleep(250);
       const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
