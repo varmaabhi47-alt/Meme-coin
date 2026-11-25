@@ -712,6 +712,7 @@ node meme-radar-autobot-24-7.mjs
         <p id="v5-backtest-status" class="text-xs text-slate-500">Waiting for historical snapshots. A result requires a later price observation for each entry.</p>
         <div id="v5-backtest-results" class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3"></div>
       </div>
+      <p id="v5-research-status" class="px-3 py-2 text-xs text-slate-400">Loading research feed from GitHub…</p>
       <div class="rounded-xl bg-term-panel border border-term-border overflow-hidden">
         <div class="px-3 py-2 border-b border-term-border text-xs font-bold text-white font-mono">LATEST RESEARCH SNAPSHOTS</div>
         <div class="overflow-x-auto">
@@ -1034,6 +1035,131 @@ node meme-radar-autobot-24-7.mjs
           '</td></tr>';
       }).join('');
       empty.classList.toggle('hidden', rows.length > 0);
+    }
+
+
+    let v5ResearchLoadPromise = null;
+
+    async function loadV5Research(force = false) {
+      if (v5ResearchLoadPromise) return v5ResearchLoadPromise;
+      const status = document.getElementById('v5-research-status');
+      if (status) status.textContent = force ? 'Refreshing research snapshots…' : 'Loading research snapshots…';
+      v5ResearchLoadPromise = (async () => {
+        try {
+          const url = V5_RESEARCH_URL + (force ? '?refresh=' + Date.now() : '');
+          const response = await fetch(url, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Research feed HTTP ' + response.status);
+          const body = await response.text();
+          const parsed = [];
+          let invalid = 0;
+          for (const line of body.split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            try {
+              const row = JSON.parse(line);
+              if (row && typeof row === 'object' && !Array.isArray(row)) parsed.push(row);
+              else invalid++;
+            } catch { invalid++; }
+          }
+          parsed.sort((a, b) => Date.parse(a.recordedAt || 0) - Date.parse(b.recordedAt || 0));
+          v5ResearchRows = parsed;
+          renderV5Research();
+          if (status) {
+            status.textContent = parsed.length
+              ? 'Loaded ' + parsed.length.toLocaleString() + ' snapshots from paper_research.jsonl' + (invalid ? ' • skipped ' + invalid + ' invalid lines' : '') + ' • latest: ' + (parsed[parsed.length - 1].recordedAt ? new Date(parsed[parsed.length - 1].recordedAt).toLocaleString() : 'time unknown')
+              : 'Research feed is empty. The bot must write paper_research.jsonl snapshots first.';
+            status.className = 'px-3 py-2 text-xs ' + (parsed.length ? 'text-emerald-300' : 'text-amber-300');
+          }
+          addTelemetry('OK', 'V5-RESEARCH', response.status, 0, 'paper_research.jsonl', 'Loaded ' + parsed.length + ' research snapshots.');
+          return parsed;
+        } catch (error) {
+          if (status) {
+            status.textContent = 'Research feed failed to load: ' + (error?.message || String(error)) + ' • tap Refresh research to retry.';
+            status.className = 'px-3 py-2 text-xs text-rose-300';
+          }
+          addTelemetry('WARN', 'V5-RESEARCH', 0, 0, V5_RESEARCH_URL, error?.message || String(error));
+          throw error;
+        } finally {
+          v5ResearchLoadPromise = null;
+        }
+      })();
+      return v5ResearchLoadPromise;
+    }
+
+    async function runV5Backtest() {
+      const status = document.getElementById('v5-backtest-status');
+      const resultsEl = document.getElementById('v5-backtest-results');
+      const minimumScore = Math.max(0, Math.min(100, Number(document.getElementById('v5-min-score')?.value || 80)));
+      const horizonMinutes = Math.max(1, Math.min(10080, Number(document.getElementById('v5-horizon')?.value || 60)));
+      if (!v5ResearchRows.length) {
+        status.textContent = 'No research snapshots loaded. Refresh the research feed first.';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      status.textContent = 'Evaluating only snapshots with an observed later price…';
+      const horizonMs = horizonMinutes * 60000;
+      const cooldownMs = 60 * 60000;
+      const feeRate = 0.006;
+      const clean = v5ResearchRows.map(row => ({
+        ...row,
+        ts: Date.parse(row.recordedAt),
+        price: Number(row.priceUsd),
+        score: Number(row.score),
+        token: String(row.token || row.pairAddress || '')
+      })).filter(row => Number.isFinite(row.ts) && Number.isFinite(row.price) && row.price > 0 && row.token);
+      clean.sort((a, b) => a.ts - b.ts);
+      const eligible = clean.filter(row => row.score >= minimumScore && row.decision !== 'REJECT' && row.decision !== 'PREFILTER_REJECT' && row.tier !== 'REJECT' && row.tier !== 'PREFILTER_REJECT');
+      const lastEntryByToken = new Map();
+      const trades = [];
+      let missingExitSnapshots = 0;
+      for (let i = 0; i < clean.length; i++) {
+        const entry = clean[i];
+        if (!(entry.score >= minimumScore) || entry.decision === 'REJECT' || entry.decision === 'PREFILTER_REJECT' || entry.tier === 'REJECT' || entry.tier === 'PREFILTER_REJECT') continue;
+        if (entry.ts - (lastEntryByToken.get(entry.token) ?? -Infinity) < cooldownMs) continue;
+        let exit = null;
+        for (let j = i + 1; j < clean.length; j++) {
+          if (clean[j].token === entry.token && clean[j].ts >= entry.ts + horizonMs) { exit = clean[j]; break; }
+        }
+        if (!exit) { missingExitSnapshots++; continue; }
+        const grossReturn = exit.price / entry.price - 1;
+        const netReturn = (1 + grossReturn) * (1 - feeRate) - 1;
+        trades.push({ token: entry.token, symbol: entry.symbol || 'UNKNOWN', entryTime: entry.recordedAt, exitTime: exit.recordedAt, entryPrice: entry.price, exitPrice: exit.price, score: entry.score, grossReturnPct: grossReturn * 100, netReturnPct: netReturn * 100 });
+        lastEntryByToken.set(entry.token, entry.ts);
+      }
+      let equity = 1, peak = 1, maxDrawdownPct = 0;
+      for (const trade of trades) {
+        equity *= 1 + trade.netReturnPct / 100;
+        peak = Math.max(peak, equity);
+        maxDrawdownPct = Math.max(maxDrawdownPct, (peak - equity) / peak * 100);
+      }
+      const returns = trades.map(t => t.netReturnPct);
+      const winRate = trades.length ? trades.filter(t => t.netReturnPct > 0).length / trades.length * 100 : null;
+      const average = trades.length ? returns.reduce((sum, n) => sum + n, 0) / trades.length : null;
+      const card = (label, value) => '<div class="p-3 rounded-lg bg-term-bg border border-term-border"><div class="text-[10px] text-slate-500 font-mono">' + escapeHtml(label) + '</div><div class="text-lg font-bold text-white mt-1">' + escapeHtml(value) + '</div></div>';
+      if (!trades.length) {
+        resultsEl.innerHTML = card('ELIGIBLE ENTRIES', String(eligible.length)) + card('MATCHED EXITS', '0') + '<div class="col-span-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">No valid entry/exit pairs yet. This feed currently records mostly one snapshot per token; the backtest needs a later price snapshot for the same token at least ' + horizonMinutes + ' minutes after entry. It will not invent prices.</div>';
+        status.textContent = eligible.length + ' eligible entry snapshots • ' + missingExitSnapshots + ' missing future observations • ' + horizonMinutes + ' min horizon. Collect repeat snapshots for the same token before interpreting performance.';
+        return;
+      }
+      resultsEl.innerHTML = card('MATCHED TRADES', String(trades.length)) + card('WIN RATE', winRate.toFixed(1) + '%') + card('AVG NET / TRADE', average.toFixed(2) + '%') + card('COMPOUNDED RETURN', ((equity - 1) * 100).toFixed(2) + '%') + card('MAX DRAWDOWN', maxDrawdownPct.toFixed(2) + '%') + '<div class="col-span-2 lg:col-span-4 overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500"><th class="text-left p-2">Token</th><th class="text-right p-2">Entry</th><th class="text-right p-2">Exit</th><th class="text-right p-2">Net %</th></tr></thead><tbody>' + trades.slice(-30).reverse().map(t => '<tr class="border-t border-term-border/60"><td class="p-2 text-slate-300">' + escapeHtml(t.symbol) + ' <span class="text-slate-500">' + escapeHtml(t.token.slice(0, 12)) + '</span></td><td class="p-2 text-right text-slate-400">' + escapeHtml(new Date(t.entryTime).toLocaleString()) + '</td><td class="p-2 text-right text-slate-400">' + escapeHtml(new Date(t.exitTime).toLocaleString()) + '</td><td class="p-2 text-right ' + (t.netReturnPct >= 0 ? 'text-emerald-300' : 'text-rose-300') + '">' + t.netReturnPct.toFixed(2) + '%</td></tr>').join('') + '</tbody></table></div>';
+      status.textContent = 'Historical snapshot backtest • ' + trades.length + ' matched trades • ' + missingExitSnapshots + ' entries had no observed exit • assumed 0.6% round-trip fee. Not a live-execution simulation.';
+    }
+
+    function exportV5Research() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        source: V5_RESEARCH_URL,
+        snapshotCount: v5ResearchRows.length,
+        snapshots: v5ResearchRows
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'memeradar-v5-research-export.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function persistPortfolio() {
