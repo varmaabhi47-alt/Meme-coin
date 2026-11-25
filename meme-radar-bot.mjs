@@ -271,6 +271,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     const creatorSignals = analyzeCreatorSignals({
       mintAuthority, freezeAuthority, authoritySignatureCount, holderOwners, priorAuthorityRows: priorRows
     });
+    creatorSignals.tokenProgramId=tokenProgramId;creatorSignals.tokenExtensions=tokenExtensions;
     const currentObservation = { token: tokenAddress, creatorSignals };
     const relatedClusters = summarizeCrossTokenClusters([...priorRows, currentObservation])
       .filter(cluster => cluster.tokens.includes(tokenAddress));
