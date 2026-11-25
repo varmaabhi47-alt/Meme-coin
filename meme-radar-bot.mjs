@@ -524,7 +524,7 @@ async function monitorPositions({ discover = false } = {}) {
         continue;
       }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
-      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const smartMoneySignal=!!portfolio.smartMoneySignals?.[String(p.baseToken.address)];const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
+      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const mintAddress=String(p.baseToken.address);const webhookConfluence=pairObj.chainId==='solana'?await fetchSmartMoneySignal(mintAddress):false;const smartMoneySignal=!!portfolio.smartMoneySignals?.[mintAddress]||webhookConfluence;const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
@@ -561,7 +561,7 @@ async function updateCircuitBreaker(){
  const snaps=(portfolio.dailyEquitySnapshots||[]).filter(x=>now-Number(x.ts)<=86400000);snaps.push({ts:now,equity});portfolio.dailyEquitySnapshots=snaps;
  const base=Number(snaps[0]?.equity||equity),pnl=equity-base,old=portfolio.breaker||{},decision=checkCircuitBreakers({realizedUnrealizedPnlUsd:pnl,dailyStartingEquityUsd:base,now,breaker:old,consecutiveRiskExits});
  let pauseUntil=Number(old.pauseUntil||0),reason=old.reason||null;
- if(decision.dailyDrawdownPct<=-12&&!(reason==='DAILY_DRAWDOWN_12'&&pauseUntil>now)){pauseUntil=now+12*3600000;reason='DAILY_DRAWDOWN_12';}
+ if(decision.dailyDrawdownPct<=-10&&!(reason==='DAILY_DRAWDOWN_10'&&pauseUntil>now)){pauseUntil=now+12*3600000;reason='DAILY_DRAWDOWN_10';}
  if(consecutiveRiskExits>=3&&Number(old.triggeredLossCount||0)<consecutiveRiskExits){pauseUntil=Math.max(pauseUntil,now+2*3600000);reason='CONSECUTIVE_RISK_EXITS';}
  if(pauseUntil<=now){pauseUntil=0;reason=null;}
  portfolio.breaker={pauseUntil,reason,dailyDrawdownPct:decision.dailyDrawdownPct,dailyStartingEquityUsd:base,equityUsd:equity,triggeredLossCount:consecutiveRiskExits,checkedAt:now};
