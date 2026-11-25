@@ -281,7 +281,7 @@ async function sendWeeklyTelegram(summary){
   const body=await res.json().catch(()=>null);if(!res.ok||!body?.ok)throw new Error('Telegram weekly summary failed: HTTP '+res.status+' '+JSON.stringify(body).slice(0,300));
 }
 async function main(){
-  const args=process.argv.slice(2),get=(flag)=>{const i=args.indexOf(flag);return i>=0?args[i+1]:null;};
+  const args=process.argv.slice(2),get=(flag)=>{const i=args.indexOf(flag),value=i>=0?args[i+1]:null;return value&&!value.startsWith('--')?value:null;};
   if(args.includes('--help')){console.log('Usage: node smart-wallet-curator.mjs --import candidates.csv|json|txt | --from-mints MINT1,MINT2 | --from-research [file] | --prune | --dry-run');return;}
   if(args.includes('--prune')){const summary=await pruneWallets();console.log(JSON.stringify(summary,null,2));await sendWeeklyTelegram(summary);return;}
   if(args.includes('--dry-run')){const u=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});console.log(JSON.stringify({mode:'dry-run/no-RPC',rpcCreditsThisRun:0,monthlyUsage:u,monthlyLimit:MONTHLY_LIMIT,versionedTxParser:'resolved staticAccountKeys + meta.loadedAddresses; skips unresolved ALT transactions',veting:'strict gates reject incomplete evidence',note:'Use --verify-signature SIG --wallet ADDRESS for live RPC parser validation.'},null,2));return;}
