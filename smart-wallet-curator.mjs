@@ -193,7 +193,7 @@ async function pruneWallets(){
     const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
     const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));const interval=Number(r.researchIntervalMin),ret=r.returnPct;if([15,60,240].includes(interval)&&ret!==null&&ret!==undefined&&Number.isFinite(Number(ret)))horizons.push(Number(ret));}
     const hitRate=horizons.length?horizons.filter(x=>x>0).length/horizons.length*100:null;
-    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true).length;
+    const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true||/rug|rugged/i.test(String(r.security?.reason||''))).length;
     const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
@@ -206,7 +206,7 @@ async function pruneWallets(){
   j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
   j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
   const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
-  return {active:kept.length,promoted,muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
+  const recentAdds=kept.filter(w=>Date.now()-Date.parse(w.added_at||0)<=7*DAY).map(w=>w.address);\n  return {active:kept.length,promoted:[...new Set([...promoted,...recentAdds])],muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
 }
 async function sendWeeklyTelegram(summary){
   const token=process.env.TELEGRAM_BOT_TOKEN||'',chat=process.env.TELEGRAM_CHAT_ID||'';if(!token||!chat){console.log('[curator] Telegram summary skipped: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not configured.');return;}
