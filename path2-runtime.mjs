@@ -125,8 +125,8 @@ export class SolanaEventListener {
     if (value.err) return;
     if (sub.kind === 'smart-wallet') { this.onWalletLog({ wallet: sub.address, signature, slot: message.params.result.context?.slot, logs }); return; }
     const joined = logs.join(' ').toLowerCase();
-    const pumpMigration = sub.kind === 'pump-migration' && /migrat|complete.*bonding|graduate/.test(joined);
-    const raydiumInit = sub.kind === 'raydium-pool-init' && /initialize|init.*pool|create.*pool/.test(joined);
+    const pumpMigration = sub.kind === 'pump-migration' && logs.some(line => /^(?:Program log: )?(?:Instruction: )?(?:Migrate|Complete.*BondingCurve|Graduate)$/i.test(String(line).trim()));
+    const raydiumInit = sub.kind === 'raydium-pool-init' && logs.some(line => /^(?:Program log: )?(?:Instruction: )?(?:Initialize(?:[2-6])?|CreatePool|InitializePool)(?: Pool)?$/i.test(String(line).trim()));
     if (pumpMigration || raydiumInit) this.onMint({ trigger: pumpMigration ? 'pump-migration' : 'raydium-pool-init', signature, slot: message.params.result.context?.slot, program: sub.address, logs });
   }
   stop() { this.closed = true; try { this.socket?.close(); } catch {} }
