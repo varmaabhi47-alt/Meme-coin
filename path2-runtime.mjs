@@ -16,12 +16,15 @@ export class RpcCreditGuard {
   }
   async load() {
     try { const x = JSON.parse(await fs.readFile(this.stateFile, 'utf8')); if (x.month === this.usage.month) this.usage = x; } catch {}
+    try { const rows=JSON.parse(await fs.readFile(this.stateFile+'.cache','utf8')); for(const [key,row] of Object.entries(rows)) if(row&&now()-row.at<this.cacheMs)this.cache.set(key,row); } catch {}
   }
   async save() { await fs.writeFile(this.stateFile, JSON.stringify(this.usage), 'utf8'); }
   async cached(key, fn) {
     const row = this.cache.get(key);
     if (row && now() - row.at < this.cacheMs) return row.value;
-    const value = await fn(); this.cache.set(key, { at: now(), value }); return value;
+    const value = await fn(); this.cache.set(key, { at: now(), value });
+    try { await fs.writeFile(this.stateFile+'.cache',JSON.stringify(Object.fromEntries(this.cache)),'utf8'); } catch {}
+    return value;
   }
   async rpc(endpoint, method, params = [], { credits = this.creditCost, cacheKey = null } = {}) {
     if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
@@ -46,6 +49,25 @@ export class RpcCreditGuard {
         if (error.status !== 429 || attempt >= 5) throw error;
         await sleep(Math.min(30_000, 500 * (2 ** attempt)) + Math.floor(Math.random() * 250)); attempt++;
       }
+    }
+  }
+  async batch(endpoint, requests, { credits = requests.length } = {}) {
+    if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
+    const projected=this.usage.estimatedCredits+Number(credits||0);
+    if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit)throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});
+    const minGap=1000/this.maxRps,wait=Math.max(0,minGap-(now()-this.lastCall));if(wait)await sleep(wait);
+    let attempt=0;
+    while(true){
+      this.lastCall=now();
+      try{
+        const response=await this.fetchImpl(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
+        if(response.status===429)throw Object.assign(new Error('Solana RPC HTTP 429'),{status:429});
+        if(!response.ok)throw new Error('Solana RPC HTTP '+response.status);
+        const data=await response.json();if(!Array.isArray(data))throw new Error('Solana RPC batch response was not an array');
+        const errors=data.filter(x=>x.error);if(errors.length)throw new Error('Solana RPC batch error: '+errors[0].error.message);
+        this.usage.calls++;this.usage.estimatedCredits+=Number(credits||0);this.usage.lastAt=new Date().toISOString();await this.save();
+        return data.sort((a,b)=>Number(a.id)-Number(b.id)).map(x=>x.result);
+      }catch(error){if(error.status!==429||attempt>=5)throw error;await sleep(Math.min(30000,500*2**attempt)+Math.floor(Math.random()*250));attempt++;}
     }
   }
   telemetry() { return { ...this.usage, projectedMonthlyCredits: Math.round(this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate())), throttled: this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate()) > this.monthlyLimit }; }
