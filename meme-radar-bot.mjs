@@ -276,7 +276,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
     pairAddress: pair.pairAddress || null, priceUsd: Number(pair.priceUsd || 0),
     liquidityUsd: Number(pair.liquidity?.usd || 0), volume24hUsd: Number(pair.volume?.h24 || 0),
-    security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked' },
+    security: { pass: security?.pass === true, checked: security?.checked !== false && !!security, reason: security?.reason || 'not checked', buyTaxRate: security?.buyTaxRate ?? null, sellTaxRate: security?.sellTaxRate ?? null },\n    networkFeeUsd: estimatedNetworkFeeUsd(pair.chainId), entryQuoteFallback: String(pair.chainId||'').toLowerCase()==='solana', quoteFallback: String(pair.chainId||'').toLowerCase()==='solana',
     score: analysis?.score ?? null, tier: analysis?.tier || 'UNSCORED',
     components: analysis?.components || {}, metrics: analysis?.metrics || {}, reasons: analysis?.reasons || [],
     narrativeFootprint: analyzeNarrativeFootprint(pair), paperLearning: summarizePaperLearning(portfolio.closedTrades),
@@ -344,7 +344,7 @@ async function monitorResearchSnapshots(){
    const pair=(data?.pairs||[]).find(x=>String(x.pairAddress||'').toLowerCase()===String(item.pairAddress).toLowerCase());
    if(!pair||!(Number(pair.priceUsd)>0&&Number(pair.liquidity?.usd)>0))throw Error('live pair mark/liquidity unavailable');
    for(const target of due){
-    const row={schemaVersion:2,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:(now-Number(item.entryAt))/60000,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,source:'DexScreener live pair mark'};
+    const row={schemaVersion:2,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:(now-Number(item.entryAt))/60000,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
     await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
    }
   }catch(e){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot poll failed; no mark recorded: ${e.message}`);}
