@@ -4,7 +4,7 @@ import {evaluatePositionRisk,calculatePositionSize,checkCircuitBreakers,parseTel
 
 test('partial TP arms runner and fee-covered breakeven stop',()=>{
  const p={buyPrice:1,tokens:100,remainingTokens:100,costUsd:100,remainingCostUsd:100,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1,partialTpDone:false};
- const tp=evaluatePositionRisk(p,{markPrice:1.5,liquidityUsd:100000,now:Date.now()});
+ const tp=evaluatePositionRisk(p,{markPrice:1.4,liquidityUsd:100000,now:Date.now()});
  assert.equal(tp.action,'PARTIAL_EXIT');
  p.partialTpDone=true;p.remainingTokens=50;p.remainingCostUsd=50;p.peakPrice=1.5;
  const stop=evaluatePositionRisk(p,{markPrice:1.01,liquidityUsd:100000,now:Date.now()});
@@ -24,6 +24,7 @@ test('Telegram commands parse only supported command shapes',()=>{
  assert.deepEqual(parseTelegramCommand('/status'),{command:'status'});
  assert.deepEqual(parseTelegramCommand('/close PEPE'),{command:'close',symbol:'PEPE'});
  assert.equal(parseTelegramCommand('/buy PEPE'),null);
+ assert.deepEqual(parseTelegramCommand('/kill'),{command:'kill'});
 });
 test('state lock serializes concurrent writes',async()=>{
  const lock=makeStateLock(),order=[];
