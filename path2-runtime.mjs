@@ -35,7 +35,7 @@ export class RpcCreditGuard {
     if (cacheKey) return this.cached(cacheKey, () => this.rpc(endpoint, method, params, { credits }));
     const projected = this.usage.estimatedCredits + Number(credits || 0);
     if (projected * (30 / Math.max(1, new Date().getDate())) > this.monthlyLimit) {
-      throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'), { code: 'RPC_BUDGET' });
+      this.usage.budgetThrottled=true;await this.save();throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'), { code: 'RPC_BUDGET' });
     }
     let attempt = 0;
     while (true) {
@@ -59,7 +59,7 @@ export class RpcCreditGuard {
   async batchChunk(endpoint, requests, { credits = requests.length } = {}) {
     if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
     const projected=this.usage.estimatedCredits+Number(credits||0);
-    if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit)throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});
+    if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit){this.usage.budgetThrottled=true;await this.save();throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});}
     let attempt=0;
     while(true){
       await this.rateLimit(requests.length);
@@ -74,7 +74,7 @@ export class RpcCreditGuard {
       }catch(error){if(error.status!==429||attempt>=5)throw error;await sleep(Math.min(30000,500*2**attempt)+Math.floor(Math.random()*250));attempt++;}
     }
   }
-  telemetry() { const today=new Date().toISOString().slice(0,10);return { ...this.usage, dailyEstimatedCredits:Number(this.usage.daily?.[today]||0), projectedMonthlyCredits: Math.round(this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate())), throttled: this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate()) > this.monthlyLimit }; }
+  telemetry() { const today=new Date().toISOString().slice(0,10);return { ...this.usage, dailyEstimatedCredits:Number(this.usage.daily?.[today]||0), projectedMonthlyCredits: Math.round(this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate())), throttled: this.usage.budgetThrottled===true || this.usage.estimatedCredits * 30 / Math.max(1, new Date().getDate()) > this.monthlyLimit }; }
 }
 
 export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
