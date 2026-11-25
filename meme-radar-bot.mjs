@@ -244,7 +244,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
       : { value: [] };
     const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);
     const accountsWithOwners = accounts.map((account, index) => ({ ...account, owner: holderOwners[index] || null }));
-    const info = mintInfo?.value?.data?.parsed?.info || {};
+    const info = mintInfo?.value?.data?.parsed?.info || {};\n    const tokenProgramId=String(mintInfo?.value?.owner||'');\n    const tokenExtensions=Array.isArray(info.extensions)?info.extensions.map(x=>String(x.extension||x.type||'')):null;
     const mintAuthority = info.mintAuthority || null;
     const freezeAuthority = info.freezeAuthority || null;
     let authoritySignatureCount = null;
