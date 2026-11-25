@@ -4,7 +4,22 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-const scripts = [...html.matchAll(/<script(?![^>]*\\bsrc\\s*=)[^>]*>([\\s\\S]*?)<\\/script>/gi)].map(match => match[1]).filter(source => source.trim());
+const scripts = [];
+let cursor = 0;
+while (true) {
+  const start = html.indexOf('<script', cursor);
+  if (start < 0) break;
+  const tagEnd = html.indexOf('>', start);
+  if (tagEnd < 0) throw new Error('Unclosed script tag');
+  const tag = html.slice(start, tagEnd + 1).toLowerCase();
+  const end = html.indexOf('</script>', tagEnd + 1);
+  if (end < 0) throw new Error('Unclosed inline script');
+  if (!tag.includes('src=') && !tag.includes('src =') && !tag.includes('src = ')) {
+    const source = html.slice(tagEnd + 1, end);
+    if (source.trim()) scripts.push(source);
+  }
+  cursor = end + 9;
+}
 if (!scripts.length) throw new Error('No inline JavaScript found in index.html');
 const temp = join(tmpdir(), 'meme-radar-inline-check.js');
 try {
