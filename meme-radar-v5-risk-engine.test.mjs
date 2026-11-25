@@ -36,3 +36,10 @@ test('net live exit quote overrides spot-only PnL for TP/SL decisions',()=>{
  const risk=evaluatePositionRisk(p,{markPrice:1.5,liquidityUsd:100000,netPnlPctOverride:-20});
  assert.equal(risk.action,'EXIT_ALL');assert.equal(risk.reason,'STOP_LOSS');
 });
+
+test('daily drawdown and three consecutive risk exits pause new entries',()=>{
+ const daily=checkCircuitBreakers({realizedUnrealizedPnlUsd:-121,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:0});
+ assert.equal(daily.pauseBuys,true);assert.ok(daily.pauseUntil>=1000+12*3600000);
+ const streak=checkCircuitBreakers({realizedUnrealizedPnlUsd:0,dailyStartingEquityUsd:1000,now:1000,breaker:{},consecutiveRiskExits:3});
+ assert.equal(streak.pauseBuys,true);assert.ok(streak.pauseUntil>=1000+2*3600000);
+});
