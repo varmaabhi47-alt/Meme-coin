@@ -613,7 +613,8 @@ async function persistentRunner(){
   if(process.env.SOLANA_RPC_WSS){
     try{
       const walletConfig=JSON.parse(await fs.readFile(process.env.SMART_WALLETS_FILE||'smart_wallets.json','utf8'));
-      const wallets=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>typeof x==='string'&&x.trim()).slice(0,30):[];
+      const wallets=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>typeof x==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.trim())).slice(0,30):[];
+      if(wallets.length<15)console.warn('Smart-money wallet tracker has '+wallets.length+' valid addresses; configure 15-30 verified wallets to enable meaningful confluence.');
       eventListener=new SolanaEventListener({
         wallets,
         onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
