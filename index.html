@@ -1077,7 +1077,7 @@ node meme-radar-autobot-24-7.mjs
             status.className = 'px-3 py-2 text-xs text-rose-300';
           }
           addTelemetry('WARN', 'V5-RESEARCH', 0, 0, V5_RESEARCH_URL, error?.message || String(error));
-          throw error;
+          return [];
         } finally {
           v5ResearchLoadPromise = null;
         }
