@@ -550,7 +550,7 @@ async function persistentRunner(){
 }
 async function main(){
  if(process.argv.includes('--dry-run')){
-  try{await fs.access(CONFIG.PORTFOLIO_FILE);await loadState();}catch(e){if(e.code!=='ENOENT')throw e;console.log('No local bot portfolio file; dry run will not initialize one.');}
+  try{await fs.access(CONFIG.PORTFOLIO_FILE);console.log('Existing bot portfolio file detected; dry run will not read or write its contents.');}catch(e){if(e.code!=='ENOENT')throw e;console.log('No local bot portfolio file; dry run will not initialize one.');}
   const feed=await fetchJsonStrict(CONFIG.FEED_URL);
   console.log(`DRY RUN OK: live discovery feed returned ${Array.isArray(feed)?feed.length:'non-array'} records.`);
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)throw Error('D1 read check skipped: MEMERADAR_SYNC_SECRET is missing.');
@@ -559,7 +559,7 @@ async function main(){
   console.log('Dry run made no buys, sells, local portfolio changes, or D1 writes.');return;
  }
  if(process.argv.includes('--telegram-test')){const ok=await sendTelegram('MEME.RADAR Telegram connection test. Paper-only.');if(!ok)throw Error('Telegram test failed');console.log('Telegram test message sent.');return;}
- if(process.argv.includes('--sync-check')){try{await fs.access(CONFIG.PORTFOLIO_FILE);}catch{throw Error('D1 sync-check requires an existing bot portfolio file; refusing to initialize/overwrite from defaults.');}await loadState();const ok=await syncPortfolioToCloudflare();if(!ok)throw Error('D1 sync check failed');console.log(`D1 versioned sync check passed at version ${d1Version}.`);return;}
+ if(process.argv.includes('--sync-check')){let raw;try{raw=await fs.readFile(CONFIG.PORTFOLIO_FILE,'utf8');}catch{throw Error('D1 sync-check requires an existing bot portfolio file; refusing to initialize/overwrite from defaults.');}const parsed=JSON.parse(raw);portfolio={...portfolio,...parsed};lastHourlySummaryMs=Number(parsed.lastHourlySummaryMs||0);consecutiveRiskExits=Number(parsed.consecutiveRiskExits||0);telegramOffset=Number(parsed.telegramOffset||0);const ok=await syncPortfolioToCloudflare();if(!ok)throw Error('D1 sync check failed');console.log(`D1 versioned sync check passed at version ${d1Version}.`);return;}
  await loadState();
  if(process.env.TELEGRAM_TEST==='true'){const ok=await sendTelegram('MEME.RADAR Telegram connection test. Paper-only.');if(!ok)process.exitCode=1;}
  if(process.env.RUN_MODE==='persistent'){console.log('Persistent mode: 12s position monitor / 180s discovery scanner.');await persistentRunner();return;}
