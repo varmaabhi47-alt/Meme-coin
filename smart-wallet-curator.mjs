@@ -191,14 +191,14 @@ async function pruneWallets(){
     if(w.status==='MUTED'){mutedExisting.push(w);continue;}
     let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
     const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
-    const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));const interval=Number(r.researchIntervalMin),ret=Number(r.returnPct);if([15,60,240].includes(interval)&&Number.isFinite(ret))horizons.push(ret);}
+    const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));const interval=Number(r.researchIntervalMin),ret=r.returnPct;if([15,60,240].includes(interval)&&ret!==null&&ret!==undefined&&Number.isFinite(Number(ret)))horizons.push(Number(ret));}
     const hitRate=horizons.length?horizons.filter(x=>x>0).length/horizons.length*100:null;
     const rugCount=recent.filter(r=>r.rugPull===true||r.outcome==='RUG'||r.security?.rug===true).length;
     const age=Date.now()-Date.parse(w.last_active_at||w.added_at||0),reasons=[];
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
     if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
-    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:(()=>{const rows=recent.filter(r=>Number(r.researchIntervalMin)===240&&Number.isFinite(Number(r.returnPct)));return rows.length?rows.reduce((s,r)=>s+Number(r.returnPct),0)/rows.length:null;})()};
+    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:(()=>{const rows=recent.filter(r=>Number(r.researchIntervalMin)===240&&r.returnPct!==null&&r.returnPct!==undefined&&Number.isFinite(Number(r.returnPct)));return rows.length?rows.reduce((s,r)=>s+Number(r.returnPct),0)/rows.length:null;})()};
     if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
@@ -243,4 +243,4 @@ async function main(){
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
-export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,decodeSwap,analyzeTrades,vetWallet,validAddress};
+export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,decodeSwap,analyzeTrades,vetWallet,validAddress,MONTHLY_LIMIT,MAX_RPS};
