@@ -15,6 +15,7 @@ jobs:
         with:
           node-version: 22
       - name: Reconcile Helius webhook and Worker D1 metadata
+        if: ${{ env.HELIUS_API_KEY != '' && env.HELIUS_WEBHOOK_URL != '' && env.HELIUS_WEBHOOK_AUTH != '' && env.BOT_SYNC_SECRET != '' }}
         env:
           HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
           HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
@@ -22,3 +23,6 @@ jobs:
           HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
           BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
         run: node sync-helius-webhook.mjs
+      - name: Explain skipped sync until secrets are configured
+        if: ${{ env.HELIUS_API_KEY == '' || env.HELIUS_WEBHOOK_URL == '' || env.HELIUS_WEBHOOK_AUTH == '' || env.BOT_SYNC_SECRET == '' }}
+        run: echo "Wallet sync skipped safely. Configure Helius and Worker secrets to activate webhook reconciliation."
