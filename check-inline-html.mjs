@@ -23,13 +23,13 @@ while (true) {
 if (!scripts.length) throw new Error('No inline JavaScript found in index.html');
 const temp = join(tmpdir(), 'meme-radar-inline-check.js');
 try {
-  writeFileSync(temp, scripts.join('\\n;\\n'));
+  writeFileSync(temp, scripts.join(String.fromCharCode(10) + ';' + String.fromCharCode(10)));
   const result = spawnSync(process.execPath, ['--check', temp], { encoding: 'utf8' });
   if (result.status !== 0) {
-    process.stderr.write(result.stderr || result.stdout || 'Inline script syntax check failed\\n');
+    process.stderr.write(result.stderr || result.stdout || 'Inline script syntax check failed');
     process.exit(result.status || 1);
   }
-  process.stdout.write('Checked ' + scripts.length + ' inline script block(s) in index.html\\n');
+  process.stdout.write('Checked ' + scripts.length + ' inline script block(s) in index.html');
 } finally {
   try { unlinkSync(temp); } catch {}
 }
