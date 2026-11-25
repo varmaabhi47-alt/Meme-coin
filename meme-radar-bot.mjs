@@ -205,7 +205,7 @@ function calcSell(tokens, price, liq) {
   return { effPrice: result.effectivePrice, impactUsd: result.impactUsd, impactRate: result.impactRate, feeUsd: result.feeUsd, netProceeds: result.netProceeds, model: result.model };
 }
 
-async function inspectSolanaHolders(tokenAddress) {
+async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
   const rpc = async (method, params, id) => {
     const response = await fetch('https://api.mainnet-beta.solana.com', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -227,7 +227,7 @@ async function inspectSolanaHolders(tokenAddress) {
     const ownerResponse = accountAddresses.length
       ? await rpc('getMultipleAccounts', [accountAddresses, { encoding: 'jsonParsed', commitment: 'confirmed' }], 4)
       : { value: [] };
-    const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);
+    const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);\n    const accountsWithOwners = accounts.map((account, index) => ({ ...account, owner: holderOwners[index] || null }));
     const info = mintInfo?.value?.data?.parsed?.info || {};
     const mintAuthority = info.mintAuthority || null;
     const freezeAuthority = info.freezeAuthority || null;
@@ -239,7 +239,7 @@ async function inspectSolanaHolders(tokenAddress) {
       } catch {}
     }
     const holderDistribution = {
-      ...calculateTopHolderConcentration(accounts, supply?.value?.amount),
+      ...calculateTopHolderConcentration(accountsWithOwners, supply?.value?.amount, [pairAddress]),
       decimals: supply?.value?.decimals ?? null,
       source: 'Solana public RPC'
     };
@@ -460,7 +460,7 @@ async function monitorPositions() {
       const pairObj = { id: key, chainId: p.chainId.toLowerCase(), address: p.baseToken.address };
       const sec = await auditSecurity(pairObj);
       const intelligence = scoreCandidate(p, sec);
-      const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
+      const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
       if(pairObj.chainId==='solana'){const gates=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData});if(!gates.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...gates.reasons);}}
       await recordResearch(p, sec, intelligence, intelligence.tier, holders);
