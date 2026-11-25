@@ -1,0 +1,71 @@
+name: Live smart-wallet discovery
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - curator-discovery-trigger.txt
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-smart-wallet-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify live RPC credentials
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_RPC_URL: ${{ secrets.HELIUS_RPC_URL }}
+        run: |
+          test -n "$HELIUS_API_KEY" || { echo "::error::Missing HELIUS_API_KEY"; exit 1; }
+          test -n "$HELIUS_RPC_URL" || { echo "::error::Missing HELIUS_RPC_URL"; exit 1; }
+          echo "$HELIUS_RPC_URL" | grep -qi helius || { echo "::error::HELIUS_RPC_URL must point to Helius"; exit 1; }
+      - name: Run deterministic curator tests
+        run: node --test smart-wallet-curator.test.mjs research-mint-source.test.mjs funding-link-detection.test.mjs swap-reconstruction.test.mjs
+      - name: Discover candidates from recent checked security-pass research mints and vet live wallets
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_RPC_URL: ${{ secrets.HELIUS_RPC_URL }}
+          RPC_MAX_RPS: "6"
+          CURATOR_DISCOVERY_SIGNATURE_LIMIT: "150"
+          CURATOR_MAX_CANDIDATES: "2"
+          CURATOR_MAX_WALLET_SIGNATURES: "2500"
+        run: node smart-wallet-curator.mjs --from-research
+      - name: Reconcile Helius webhook and D1 wallet metadata when sync secrets are configured
+        if: ${{ env.HELIUS_API_KEY != '' && env.HELIUS_WEBHOOK_URL != '' && env.HELIUS_WEBHOOK_AUTH != '' && env.BOT_SYNC_SECRET != '' }}
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: node sync-helius-webhook.mjs
+      - name: Report skipped webhook sync
+        if: ${{ env.HELIUS_WEBHOOK_URL == '' || env.HELIUS_WEBHOOK_AUTH == '' || env.BOT_SYNC_SECRET == '' }}
+        run: echo "Candidate discovery ran. Helius webhook/D1 sync skipped because webhook credentials are not all configured."
+      - name: Persist wallet queue and RPC credit ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add smart_wallets.json rpc-curator-usage.json
+          if [ -f candidate_wallets.json ]; then git add candidate_wallets.json; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: persist live smart-wallet discovery [skip ci]"
+            git push
+          fi
