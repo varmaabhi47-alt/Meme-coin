@@ -1958,7 +1958,7 @@ node meme-radar-autobot-24-7.mjs
           : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700" title="${esc(gate.reason)}">FAIL</span>`;
         const avatar = p.icon
           ? `<img src="${esc(p.icon)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`
-          : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0">${esc(p.symbol.slice(0,2))}</div>`;
+          : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0" ><span data-radar-initials></span></div>`;
 
         return `
           <tr onclick="openInspectorById('${esc(p.id)}')" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
