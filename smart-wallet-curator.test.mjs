@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvedKeys,instructionProgramIds,solDeltaByAccount,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS} from './smart-wallet-curator.mjs';
+import {resolvedKeys,instructionProgramIds,solDeltaByAccount,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS,canSpendRpcCredits,RPC_BATCH_SIZE} from './smart-wallet-curator.mjs';
 
 test('versioned message account keys append runtime-loaded ALT addresses in correct writable/readonly order',()=>{
   const tx={transaction:{message:{staticAccountKeys:['payer','staticA'],addressTableLookups:[{accountKey:'lookupTable',writableIndexes:[2],readonlyIndexes:[5]}],instructions:[{programIdIndex:2,accounts:[0,2,3],data:''}]}},meta:{loadedAddresses:{writable:['altWritable'],readonly:['altReadonly']}}};
@@ -47,4 +47,40 @@ test('fee payer SOL delta is corrected by the recorded transaction fee',()=>{
   const d=solDeltaByAccount(tx);
   assert.equal(d.get('payer'),-0.1);
   assert.equal(d.get('wallet'),-0.1);
+});
+
+test('profitable token gate uses net PnL per mint, not any isolated winning trade',()=>{
+  const now=Date.now()/1000;
+  const trades=[];
+  for(const mint of ['A','B','C','D']){trades.push({mint,pnlSol:0.5,holdMins:20,buyTime:now-1800,sellTime:now-600});trades.push({mint,pnlSol:-0.1,holdMins:20,buyTime:now-1800,sellTime:now-600});}
+  trades.push({mint:'E',pnlSol:0.5,holdMins:20,buyTime:now-1800,sellTime:now-600},{mint:'E',pnlSol:-0.7,holdMins:20,buyTime:now-1800,sellTime:now-600});
+  const swaps=Array.from({length:20},(_,i)=>({mint:'mint'+i,side:i%2?'SELL':'BUY',solAmount:0.4,blockTime:now-600,slot:100+i}));
+  const result=vetWallet('wallet',trades,swaps);
+  assert.equal(result.metrics.profitableTokens,4);
+  assert.ok(result.reasons.includes('less-than-5-net-profitable-tokens'));
+});
+
+test('token PnL concentration is measured against positive net token profits',()=>{
+  const now=Date.now()/1000,trades=[{mint:'A',pnlSol:4,holdMins:20,buyTime:now-1800,sellTime:now-600}];
+  for(const mint of ['B','C','D','E'])trades.push({mint,pnlSol:0.5,holdMins:20,buyTime:now-1800,sellTime:now-600});
+  for(const mint of ['A','B','C','D','E'])trades.push({mint,pnlSol:-0.1,holdMins:20,buyTime:now-1800,sellTime:now-600});
+  const swaps=Array.from({length:20},(_,i)=>({mint:'mint'+i,side:i%2?'SELL':'BUY',solAmount:0.4,blockTime:now-600,slot:200+i}));
+  const result=vetWallet('wallet',trades,swaps);
+  assert.ok(result.metrics.largestTokenPnlShare>0.6);
+  assert.ok(result.reasons.includes('single-token-pnl-concentration'));
+});
+
+test('rejects a near-instant same/adjacent-slot round trip as sniper-like evidence',()=>{
+  const now=Date.now()/1000,trades=Array.from({length:10},(_,i)=>({mint:'M'+i,pnlSol:0.3,holdMins:0.5,buyTime:now-60,sellTime:now-30,buySlot:100,sellSlot:101}));
+  const swaps=Array.from({length:20},(_,i)=>({mint:'mint'+i,side:i%2?'SELL':'BUY',solAmount:0.4,blockTime:now-600,slot:200+i}));
+  const result=vetWallet('wallet',trades,swaps);
+  assert.ok(result.reasons.includes('same-slot-or-next-slot-roundtrip'));
+});
+
+test('credit guard counts every batch item and refuses crossing the monthly free limit',()=>{
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT-6,6),true);
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT-5,6),false);
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT,1),false);
+  assert.equal(canSpendRpcCredits(-1,1),false);
+  assert.equal(RPC_BATCH_SIZE,6);
 });

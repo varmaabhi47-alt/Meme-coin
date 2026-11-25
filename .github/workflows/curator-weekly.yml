@@ -1,0 +1,67 @@
+name: Weekly smart-wallet curator
+
+on:
+  schedule:
+    - cron: "15 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  weekly-curation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify required free-tier credentials
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_RPC_URL: ${{ secrets.HELIUS_RPC_URL }}
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: |
+          for name in HELIUS_API_KEY HELIUS_RPC_URL HELIUS_WEBHOOK_URL HELIUS_WEBHOOK_AUTH BOT_SYNC_SECRET; do
+            if [ -z "${!name}" ]; then echo "::error::Missing required GitHub Actions secret: $name"; exit 1; fi
+          done
+      - name: Export observed webhook buys (last 30 days)
+        env:
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: node sync-smart-wallet-buys.mjs
+      - name: Attribute actual research snapshots to observed buys
+        run: node attribute-curator-outcomes.mjs
+      - name: Prune wallets using live activity and outcome evidence
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_RPC_URL: ${{ secrets.HELIUS_RPC_URL }}
+          RPC_MAX_RPS: "6"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node smart-wallet-curator.mjs --prune
+      - name: Reconcile Helius webhook and Worker wallet metadata
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HELIUS_WEBHOOK_URL: ${{ secrets.HELIUS_WEBHOOK_URL }}
+          HELIUS_WEBHOOK_AUTH: ${{ secrets.HELIUS_WEBHOOK_AUTH }}
+          BOT_SYNC_SECRET: ${{ secrets.BOT_SYNC_SECRET }}
+        run: node sync-helius-webhook.mjs
+
+      - name: Persist wallet state and monthly RPC credit ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ ! -f rpc-curator-usage.json ]; then printf '{"month":"%s","credits":0,"requests":0,"httpRequests":0,"byMethod":{}}\n' "$(date -u +%Y-%m)" > rpc-curator-usage.json; fi
+          git add smart_wallets.json smart_wallet_buys.json paper_wallet_outcomes.jsonl rpc-curator-usage.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: persist weekly smart-wallet curator state [skip ci]"
+            git push
+          fi
