@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvedKeys,instructionProgramIds,solDeltaByAccount,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS} from './smart-wallet-curator.mjs';
+import {resolvedKeys,instructionProgramIds,solDeltaByAccount,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS,canSpendRpcCredits,RPC_BATCH_SIZE} from './smart-wallet-curator.mjs';
 
 test('versioned message account keys append runtime-loaded ALT addresses in correct writable/readonly order',()=>{
   const tx={transaction:{message:{staticAccountKeys:['payer','staticA'],addressTableLookups:[{accountKey:'lookupTable',writableIndexes:[2],readonlyIndexes:[5]}],instructions:[{programIdIndex:2,accounts:[0,2,3],data:''}]}},meta:{loadedAddresses:{writable:['altWritable'],readonly:['altReadonly']}}};
@@ -75,4 +75,12 @@ test('rejects a near-instant same/adjacent-slot round trip as sniper-like eviden
   const swaps=Array.from({length:20},(_,i)=>({mint:'mint'+i,side:i%2?'SELL':'BUY',solAmount:0.4,blockTime:now-600,slot:200+i}));
   const result=vetWallet('wallet',trades,swaps);
   assert.ok(result.reasons.includes('same-slot-or-next-slot-roundtrip'));
+});
+
+test('credit guard counts every batch item and refuses crossing the monthly free limit',()=>{
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT-6,6),true);
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT-5,6),false);
+  assert.equal(canSpendRpcCredits(MONTHLY_LIMIT,1),false);
+  assert.equal(canSpendRpcCredits(-1,1),false);
+  assert.equal(RPC_BATCH_SIZE,6);
 });
