@@ -97,10 +97,10 @@ export default {
     }
     if(request.method!=="POST")return json({error:"method_not_allowed"},405);
     let body;try{body=await request.json();}catch{return json({error:"invalid_json"},400);}
-    if(!body||!body.portfolio||typeof body.portfolio!=="object"||Array.isArray(body.portfolio)||!Number.isSafeInteger(Number(body.version))||Number(body.version)<0)return json({error:"portfolio_and_nonnegative_version_required"},400);
+    if(!body||!body.portfolio||typeof body.portfolio!=="object"||Array.isArray(body.portfolio)||!Number.isSafeInteger(Number(body.version))||Number(body.version)<0||!(body.updated_at===null||typeof body.updated_at==="string"))return json({error:"portfolio_version_and_updated_at_required"},400);
     const serialized=JSON.stringify(body.portfolio);if(serialized.length>2_000_000)return json({error:"state_too_large"},413);
     const expected=Number(body.version),updatedAt=new Date().toISOString();
-    const result=await env.DB.prepare("UPDATE portfolio_state SET payload=?, updated_at=?, version=version+1 WHERE id=? AND version=?").bind(serialized,updatedAt,"main",expected).run();
+    const result=await env.DB.prepare("UPDATE portfolio_state SET payload=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND updated_at IS ?").bind(serialized,updatedAt,"main",expected,body.updated_at).run();
     if(!result.meta?.changes){const row=await env.DB.prepare("SELECT version,updated_at FROM portfolio_state WHERE id=?").bind("main").first();return json({success:false,error:"version_conflict",version:Number(row?.version||0),updated_at:row?.updated_at||null},409);}
     return json({success:true,version:expected+1,updated_at:updatedAt});
   }
