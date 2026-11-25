@@ -40,9 +40,49 @@ export default {
           feesImpactUsd:Number(t.feesImpactUsd||0),netPnlUsd:Number(t.netPnlUsd||0),netPnlPct:Number(t.netPnlPct||0),entryQuoteFallback:!!t.entryQuoteFallback,exitQuoteSource:cleanText(t.exitQuoteSource),finalExitValueUsd:Number(t.finalExitValueUsd||0),
           realizedPartialPnlUsd:Number(t.realizedPartialPnlUsd||0),partialExits:Array.isArray(t.partialExits)?t.partialExits:[],quoteFallback:!!t.quoteFallback,exitReason:cleanText(t.exitReason)
         })),
+        rpcTelemetry:raw.rpcTelemetry||null,edgeProof:raw.edgeProof||null,
         cooldowns:raw.cooldowns||{},decisionLog:(Array.isArray(raw.decisionLog)?raw.decisionLog:[]).slice(0,150).map(d=>({ts:Number(d.ts||0),timeStr:cleanText(d.timeStr),action:cleanText(d.action),symbol:cleanText(d.symbol),chainId:cleanText(d.chainId),reason:cleanText(d.reason)}))
       };
       return json({ok:true,portfolio,version:Number(row.version||0),updated_at:row.updated_at},200,request);
+    }
+    if(url.pathname==="/webhook/helius"&&request.method==="POST"){
+      const expected=String(env.HELIUS_WEBHOOK_SECRET||"");
+      const supplied=request.headers.get("Authorization")||"";
+      if(!expected||supplied.length!==expected.length)return json({error:"unauthorized_webhook"},401,request);
+      let authDiff=0;for(let i=0;i<expected.length;i++)authDiff|=expected.charCodeAt(i)^supplied.charCodeAt(i);
+      if(authDiff!==0)return json({error:"unauthorized_webhook"},401,request);
+      const raw=await request.text();
+      let events;try{events=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,request);}
+      if(!Array.isArray(events))events=[events];
+      const allow=new Set(String(env.SMART_WALLETS||"").split(",").map(x=>x.trim()).filter(Boolean));
+      if(!allow.size)return json({error:"smart_wallet_allowlist_empty"},400,request);
+      let stored=0;
+      for(const event of events){
+        if(String(event?.type||"").toUpperCase()!=="SWAP"||event?.transactionError)continue;
+        const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[];
+        const walletBuy=transfers.filter(t=>allow.has(String(t.toUserAccount||""))&&t.mint&&Number(t.tokenAmount||0)>0);
+        for(const transfer of walletBuy){
+          const wallet=String(transfer.toUserAccount),mint=String(transfer.mint),signature=String(event.signature||"");
+          if(!signature||!mint)continue;
+          const timestamp=Number(event.timestamp||Date.now()/1000)*1000;
+          const write=await env.DB.prepare("INSERT OR IGNORE INTO smart_wallet_buys(wallet,mint,signature,slot,occurred_at) VALUES(?,?,?,?,?)")
+            .bind(wallet,mint,signature,Number(event.slot||0),Math.floor(timestamp)).run();
+          stored+=Number(write.meta?.changes||0);
+        }
+      }
+      await env.DB.prepare("DELETE FROM smart_wallet_buys WHERE occurred_at<?").bind(Date.now()-24*60*60*1000).run();
+      const recent=await env.DB.prepare("SELECT mint,COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE occurred_at>=? GROUP BY mint HAVING COUNT(DISTINCT wallet)>=2")
+        .bind(Date.now()-15*60*1000).all();
+      return json({ok:true,stored,confluence:(recent.results||[]).map(x=>({signal:"SMART_MONEY_CONFLUENCE",mint:x.mint,wallets:Number(x.wallets),latest:Number(x.latest)}))},200,request);
+    }
+    if(url.pathname==="/smart-money"&&request.method==="GET"){
+      if(!authorized(request,env))return json({error:"unauthorized"},401,request);
+      const mint=String(url.searchParams.get("mint")||"");
+      if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint))return json({error:"invalid_mint"},400,request);
+      const row=await env.DB.prepare("SELECT COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE mint=? AND occurred_at>=?")
+        .bind(mint,Date.now()-15*60*1000).first();
+      const wallets=Number(row?.wallets||0);
+      return json({ok:true,mint,wallets,signal:wallets>=2?"SMART_MONEY_CONFLUENCE":null,latest:Number(row?.latest||0)},200,request);
     }
     if(url.pathname!=="/state")return json({error:"not_found"},404);
     if(!authorized(request,env))return json({error:"unauthorized"},401);
@@ -54,10 +94,10 @@ export default {
     }
     if(request.method!=="POST")return json({error:"method_not_allowed"},405);
     let body;try{body=await request.json();}catch{return json({error:"invalid_json"},400);}
-    if(!body||!body.portfolio||typeof body.portfolio!=="object"||Array.isArray(body.portfolio)||!Number.isSafeInteger(Number(body.version))||Number(body.version)<0)return json({error:"portfolio_and_nonnegative_version_required"},400);
+    if(!body||!body.portfolio||typeof body.portfolio!=="object"||Array.isArray(body.portfolio)||!Number.isSafeInteger(Number(body.version))||Number(body.version)<0||!(body.updated_at===null||typeof body.updated_at==="string"))return json({error:"portfolio_version_and_updated_at_required"},400);
     const serialized=JSON.stringify(body.portfolio);if(serialized.length>2_000_000)return json({error:"state_too_large"},413);
     const expected=Number(body.version),updatedAt=new Date().toISOString();
-    const result=await env.DB.prepare("UPDATE portfolio_state SET payload=?, updated_at=?, version=version+1 WHERE id=? AND version=?").bind(serialized,updatedAt,"main",expected).run();
+    const result=await env.DB.prepare("UPDATE portfolio_state SET payload=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND updated_at IS ?").bind(serialized,updatedAt,"main",expected,body.updated_at).run();
     if(!result.meta?.changes){const row=await env.DB.prepare("SELECT version,updated_at FROM portfolio_state WHERE id=?").bind("main").first();return json({success:false,error:"version_conflict",version:Number(row?.version||0),updated_at:row?.updated_at||null},409);}
     return json({success:true,version:expected+1,updated_at:updatedAt});
   }

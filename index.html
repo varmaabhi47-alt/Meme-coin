@@ -1004,6 +1004,10 @@ node meme-radar-autobot-24-7.mjs
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[char]));
     }
+    function safeHttpsUrl(value) {
+      try { const url = new URL(String(value ?? '')); return url.protocol === 'https:' ? url.href : ''; }
+      catch { return ''; }
+    }
 
     function renderV5Research() {
       const rows = v5ResearchRows;
@@ -1191,6 +1195,8 @@ node meme-radar-autobot-24-7.mjs
         const updatedAt = result.updatedAt || result.updated_at || '';
         if (updatedAt && updatedAt === remotePortfolioUpdatedAt) { portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN`; portfolioSyncStatusClass = 'text-cyan-300'; window.renderPortfolioSyncStatus(); return true; }
         state.cashUsd = remote.cashUsd;
+        state.edgeProof = remote.edgeProof || null;
+        state.rpcTelemetry = remote.rpcTelemetry || null;
         state.config.startingBankroll = Number(remote.startingBankroll ?? state.config.startingBankroll ?? 1000);
         state.autoTradeEnabled = TELEGRAM_SHARED_READ_ONLY ? false : (remote.autoTradeEnabled ?? state.autoTradeEnabled);
         state.openPositions = remote.openPositions;
@@ -1201,7 +1207,7 @@ node meme-radar-autobot-24-7.mjs
         state.positionsStaleReason = '';
         state.lastPosSyncMs = updatedAt ? Date.parse(updatedAt) : Date.now();
         remotePortfolioUpdatedAt = updatedAt;
-        portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN • ${remote.closedTrades.length} CLOSED`;
+        const proof=remote.edgeProof||{};const pf=proof.profitFactor==null?'n/a':Number.isFinite(Number(proof.profitFactor))?Number(proof.profitFactor).toFixed(2):'∞';const adjPf=proof.outlierAdjustedProfitFactor==null?'n/a':Number.isFinite(Number(proof.outlierAdjustedProfitFactor))?Number(proof.outlierAdjustedProfitFactor).toFixed(2):'∞';portfolioSyncStatus = `D1 SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN • ${remote.closedTrades.length} CLOSED • EDGE ${proof.EDGE_VERIFIED?'VERIFIED':'NOT VERIFIED'} (${Number(proof.closedTrades||0)}/100) • PF ${pf} • OUTLIER PF ${adjPf}`;
         portfolioSyncStatusClass = 'text-cyan-300';
         window.renderPortfolioSyncStatus();
         persistPortfolio();
@@ -1956,14 +1962,14 @@ node meme-radar-autobot-24-7.mjs
         const gateBadge = gate.ok
           ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Passes Liquidity & Sellability Gate">PASS</span>`
           : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700" title="${esc(gate.reason)}">FAIL</span>`;
-        const iconUrl = String(p.icon ?? '');
-        const hasSafeIcon = iconUrl.startsWith('https://') || iconUrl.startsWith('http://');
+        const iconUrl = safeHttpsUrl(p.icon);
+        const hasSafeIcon = Boolean(iconUrl);
         const avatar = hasSafeIcon
           ? `<img src="${esc(iconUrl)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`
           : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`;
 
         return `
-          <tr onclick="openInspectorById('${esc(p.id)}')" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
+          <tr data-pair-id="${escapeHtml(p.id)}" class="cursor-pointer hover:bg-term-hover/75 transition ${flashCls}">
             <td class="py-2.5 px-3.5">
               <div class="flex items-center gap-2.5 min-w-[175px]">
                 ${avatar}
@@ -1992,11 +1998,13 @@ node meme-radar-autobot-24-7.mjs
             <td class="py-2.5 px-2 text-center">${gateBadge}</td>
             <td class="py-2.5 px-2 text-right font-mono font-bold text-white tabular-nums">${p.alphaScore}</td>
             <td class="py-2.5 px-3 text-right">
-              <button onclick="event.stopPropagation(); openInspectorById('${esc(p.id)}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-semibold">Inspect</button>
+              <button type="button" data-pair-inspect="${escapeHtml(p.id)}" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-semibold">Inspect</button>
             </td>
           </tr>
         `;
       }).join('');
+      tbody.querySelectorAll('[data-pair-id]').forEach(el=>el.addEventListener('click',()=>openInspectorById(el.dataset.pairId)));
+      tbody.querySelectorAll('[data-pair-inspect]').forEach(el=>el.addEventListener('click',event=>{event.stopPropagation();openInspectorById(el.dataset.pairInspect);}));
       tbody.querySelectorAll('[data-radar-symbol]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'');});
       tbody.querySelectorAll('[data-radar-name]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.name??'');});
       tbody.querySelectorAll('[data-radar-initials]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'').slice(0,2);});
@@ -2171,12 +2179,12 @@ node meme-radar-autobot-24-7.mjs
         return `
           <div class="px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-term-hover/30">
             <div class="flex items-center gap-2 min-w-0">
-              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${d.action}</span>
+              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${esc(d.action)}</span>
               <span class="font-bold text-white shrink-0" data-decision-symbol></span>
               <span class="text-slate-500 shrink-0">[${esc((d.chainId || '').toUpperCase())}]</span>
               <span class="text-slate-300 truncate">${esc(d.reason)}</span>
             </div>
-            <span class="text-slate-500 shrink-0">${d.timeStr}</span>
+            <span class="text-slate-500 shrink-0">${esc(d.timeStr)}</span>
           </div>
         `;
       }).join('');
@@ -2281,10 +2289,10 @@ node meme-radar-autobot-24-7.mjs
         const pill = e.level === 'OK' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
         return `
           <tr class="hover:bg-term-hover/40">
-            <td class="py-2 px-3.5 text-slate-400 whitespace-nowrap">${e.timeStr}</td>
-            <td class="py-2 px-3 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${pill}">${e.status || e.level}</span></td>
+            <td class="py-2 px-3.5 text-slate-400 whitespace-nowrap">${esc(e.timeStr)}</td>
+            <td class="py-2 px-3 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${pill}">${esc(e.status || e.level)}</span></td>
             <td class="py-2 px-3 text-cyan-300 whitespace-nowrap">${esc(e.context)}</td>
-            <td class="py-2 px-3 text-right text-slate-400 whitespace-nowrap">${e.latencyMs}ms</td>
+            <td class="py-2 px-3 text-right text-slate-400 whitespace-nowrap">${Number.isFinite(Number(e.latencyMs)) ? Number(e.latencyMs) : '—'}ms</td>
             <td class="py-2 px-3 text-slate-300 break-all max-w-[340px]">${esc(e.url)}</td>
             <td class="py-2 px-3.5 ${e.level === 'ERROR' ? 'text-rose-300 font-semibold' : 'text-slate-300'}">${esc(e.detail)}</td>
           </tr>
@@ -2363,14 +2371,14 @@ node meme-radar-autobot-24-7.mjs
       const bm = { solana: 'sol', ethereum: 'eth', base: 'base', bsc: 'bsc', arbitrum: 'arbi' }[p.chainId] || 'eth';
       document.getElementById('insp-ext-links').innerHTML = [
         { l: 'DexScreener', u: p.url }, { l: 'Explorer', u: exp }, { l: 'Bubblemaps', u: `https://app.bubblemaps.io/${bm}/token/${addr}` }
-      ].map(x => `<a href="${x.u}" target="_blank" rel="noopener noreferrer" class="text-center py-1.5 rounded-lg bg-term-panel hover:bg-term-hover border border-term-border text-[11px] font-mono text-slate-300">${x.l} ↗</a>`).join('');
+      ].map(x => { const href = safeHttpsUrl(x.u); return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-center py-1.5 rounded-lg bg-term-panel hover:bg-term-hover border border-term-border text-[11px] font-mono text-slate-300">${escapeHtml(x.l)} ↗</a>` : ''; }).join('');
 
       let dexBtns = p.chainId === 'solana'
         ? [{ l: 'Jupiter Swap', u: `https://jup.ag/swap/SOL-${addr}`, c: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' }, { l: 'Raydium Swap', u: `https://raydium.io/swap/?inputMint=sol&outputMint=${addr}`, c: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40' }]
         : p.chainId === 'bsc'
           ? [{ l: 'PancakeSwap', u: `https://pancakeswap.finance/swap?outputCurrency=${addr}`, c: 'bg-amber-500/15 text-amber-300 border-amber-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/bsc/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }]
           : [{ l: 'Uniswap Swap', u: `https://app.uniswap.org/swap?outputCurrency=${addr}`, c: 'bg-pink-500/15 text-pink-300 border-pink-500/40' }, { l: 'TokenSniffer', u: `https://tokensniffer.com/token/${p.chainId}/${addr}`, c: 'bg-term-bg text-slate-300 border-term-border' }];
-      document.getElementById('insp-dex-btns').innerHTML = dexBtns.map(b => `<a href="${b.u}" target="_blank" rel="noopener noreferrer" class="text-center py-2 rounded-xl border text-xs font-bold transition ${b.c}">${b.l} ↗</a>`).join('');
+      document.getElementById('insp-dex-btns').innerHTML = dexBtns.map(b => { const href = safeHttpsUrl(b.u); return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-center py-2 rounded-xl border text-xs font-bold transition ${b.c}">${escapeHtml(b.l)} ↗</a>` : ''; }).join('');
     }
 
     async function runInspectorAudit(force) {
@@ -3074,7 +3082,8 @@ main();
         const passed = run.status === 'completed' && run.conclusion === 'success';
         const failed = run.status === 'completed' && run.conclusion !== 'success';
         const tone = passed ? 'text-emerald-300' : failed ? 'text-rose-300' : 'text-amber-300';
-        summary.innerHTML = '<div class="flex flex-wrap items-center justify-between gap-2"><div><span class="font-bold ' + tone + '">' + esc(stateLabel) + '</span><span class="text-slate-400 ml-2">Run #' + Number(run.run_number || 0) + '</span></div><a class="text-cyan-300 hover:text-white underline" href="' + esc(run.html_url || 'https://github.com/varmaabhi47-alt/Meme-coin/actions') + '" target="_blank" rel="noopener noreferrer">Open workflow run ↗</a></div><div class="mt-1 text-[11px] text-slate-500">Started: ' + esc(run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown') + ' · Branch: ' + esc(run.head_branch || 'unknown') + '</div>';
+        const runUrl = safeHttpsUrl(run.html_url || 'https://github.com/varmaabhi47-alt/Meme-coin/actions') || 'https://github.com/varmaabhi47-alt/Meme-coin/actions';
+        summary.innerHTML = '<div class="flex flex-wrap items-center justify-between gap-2"><div><span class="font-bold ' + tone + '">' + esc(stateLabel) + '</span><span class="text-slate-400 ml-2">Run #' + Number(run.run_number || 0) + '</span></div><a class="text-cyan-300 hover:text-white underline" href="' + escapeHtml(runUrl) + '" target="_blank" rel="noopener noreferrer">Open workflow run ↗</a></div><div class="mt-1 text-[11px] text-slate-500">Started: ' + esc(run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown') + ' · Branch: ' + esc(run.head_branch || 'unknown') + '</div>';
         const providerNames = ['DexScreener','GoPlus','RugCheck','Solana RPC','Jupiter'];
         const label = passed ? 'PASS' : failed ? 'CHECK FAILED' : 'PENDING';
         const cls = passed ? 'text-emerald-300' : failed ? 'text-rose-300' : 'text-amber-300';

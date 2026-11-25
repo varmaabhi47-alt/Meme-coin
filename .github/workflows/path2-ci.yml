@@ -1,0 +1,20 @@
+name: MEME.RADAR Path 2 CI
+on:
+  push:
+    branches: [path2-zero-cost-engine]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm run check
+      - run: npm test
