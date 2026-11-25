@@ -25,11 +25,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Check V5 bot syntax
-        run: node --check meme-radar-bot.mjs
-
-      - name: Check V5 intelligence module syntax
-        run: node --check meme-radar-v5-intelligence.mjs
+      - name: Check bot, modules and Worker syntax
+        run: npm run check
 
       - name: Run all V5 unit tests
         run: node --test meme-radar-v5-*.test.mjs
