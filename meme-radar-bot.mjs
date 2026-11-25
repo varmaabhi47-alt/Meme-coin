@@ -226,6 +226,7 @@ function calcSell(tokens, price, liq) {
 }
 
 async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
+  for(const [mint,row] of holderAuditCache)if(Date.now()-row.ts>=900000)holderAuditCache.delete(mint);
   const cachedAudit = holderAuditCache.get(tokenAddress);
   if (cachedAudit && Date.now() - cachedAudit.ts < 900000) return cachedAudit.value;
   const endpoint = process.env.SOLANA_RPC_HTTP || 'https://api.mainnet-beta.solana.com';
@@ -337,6 +338,7 @@ async function recordResearch(pair, security, analysis, decision, holders = null
 }
 
 async function auditSecurity(pair) {
+  for(const [oldKey,row] of secCache)if(Date.now()-Number(row.ts||0)>=900000)secCache.delete(oldKey);
   const key = pair.id;
   const cached = secCache.get(key);
   if (cached && Date.now() - cached.ts < 900000) return cached;
@@ -376,7 +378,10 @@ async function auditSecurity(pair) {
 async function syncPortfolioToCloudflare(){const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret){console.error('D1 sync skipped: missing secret');return false;}try{const headers={'Authorization':`Bearer ${secret}`,'Content-Type':'application/json'};const read=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{headers,cache:'no-store'});if(!read.ok)throw Error('D1 read HTTP '+read.status);const current=await read.json();d1Version=Number(current.version??d1Version);const response=await fetch('https://memeradar-state-api.varmaabhi47.workers.dev/state',{method:'POST',headers,body:JSON.stringify({portfolio,version:d1Version,updated_at:current.updated_at??null})});const result=await response.json().catch(()=>({}));if(!response.ok||result.success===false){if(response.status===409)d1Version=Number(result.version||d1Version);throw Error(result.error||'D1 write HTTP '+response.status);}d1Version=Number(result.version??d1Version+1);console.log('D1 sync OK version '+d1Version);return true;}catch(e){console.error('D1 sync failed: '+e.message);process.exitCode=1;return false;}}
 
 async function fetchSmartMoneySignal(mint) {
-  if(portfolio.smartMoneySignals?.[mint])return true;
+  portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
+  for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>15*60*1000)delete portfolio.smartMoneySignals[oldMint];}
+  const existing=portfolio.smartMoneySignals[mint],existingAt=Number(existing?.at||existing?.latest||0);
+  if(existing&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
   try{
     const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
@@ -622,7 +627,7 @@ async function persistentRunner(){
         wallets,
         onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
         onMint:async event=>{
-          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx))eventMintQueue.add(mint);portfolio.eventDiscoveryRequested=true;console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
+          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx)){eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);}portfolio.eventDiscoveryRequested=true;console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
           catch(error){console.error('Migration transaction lookup failed; no mint inferred: '+error.message);}
         },
         onWalletLog:async event=>{
