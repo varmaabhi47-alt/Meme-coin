@@ -595,7 +595,7 @@ async function persistentRunner(){
         wallets,
         onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
         onMint:async event=>{
-          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx))eventMintQueue.add(mint);console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
+          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx))eventMintQueue.add(mint);portfolio.eventDiscoveryRequested=true;console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
           catch(error){console.error('Migration transaction lookup failed; no mint inferred: '+error.message);}
         },
         onWalletLog:async event=>{
@@ -605,7 +605,7 @@ async function persistentRunner(){
             for(const mint of extractWalletTokenBuys(tx,event.wallet)){
               if([USDC_MINT,'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB','So11111111111111111111111111111111111111112'].includes(mint))continue;
               const signal=smartMoneyConfluence(event.wallet,mint);
-              if(signal){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]=signal;logDecision(signal.signal,mint,'solana',signal.wallets+' tracked wallets bought within 15m');await runnerLock(async()=>{await saveState();await syncPortfolioToCloudflare();});}
+              if(signal){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]=signal;portfolio.eventDiscoveryRequested=true;logDecision(signal.signal,mint,'solana',signal.wallets+' tracked wallets bought within 15m');await runnerLock(async()=>{await saveState();await syncPortfolioToCloudflare();});}
             }
           }catch(error){console.error('Smart-wallet transaction lookup failed; no signal inferred: '+error.message);}
         }
@@ -628,7 +628,7 @@ async function persistentRunner(){
         const now=Date.now();
         if(now-lastTelegram>=5000){await pollTelegramCommands();lastTelegram=Date.now();}
         if(now-lastBreaker>=30000){await runnerLock(()=>updateCircuitBreaker());lastBreaker=Date.now();}
-        if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await runnerLock(async()=>{await updateCircuitBreaker();await monitorPositions({discover:true});});lastDiscovery=Date.now();}
+        if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000||portfolio.eventDiscoveryRequested){portfolio.eventDiscoveryRequested=false;await runnerLock(async()=>{await updateCircuitBreaker();await monitorPositions({discover:true});});lastDiscovery=Date.now();}
         if(now-lastResearch>=60000){await runnerLock(()=>monitorResearchSnapshots());lastResearch=Date.now();}
       }catch(error){lastError=error?.message||String(error);console.error('Discovery/control loop error: '+lastError);await saveState();}
       await sleep(1000);
