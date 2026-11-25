@@ -14,7 +14,7 @@ function mockDb(){
    if(sql.startsWith('UPDATE portfolio_state')){const [payload,updated,id,version,updatedAt]=args;if(row.version===version&&row.updated_at===updatedAt){row={...row,payload,updated_at:updated,version:version+1};return{meta:{changes:1}};}return{meta:{changes:0}};}
    if(sql.startsWith('INSERT OR IGNORE INTO smart_wallet_buys')){const key=args.join('|');const before=buys.size;buys.add(key);return{meta:{changes:buys.size>before?1:0}};}
    return{meta:{changes:1}};
-  },async all(){return{results:[]};}};}};
+  },async all(){if(sql.includes('FROM curated_smart_wallets WHERE status=\\'ACTIVE\\''))return{results:[{address:'WALLET_A',median_buy_sol:0.5,correlation_group:'group-a'}]};return{results:[]};}};}};
 }
 
 test('Worker GET /state requires bearer auth and POST checks version plus updated_at',async()=>{
@@ -27,8 +27,8 @@ test('Worker GET /state requires bearer auth and POST checks version plus update
 });
 
 test('Helius webhook requires configured auth header and accepts only allowlisted swap buys',async()=>{
- const DB=mockDb(),env={DB,HELIUS_WEBHOOK_SECRET:'Bearer webhook-secret',SMART_WALLETS:'WALLET_A,WALLET_B'};
- const body=[{type:'SWAP',signature:'sig-buy',slot:123,timestamp:Date.now()/1000,tokenTransfers:[{toUserAccount:'WALLET_A',mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',tokenAmount:25}]}];
+ const DB=mockDb(),env={DB,HELIUS_WEBHOOK_SECRET:'Bearer webhook-secret'};
+ const body=[{type:'SWAP',signature:'sig-buy',slot:123,timestamp:Date.now()/1000,tokenTransfers:[{toUserAccount:'WALLET_A',mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',tokenAmount:25}],nativeTransfers:[{fromUserAccount:'WALLET_A',toUserAccount:'DEX',amount:500000000}]}];
  const denied=await worker.fetch(new Request('https://worker.test/webhook/helius',{method:'POST',body:JSON.stringify(body)}),env);assert.equal(denied.status,401);
  const accepted=await worker.fetch(new Request('https://worker.test/webhook/helius',{method:'POST',headers:{Authorization:'Bearer webhook-secret','Content-Type':'application/json'},body:JSON.stringify(body)}),env);assert.equal(accepted.status,200);assert.equal((await accepted.json()).stored,1);
 });
