@@ -202,7 +202,7 @@ async function pruneWallets(){
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
   const kept=active.slice(0,50);for(const w of active.slice(50)){w.status='WATCH';}
-  j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address))].filter(Boolean);
+  j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
   j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
   const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
   return {active:kept.length,promoted,muted,top:top.map(w=>({address:w.address,hitRate14d:w.performance14d?.hitRatePct,mean4hPct:w.performance14d?.mean4hPct,confidence:w.confidence_score})),telemetryErrors};
