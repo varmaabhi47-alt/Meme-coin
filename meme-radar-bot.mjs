@@ -90,18 +90,24 @@ const nowIso = () => new Date().toISOString();
 
 async function loadState() {
   try { const cache=JSON.parse(await fs.readFile('audit-cache.json','utf8')); for(const [key,value] of Object.entries(cache)) if(value&&Date.now()-Number(value.ts)<900000)secCache.set(key,value); } catch {}
-  try {
-    const raw = await fs.readFile(CONFIG.PORTFOLIO_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    portfolio = { ...portfolio, ...parsed };
-    lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);
-    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
-    telegramOffset = Number(parsed.telegramOffset || 0);
-    console.log(`[${nowIso()}] Loaded ${CONFIG.PORTFOLIO_FILE} | Cash: $${portfolio.cashUsd.toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
-  } catch {
-    await saveState();
-    console.log(`[${nowIso()}] Initialized fresh ${CONFIG.PORTFOLIO_FILE} with $${portfolio.cashUsd.toFixed(2)} USDC`);
+  let parsed=null,localExists=false;
+  try{parsed=JSON.parse(await fs.readFile(CONFIG.PORTFOLIO_FILE,'utf8'));localExists=true;}
+  catch(error){if(error.code!=='ENOENT')throw new Error('Local portfolio file is unreadable; refusing to reset: '+error.message);}
+  if(!localExists){
+    const secret=process.env.MEMERADAR_SYNC_SECRET;
+    if(secret){
+      const remote=await fetchJsonStrict('https://memeradar-state-api.varmaabhi47.workers.dev/state',8000,{Authorization:'Bearer '+secret});
+      parsed=remote.portfolio||remote.state||null;d1Version=Number(remote.version||0);
+    }
+    if(parsed&&typeof parsed==='object')console.log('Hydrated local paper state from authenticated D1 version '+d1Version+'.');
+    else if(process.env.ALLOW_FRESH_PAPER_STATE==='true'){parsed={...portfolio};console.warn('Explicitly initializing a new paper portfolio; D1 had no existing state.');}
+    else throw new Error('No local paper portfolio and no authoritative D1 portfolio. Set ALLOW_FRESH_PAPER_STATE=true only for an intentional fresh paper account.');
   }
+  if(!parsed||typeof parsed!=='object'||!Array.isArray(parsed.openPositions)||!Array.isArray(parsed.closedTrades))throw new Error('Portfolio state shape invalid; refusing to reset.');
+  portfolio={...portfolio,...parsed};
+  lastHourlySummaryMs=Number(parsed.lastHourlySummaryMs||0);consecutiveRiskExits=Number(parsed.consecutiveRiskExits||0);telegramOffset=Number(parsed.telegramOffset||0);
+  await saveState();
+  console.log(`[${nowIso()}] Loaded authoritative portfolio | Cash: $${Number(portfolio.cashUsd).toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
 }
 
 async function saveState() { return stateLock(async()=>{portfolio.lastHourlySummaryMs=lastHourlySummaryMs;portfolio.rpcTelemetry=rpcGuard.telemetry();portfolio.edgeProof=computeEdgeProof(portfolio.closedTrades||[]);const tmp=CONFIG.PORTFOLIO_FILE+'.tmp';await fs.writeFile(tmp,JSON.stringify(portfolio,null,2),'utf8');await fs.rename(tmp,CONFIG.PORTFOLIO_FILE);await fs.writeFile('audit-cache.json',JSON.stringify(Object.fromEntries(secCache)),'utf8');}); }
