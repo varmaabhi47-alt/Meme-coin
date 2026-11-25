@@ -15,8 +15,18 @@ export class RpcCreditGuard {
     this.cache = new Map(); this.usage = { month: new Date().toISOString().slice(0, 7), calls: 0, estimatedCredits: 0, daily: {}, lastAt: null };
   }
   async load() {
-    try { const x = JSON.parse(await fs.readFile(this.stateFile, 'utf8')); if (x.month === this.usage.month) this.usage = { ...this.usage, ...x, daily: x.daily || {} }; } catch {}
-    try { const rows=JSON.parse(await fs.readFile(this.stateFile+'.cache','utf8')); for(const [key,row] of Object.entries(rows)) if(row&&now()-row.at<this.cacheMs)this.cache.set(key,row); } catch {}
+    try {
+      const x = JSON.parse(await fs.readFile(this.stateFile, 'utf8'));
+      if (x.month === this.usage.month) this.usage = { ...this.usage, ...x, daily: x.daily || {} };
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw new Error('RPC usage telemetry file unreadable; refusing to reset credit accounting: ' + error.message);
+    }
+    try {
+      const rows = JSON.parse(await fs.readFile(this.stateFile + '.cache', 'utf8'));
+      for (const [key, row] of Object.entries(rows)) if (row && now() - row.at < this.cacheMs) this.cache.set(key, row);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw new Error('RPC audit cache unreadable: ' + error.message);
+    }
   }
   async save() { await fs.writeFile(this.stateFile, JSON.stringify(this.usage), 'utf8'); }
   async rateLimit(count=1) {
@@ -28,7 +38,7 @@ export class RpcCreditGuard {
     if (row && now() - row.at < this.cacheMs) return row.value;
     for(const [oldKey,oldRow] of this.cache)if(now()-oldRow.at>=this.cacheMs)this.cache.delete(oldKey);
     const value = await fn(); this.cache.set(key, { at: now(), value });
-    try { await fs.writeFile(this.stateFile+'.cache',JSON.stringify(Object.fromEntries(this.cache)),'utf8'); } catch {}
+    try { await fs.writeFile(this.stateFile+'.cache',JSON.stringify(Object.fromEntries(this.cache)),'utf8'); } catch (error) { console.error('RPC audit cache persistence failed: ' + error.message); }
     return value;
   }
   async rpc(endpoint, method, params = [], { credits = this.creditCost, cacheKey = null } = {}) {
