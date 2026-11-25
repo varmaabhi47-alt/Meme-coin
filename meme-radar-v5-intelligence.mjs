@@ -16,12 +16,15 @@ export function scoreCandidate(pair, security = { pass: false }) {
   const liq = num(pair?.liquidity?.usd);
   const vol24 = num(pair?.volume?.h24);
   const vol1h = num(pair?.volume?.h1);
-  const buys5m = num(pair?.txns?.m5?.buys);\n  const sells5m = num(pair?.txns?.m5?.sells);\n  const buys1h = num(pair?.txns?.h1?.buys);
+  const buys5m = num(pair?.txns?.m5?.buys);
+  const sells5m = num(pair?.txns?.m5?.sells);
+  const buys1h = num(pair?.txns?.h1?.buys);
   const sells1h = num(pair?.txns?.h1?.sells);
   const buys24 = num(pair?.txns?.h24?.buys);
   const sells24 = num(pair?.txns?.h24?.sells);
   const fdv = num(pair?.fdv || pair?.marketCap);
-  const buyRatio5m = buys5m + sells5m ? buys5m / (buys5m + sells5m) : 0;\n  const buyRatio1h = buys1h + sells1h ? buys1h / (buys1h + sells1h) : 0;
+  const buyRatio5m = buys5m + sells5m ? buys5m / (buys5m + sells5m) : 0;
+  const buyRatio1h = buys1h + sells1h ? buys1h / (buys1h + sells1h) : 0;
   const buyRatio24 = buys24 + sells24 ? buys24 / (buys24 + sells24) : 0;
   const liqFdv = fdv > 0 ? liq / fdv : 0;
   const turnover = liq > 0 ? vol24 / liq : 0;
@@ -54,7 +57,9 @@ export function scoreCandidate(pair, security = { pass: false }) {
   if (buyRatio1h < 0.52) reasons.push('1h buy ratio below 52%');
   if (liqFdv < 0.08) reasons.push('liquidity/FDV below 8%');
   if (turnover > 20) reasons.push('extreme turnover; possible churn');
-  if (change5m > 35) reasons.push('extreme 5m move; chase-risk');\n  if (change1h > 150) reasons.push('extreme 1h move; parabolic chase-risk');\n  if (buyRatio5m < 0.55) reasons.push('5m buy ratio below 55%');
+  if (change5m > 35) reasons.push('extreme 5m move; chase-risk');
+  if (change1h > 150) reasons.push('extreme 1h move; parabolic chase-risk');
+  if (buyRatio5m < 0.55) reasons.push('5m buy ratio below 55%');
 
   return {
     version: V5_SCORE_VERSION,
@@ -370,9 +375,15 @@ export function evaluateDiscoveryPrefilter(pair, config = {}) {
   const tradeSize = Number(config.TRADE_SIZE_USD ?? 100);
   const volume = Number(pair?.volume?.h24 || 0);
   const sells1h = Number(pair?.txns?.h1?.sells || 0);
-  const buys5m = Number(pair?.txns?.m5?.buys || 0);\n  const sells5m = Number(pair?.txns?.m5?.sells || 0);\n  const buys24 = Number(pair?.txns?.h24?.buys || 0);
+  const buys5m = Number(pair?.txns?.m5?.buys || 0);
+  const sells5m = Number(pair?.txns?.m5?.sells || 0);
+  const buys24 = Number(pair?.txns?.h24?.buys || 0);
   const sells24 = Number(pair?.txns?.h24?.sells || 0);
-  const buyRatio = buys24 + sells24 > 0 ? buys24 / (buys24 + sells24) * 100 : null;\n  const buyRatio5m = buys5m + sells5m > 0 ? buys5m / (buys5m + sells5m) * 100 : null;\n  const change5m = Number(pair?.priceChange?.m5);\n  const change1h = Number(pair?.priceChange?.h1);\n  const pairAgeMinutes = Number(pair?.pairCreatedAt) > 0 ? (Date.now() - Number(pair.pairCreatedAt)) / 60000 : null;
+  const buyRatio = buys24 + sells24 > 0 ? buys24 / (buys24 + sells24) * 100 : null;
+  const buyRatio5m = buys5m + sells5m > 0 ? buys5m / (buys5m + sells5m) * 100 : null;
+  const change5m = Number(pair?.priceChange?.m5);
+  const change1h = Number(pair?.priceChange?.h1);
+  const pairAgeMinutes = Number(pair?.pairCreatedAt) > 0 ? (Date.now() - Number(pair.pairCreatedAt)) / 60000 : null;
   const liqFdv = fdv > 0 ? liquidity / fdv * 100 : null;
   const tradeToLiq = liquidity > 0 ? tradeSize / liquidity * 100 : null;
   const reasons = [];
