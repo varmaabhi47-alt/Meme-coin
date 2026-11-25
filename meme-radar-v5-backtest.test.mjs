@@ -35,3 +35,18 @@ test('backtest is deterministic and handles empty input', () => {
   assert.deepEqual(a, b);
   assert.equal(backtestSnapshots([]).trades, 0);
 });
+
+test('staged replay takes partial profit then exits runner on trailing stop',()=>{
+ const rows=[
+  {token:'runner',symbol:'RUN',recordedAt:'2026-01-01T00:00:00.000Z',priceUsd:1,liquidityUsd:100000,score:92,tier:'RESEARCH',security:{pass:true},decision:'RESEARCH'},
+  {token:'runner',symbol:'RUN',recordedAt:'2026-01-01T00:05:00.000Z',priceUsd:1.5,liquidityUsd:100000,score:92,tier:'RESEARCH',security:{pass:true},decision:'SNAPSHOT'},
+  {token:'runner',symbol:'RUN',recordedAt:'2026-01-01T00:10:00.000Z',priceUsd:1.25,liquidityUsd:100000,score:92,tier:'RESEARCH',security:{pass:true},decision:'SNAPSHOT'}
+ ];
+ const result=backtestSnapshots(rows,{startingEquityUsd:1000});
+ assert.equal(result.trades,1);
+ assert.equal(result.results[0].partialTpDone,true);
+ assert.equal(result.results[0].finalExitReason,'RUNNER_TRAILING');
+ assert.ok(result.results[0].netPnlUsd>0);
+ assert.equal(typeof result.profitFactor,'number');
+ assert.equal(typeof result.pnlExcludingLargestTradeUsd,'number');
+});
