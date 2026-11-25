@@ -52,10 +52,8 @@ export default {
       const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
       const digest=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(raw)));
       const expected=[...digest].map(b=>b.toString(16).padStart(2,"0")).join("");
-      if(supplied.length!==expected.length||!crypto.subtle.timingSafeEqual) {
-        // Workers WebCrypto lacks timingSafeEqual; compare fixed-length bytes without early exit.
-        if(supplied.length!==expected.length)return json({error:"invalid_signature"},401,request);
-      }
+      if(supplied.length!==expected.length)return json({error:"invalid_signature"},401,request);
+      // Fixed-length comparison without early exit.
       let diff=0;for(let i=0;i<expected.length;i++)diff|=expected.charCodeAt(i)^supplied.charCodeAt(i);
       if(diff!==0)return json({error:"invalid_signature"},401,request);
       let events;try{events=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,request);}
@@ -79,6 +77,15 @@ export default {
       const recent=await env.DB.prepare("SELECT mint,COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE occurred_at>=? GROUP BY mint HAVING COUNT(DISTINCT wallet)>=2")
         .bind(Date.now()-15*60*1000).all();
       return json({ok:true,stored,confluence:(recent.results||[]).map(x=>({signal:"SMART_MONEY_CONFLUENCE",mint:x.mint,wallets:Number(x.wallets),latest:Number(x.latest)}))},200,request);
+    }
+    if(url.pathname==="/smart-money"&&request.method==="GET"){
+      if(!authorized(request,env))return json({error:"unauthorized"},401,request);
+      const mint=String(url.searchParams.get("mint")||"");
+      if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint))return json({error:"invalid_mint"},400,request);
+      const row=await env.DB.prepare("SELECT COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE mint=? AND occurred_at>=?")
+        .bind(mint,Date.now()-15*60*1000).first();
+      const wallets=Number(row?.wallets||0);
+      return json({ok:true,mint,wallets,signal:wallets>=2?"SMART_MONEY_CONFLUENCE":null,latest:Number(row?.latest||0)},200,request);
     }
     if(url.pathname!=="/state")return json({error:"not_found"},404);
     if(!authorized(request,env))return json({error:"unauthorized"},401);
