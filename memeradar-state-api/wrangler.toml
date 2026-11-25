@@ -5,7 +5,7 @@ compatibility_date = "2026-11-25"
 [[d1_databases]]
 binding = "DB"
 database_name = "memeradar_portfolio"
-database_id = "REPLACE_WITH_EXISTING_D1_DATABASE_ID"
+database_id = "eaa50454-a109-49d3-8f47-d65e2191fd2f"
 
 [vars]
 # Set SMART_WALLETS and HELIUS_WEBHOOK_SECRET as Worker secrets/vars, not here.
