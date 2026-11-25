@@ -186,8 +186,9 @@ async function pruneWallets(){
   const j=await readJson(WALLETS,{version:1,wallets:[]}),research=(await fs.readFile(path.join(ROOT,'paper_research.jsonl'),'utf8').catch(()=>'' )).split(/\r?\n/).filter(Boolean);
   const outcomes=new Map();
   for(const line of research){try{const r=JSON.parse(line),a=r.wallet||r.sourceWallet;if(!a)continue;const arr=outcomes.get(a)||[];arr.push(r);outcomes.set(a,arr);}catch{}}
-  const muted=[],active=[],promoted=[],telemetryErrors=[];
+  const muted=[],active=[],promoted=[],telemetryErrors=[],mutedExisting=[];
   for(const w of j.wallets||[]){
+    if(w.status==='MUTED'){mutedExisting.push(w);continue;}
     let liveLast=null;try{const sigs=await signatures(w.address,Date.now()/1000-30*DAY);liveLast=Number(sigs[0]?.blockTime||0);if(liveLast)w.last_active_at=iso(liveLast*1000);}catch(e){telemetryErrors.push({address:w.address,error:String(e)});}
     const rs=outcomes.get(w.address)||[],recent=rs.filter(r=>Date.parse(r.recordedAt||r.timestamp||0)>=Date.now()-14*DAY);
     const horizons=[];for(const r of recent){const p=r.performance||{},vals=[p.pnl15m??r.pnl15m,p.pnl60m??r.pnl60m,p.pnl4h??r.pnl4h];for(const v of vals)if(v!==null&&v!==undefined&&Number.isFinite(Number(v)))horizons.push(Number(v));}
