@@ -48,7 +48,7 @@ export function scoreCandidate(pair, security = { pass: false }) {
     securityScore * 0.20
   );
 
-  const hardReject = security?.pass !== true;
+  const hardReject = security?.pass !== true || change5m > 30 || change1h > 150 || buyRatio5m < 0.55 || buyRatio1h < 0.52 || liqFdv < 0.08;
   const reasons = [];
   if (hardReject) reasons.push('security audit not passed');
   if (liq < 75000) reasons.push('liquidity below $75k');
@@ -57,8 +57,8 @@ export function scoreCandidate(pair, security = { pass: false }) {
   if (buyRatio1h < 0.52) reasons.push('1h buy ratio below 52%');
   if (liqFdv < 0.08) reasons.push('liquidity/FDV below 8%');
   if (turnover > 20) reasons.push('extreme turnover; possible churn');
-  if (change5m > 35) reasons.push('extreme 5m move; chase-risk');
-  if (change1h > 150) reasons.push('extreme 1h move; parabolic chase-risk');
+  if (change5m > 30) reasons.push('HARD REJECT: 5m price change above +30%');
+  if (change1h > 150) reasons.push('HARD REJECT: 1h price change above +150%');
   if (buyRatio5m < 0.55) reasons.push('5m buy ratio below 55%');
 
   return {
@@ -351,8 +351,8 @@ export function evaluateSolanaHardSecurityGates({ mintAuthority = null, freezeAu
   if (freezeAuthority) reasons.push('active freeze authority');
   if (!holderDistribution?.known) reasons.push('holder concentration unknown');
   else {
-    if (Number(holderDistribution.top10Pct) > 35) reasons.push('top-10 concentration exceeds 35%');
-    if (Number(holderDistribution.top5Pct) > 25) reasons.push('top-5 concentration exceeds 25%');
+    if (Number(holderDistribution.top10Pct) > 30) reasons.push('top-10 concentration exceeds 30%');
+    if (Number(holderDistribution.top5Pct) > 20) reasons.push('top-5 concentration exceeds 20%');
   }
   if ((creatorSignals?.authorityHolderOverlap || []).length) reasons.push('authority/holder overlap');
   if (Number(creatorSignals?.reusedMintAuthorityTokens || 0) > 0) reasons.push('mint authority reused on prior recorded token');
