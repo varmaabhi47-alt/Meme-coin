@@ -45,10 +45,25 @@ function programId(ix,keys) {
 function accountSetFor(ix,keys) {
   return (ix.accounts||[]).map(a=>typeof a==='number'?keys[a]:keyString(a)).filter(Boolean);
 }
+function base58Bytes(value) {
+  const alphabet='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let n=0n;for(const ch of String(value||'')){const digit=alphabet.indexOf(ch);if(digit<0)return [];n=n*58n+BigInt(digit);}
+  const bytes=[];while(n>0n){bytes.push(Number(n&255n));n>>=8n;}bytes.reverse();
+  for(let i=0;i<String(value||'').length&&String(value)[i]==='1';i++)bytes.unshift(0);
+  return bytes;
+}
 function parsedSystemTransfer(ix,keys) {
   if(programId(ix,keys)!==SYSTEM_PROGRAM) return null;
   const parsed=ix.parsed;
   if(parsed?.type==='transfer'&&parsed.info) return parsed.info;
+  // RPC encoding=json returns compiled SystemProgram instructions. Decode the
+  // instruction discriminant so unrelated SOL transfers are still detected.
+  const bytes=base58Bytes(ix.data);if(bytes.length<4)return null;
+  const opcode=bytes[0]+bytes[1]*256+bytes[2]*65536+bytes[3]*16777216;
+  const accounts=ix.accounts||[];
+  const accountAt=i=>typeof accounts[i]==='number'?keys[accounts[i]]:keyString(accounts[i]);
+  if(opcode===2&&accounts.length>=2)return {source:accountAt(0),destination:accountAt(1)};
+  if(opcode===11&&accounts.length>=3)return {source:accountAt(0),destination:accountAt(2)};
   return null;
 }
 
