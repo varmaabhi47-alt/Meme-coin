@@ -98,16 +98,10 @@ async function loadState() {
 async function saveState() { return stateLock(async()=>{portfolio.lastHourlySummaryMs=lastHourlySummaryMs;const tmp=CONFIG.PORTFOLIO_FILE+'.tmp';await fs.writeFile(tmp,JSON.stringify(portfolio,null,2),'utf8');await fs.rename(tmp,CONFIG.PORTFOLIO_FILE);}); }
 
 async function appendCsv(t) {
-  let exists = true;
-  try { await fs.access(CONFIG.CSV_FILE); } catch { exists = false; }
-  if (!exists) {
-    await fs.writeFile(CONFIG.CSV_FILE, 'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,TokensSold,RemainingTokens,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,RealizedPartialPnLUSD,QuoteFallback,ExitReason\n', 'utf8');
-  }
-  const line = [
-    new Date(t.entryTime).toISOString(), new Date(t.exitTime).toISOString(), t.symbol, t.chainId,
-    t.buyPrice,t.tokensBought,t.tokensSold??t.tokensBought,t.remainingTokens??0,t.costUsd.toFixed(2),Math.round(t.entryLiquidityUsd),t.sellPrice,t.exitValueUsd.toFixed(2),t.feesImpactUsd.toFixed(2),t.netPnlUsd.toFixed(2),t.netPnlPct.toFixed(2),t.realizedPartialPnlUsd??0,!!t.quoteFallback,t.exitReason
-  ].join(',') + '\n';
-  await fs.appendFile(CONFIG.CSV_FILE, line, 'utf8');
+  let exists=true;try{await fs.access(CONFIG.CSV_FILE);}catch{exists=false;}
+  if(!exists)await fs.writeFile(CONFIG.CSV_FILE,'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason,TokensSold,RemainingTokens,RealizedPartialPnLUSD,QuoteFallback,EntryQuoteFallback\n','utf8');
+  const line=[new Date(t.entryTime).toISOString(),new Date(t.exitTime).toISOString(),t.symbol,t.chainId,t.buyPrice,t.tokensBought,t.costUsd.toFixed(2),Math.round(t.entryLiquidityUsd),t.sellPrice,t.exitValueUsd.toFixed(2),t.feesImpactUsd.toFixed(2),t.netPnlUsd.toFixed(2),t.netPnlPct.toFixed(2),t.exitReason,t.tokensSold??t.tokensBought,t.remainingTokens??0,t.realizedPartialPnlUsd??0,!!t.quoteFallback,!!t.entryQuoteFallback].join(',')+'\n';
+  await fs.appendFile(CONFIG.CSV_FILE,line,'utf8');
 }
 
 async function fetchJsonStrict(url, timeoutMs = 11000, headers = {}) {
@@ -374,11 +368,11 @@ async function monitorPositions() {
       const remCost=Number(pos.remainingCostUsd??pos.costUsd),soldCost=remCost*.5,realized=ex.netProceeds-soldCost;
       portfolio.cashUsd+=ex.netProceeds;pos.remainingTokens=qty-sellQty;pos.remainingCostUsd=remCost-soldCost;pos.realizedPartialPnlUsd=Number(pos.realizedPartialPnlUsd||0)+realized;pos.partialExitProceedsUsd=Number(pos.partialExitProceedsUsd||0)+ex.netProceeds;pos.partialFeesImpactUsd=Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd;pos.partialTpDone=true;pos.breakevenStopNetPct=2;
       pos.partialExits=[...(pos.partialExits||[]),{at:Date.now(),tokensSold:sellQty,proceedsUsd:ex.netProceeds,allocatedCostUsd:soldCost,realizedPnlUsd:realized,quoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,reason:'PARTIAL_TP_40'}];
-      await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,exitReason:'PARTIAL_TP_40'});
+      await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,entryQuoteFallback:!!pos.entryQuoteFallback,exitReason:'PARTIAL_TP_40'});
       logDecision('PARTIAL_SELL',pos.symbol,pos.chainId,'50% sold at +40% net; runner stop +2% net');await sendTelegram(`PARTIAL TP ${pos.symbol}: sold half; realized $${realized.toFixed(2)}; remaining ${pos.remainingTokens.toFixed(4)}`);
     }else if(risk.action==='EXIT_ALL'){
       const qty=Number(pos.remainingTokens??pos.tokens),ex=await calcPaperExit({...pos,tokens:qty,remainingTokens:qty},pos.lastPrice,currentLiquidityUsd),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
-      portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
+      portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
       portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else consecutiveRiskExits=0;portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(`AUTO-SELL [${risk.reason}] ${pos.symbol}: net $${pnl.toFixed(2)} incl partials; fallback ${!!ex.quoteFallback}`);
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
   }
