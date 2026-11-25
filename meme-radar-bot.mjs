@@ -227,7 +227,8 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     const ownerResponse = accountAddresses.length
       ? await rpc('getMultipleAccounts', [accountAddresses, { encoding: 'jsonParsed', commitment: 'confirmed' }], 4)
       : { value: [] };
-    const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);\n    const accountsWithOwners = accounts.map((account, index) => ({ ...account, owner: holderOwners[index] || null }));
+    const holderOwners = (ownerResponse?.value || []).map(account => account?.data?.parsed?.info?.owner || null);
+    const accountsWithOwners = accounts.map((account, index) => ({ ...account, owner: holderOwners[index] || null }));
     const info = mintInfo?.value?.data?.parsed?.info || {};
     const mintAuthority = info.mintAuthority || null;
     const freezeAuthority = info.freezeAuthority || null;
