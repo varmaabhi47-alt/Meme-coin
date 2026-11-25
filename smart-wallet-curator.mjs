@@ -86,7 +86,7 @@ async function transactionsBySignatures(signatures,encoding='json'){
   const params=signatures.map(signature=>[signature,{encoding,maxSupportedTransactionVersion:1,commitment:'confirmed'}]);
   try{return await rpcBatch('getTransaction',params);}
   catch(error){
-    if(!String(error.message).includes('rejected JSON-RPC batch'))throw error;
+    if(!/(rejected JSON-RPC batch|RPC batch failed HTTP 400)/.test(String(error.message)))throw error;
     const rows=[];for(const p of params){try{rows.push(await rpc('getTransaction',p));}catch(e){rows.push({error:{message:String(e.message)}});}}
     return rows;
   }
