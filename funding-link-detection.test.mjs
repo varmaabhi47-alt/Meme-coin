@@ -24,3 +24,11 @@ test('does not flag isolated wallets with no known or shared source',()=>{
   const result=analyzeFundingLinks(['A','B'],new Map([['A','X'],['B','Y']]));
   assert.equal(result.get('A').linked,false);assert.equal(result.get('B').linked,false);
 });
+
+test('detects wallets with different immediate funders but a shared ancestor',()=>{
+  const graph=new Map([['A','F1'],['F1','ROOT'],['B','F2'],['F2','ROOT']]);
+  const result=analyzeFundingLinks(['A','B'],graph,{maxDepth:2});
+  assert.ok(result.get('A').reasons.includes('shared-funding-cluster'));
+  assert.equal(result.get('A').correlationGroup,'ROOT');
+  assert.equal(result.get('B').correlationGroup,'ROOT');
+});
