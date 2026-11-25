@@ -1191,6 +1191,8 @@ node meme-radar-autobot-24-7.mjs
         const updatedAt = result.updatedAt || result.updated_at || '';
         if (updatedAt && updatedAt === remotePortfolioUpdatedAt) { portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN`; portfolioSyncStatusClass = 'text-cyan-300'; window.renderPortfolioSyncStatus(); return true; }
         state.cashUsd = remote.cashUsd;
+        state.edgeProof = remote.edgeProof || null;
+        state.rpcTelemetry = remote.rpcTelemetry || null;
         state.config.startingBankroll = Number(remote.startingBankroll ?? state.config.startingBankroll ?? 1000);
         state.autoTradeEnabled = TELEGRAM_SHARED_READ_ONLY ? false : (remote.autoTradeEnabled ?? state.autoTradeEnabled);
         state.openPositions = remote.openPositions;
@@ -1201,7 +1203,7 @@ node meme-radar-autobot-24-7.mjs
         state.positionsStaleReason = '';
         state.lastPosSyncMs = updatedAt ? Date.parse(updatedAt) : Date.now();
         remotePortfolioUpdatedAt = updatedAt;
-        portfolioSyncStatus = `TELEGRAM SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN • ${remote.closedTrades.length} CLOSED`;
+        const proof=remote.edgeProof||{};const pf=proof.profitFactor==null?'n/a':Number.isFinite(Number(proof.profitFactor))?Number(proof.profitFactor).toFixed(2):'∞';const adjPf=proof.outlierAdjustedProfitFactor==null?'n/a':Number.isFinite(Number(proof.outlierAdjustedProfitFactor))?Number(proof.outlierAdjustedProfitFactor).toFixed(2):'∞';portfolioSyncStatus = `D1 SYNCED • ${Number(remote.cashUsd).toFixed(2)} CASH • ${remote.openPositions.length} OPEN • ${remote.closedTrades.length} CLOSED • EDGE ${proof.EDGE_VERIFIED?'VERIFIED':'NOT VERIFIED'} (${Number(proof.closedTrades||0)}/100) • PF ${pf} • OUTLIER PF ${adjPf}`;
         portfolioSyncStatusClass = 'text-cyan-300';
         window.renderPortfolioSyncStatus();
         persistPortfolio();
