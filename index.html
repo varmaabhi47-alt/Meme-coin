@@ -194,7 +194,7 @@
       </button>
       <button onclick="switchTab('bot')" id="tab-btn-bot" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
         <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-        <span>24/7 Cloud Auto-Bot</span>
+        <span>Bot Setup & Status</span>
       </button>
       <button onclick="switchTab('research')" id="tab-btn-research" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
         <span>V5 Research Lab</span>
@@ -557,9 +557,9 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Import paper_portfolio.json from 24/7 Server Bot -->
+          <!-- Import paper_portfolio.json from the deployed persistent Node.js bot -->
           <input id="import-bot-file" type="file" accept=".json,application/json" onchange="handleImportBotJson(event)" class="hidden" />
-          <button onclick="document.getElementById('import-bot-file').click()" class="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-semibold transition" title="Load paper_portfolio.json from your 24/7 Node.js server">
+          <button onclick="document.getElementById('import-bot-file').click()" class="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-semibold transition" title="Load paper_portfolio.json from your deployed Node.js bot">
             Import Bot JSON
           </button>
           <button onclick="exportLedgerCsv()" class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-semibold transition">
@@ -601,16 +601,16 @@
     </section>
 
     <!-- ====================================================================== -->
-    <!-- TAB 4: 24/7 CLOUD AUTO-BOT GENERATOR                                   -->
+    <!-- TAB 4: NODE.JS BOT SETUP & DEPLOYMENT                                   -->
     <!-- ====================================================================== -->
     <section id="view-bot" class="hidden space-y-4">
       <div class="p-4 sm:p-5 rounded-2xl bg-term-panel border border-cyan-500/30 space-y-4">
         <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
           <div class="space-y-1.5 max-w-3xl">
             <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium">
-              True 24/7 Execution: Runs non-stop on Railway, Render, VPS, or Termux with a built-in Live Web Dashboard &amp; Telegram Receipts.
+              This is a bot-code generator, not a hosted service. It runs continuously only after you deploy the generated Node.js file to an always-on host (Railway, Render, VPS, or a supported device).
             </div>
-            <h2 class="text-lg font-bold text-white pt-1">24/7 Autonomous Paper-Trading Node.js Bot (<span class="font-mono text-cyan-400">meme-radar-autobot-24-7.mjs</span>)</h2>
+            <h2 class="text-lg font-bold text-white pt-1">Persistent Paper-Trading Node.js Bot (deployment required) (<span class="font-mono text-cyan-400">meme-radar-autobot-24-7.mjs</span>)</h2>
             <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Automatically synced with your exact Strategy Rules and Strict Liquidity/Sellability Gates. Zero npm dependencies (Node.js 18+ native <code class="font-mono text-emerald-300">fetch</code>, <code class="font-mono text-emerald-300">fs</code>, <code class="font-mono text-emerald-300">http</code>). Saves persistent state to <code class="font-mono text-cyan-300">paper_portfolio.json</code> (importable directly into the Trade Ledger tab!) and appends every closed trade to <code class="font-mono text-cyan-300">paper_trades.csv</code>. Serves a live dark-mode dashboard at <code class="font-mono text-emerald-300">http://localhost:3000</code> (or your Railway/Render URL).
             </p>
@@ -647,7 +647,7 @@
         <!-- Step-by-step Deploy Guides -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
           <div class="p-3.5 rounded-xl bg-term-bg border border-term-border space-y-1.5">
-            <div class="font-mono font-bold text-emerald-400">1. Railway / Render (Easiest 24/7 Web Service)</div>
+            <div class="font-mono font-bold text-emerald-400">1. Railway / Render (deploy as an always-on Web Service)</div>
             <pre class="text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed"># Push meme-radar-autobot-24-7.mjs to GitHub
 # Create Web Service (Node 18+)
 # Start Command: node meme-radar-autobot-24-7.mjs
@@ -2486,7 +2486,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     /*************************************************************************
-     * 8. 24/7 AUTONOMOUS NODE.JS BOT GENERATOR (BUILT-IN DASHBOARD + TELEGRAM)
+     * 8. NODE.JS BOT GENERATOR (BUILT-IN DASHBOARD + TELEGRAM)
      *************************************************************************/
     function buildAutonomousBotCode() {
       const c = state.config;
@@ -2501,7 +2501,7 @@ node meme-radar-autobot-24-7.mjs
 
       return `#!/usr/bin/env node
 /**
- * MEME.RADAR v4 — 24/7 Autonomous Paper-Trading Node.js Bot (Zero Simulation)
+ * MEME.RADAR — Persistent Paper-Trading Node.js Bot (Zero Simulation)
  * Pure Node.js 18+ ESM (zero external npm packages: uses native fetch, fs, http).
  *
  * Features:
