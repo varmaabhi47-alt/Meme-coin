@@ -41,7 +41,8 @@ export function attributeWalletOutcomes(buys,research,{max15mLagMin=10,max60mLag
     for(const mins of HORIZONS){
       const lag=mins===15?max15mLagMin:mins===60?max60mLagMin:max4hLagMin;
       const sample=entry?pickHorizon(list,boughtAt+mins*60*1000,boughtAt+(mins+lag)*60*1000):null;
-      row.outcomes[mins+'m']=sample&&entry?{observedAt:sample.time,priceUsd:sample.price,returnPct:(sample.price/entry.price-1)*100}:null;
+      const horizonKey=mins===240?'4h':mins+'m';
+      row.outcomes[horizonKey]=sample&&entry?{observedAt:sample.time,priceUsd:sample.price,returnPct:(sample.price/entry.price-1)*100}:null;
     }
     const explicitRug=list.some(x=>x.time>=boughtAt&&x.time<=boughtAt+4*60*60*1000&&
       (x.raw.rugPull===true||x.raw.outcome==='RUG'||x.raw.security?.rug===true));
@@ -55,8 +56,8 @@ export function summarizeWalletOutcomes(outcomes){
   for(const o of outcomes||[]){const list=grouped.get(o.wallet)||[];list.push(o);grouped.set(o.wallet,list);}
   return [...grouped].map(([wallet,rows])=>{
     const result={wallet,observations:rows.length,rugEntries:rows.filter(x=>x.rug).length,horizons:{}};
-    for(const h of HORIZONS){const vals=rows.map(x=>x.outcomes?.[h+'m']?.returnPct).filter(Number.isFinite);
-      result.horizons[h+'m']={samples:vals.length,hitRatePct:vals.length?vals.filter(x=>x>0).length/vals.length*100:null,meanReturnPct:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null};}
+    for(const h of HORIZONS){const key=h===240?'4h':h+'m',vals=rows.map(x=>x.outcomes?.[key]?.returnPct).filter(Number.isFinite);
+      result.horizons[key]={samples:vals.length,hitRatePct:vals.length?vals.filter(x=>x>0).length/vals.length*100:null,meanReturnPct:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null};}
     return result;
   });
 }
