@@ -65,11 +65,12 @@ export default {
           const wallet=String(transfer.toUserAccount),mint=String(transfer.mint),signature=String(event.signature||"");
           if(!signature||!mint)continue;
           const timestamp=Number(event.timestamp||Date.now()/1000)*1000;
-          await env.DB.prepare("INSERT OR IGNORE INTO smart_wallet_buys(wallet,mint,signature,slot,occurred_at) VALUES(?,?,?,?,?)")
+          const write=await env.DB.prepare("INSERT OR IGNORE INTO smart_wallet_buys(wallet,mint,signature,slot,occurred_at) VALUES(?,?,?,?,?)")
             .bind(wallet,mint,signature,Number(event.slot||0),Math.floor(timestamp)).run();
-          stored++;
+          stored+=Number(write.meta?.changes||0);
         }
       }
+      await env.DB.prepare("DELETE FROM smart_wallet_buys WHERE occurred_at<?").bind(Date.now()-24*60*60*1000).run();
       const recent=await env.DB.prepare("SELECT mint,COUNT(DISTINCT wallet) AS wallets,MAX(occurred_at) AS latest FROM smart_wallet_buys WHERE occurred_at>=? GROUP BY mint HAVING COUNT(DISTINCT wallet)>=2")
         .bind(Date.now()-15*60*1000).all();
       return json({ok:true,stored,confluence:(recent.results||[]).map(x=>({signal:"SMART_MONEY_CONFLUENCE",mint:x.mint,wallets:Number(x.wallets),latest:Number(x.latest)}))},200,request);
