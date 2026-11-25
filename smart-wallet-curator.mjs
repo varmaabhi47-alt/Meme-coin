@@ -7,6 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { analyzeFundingLinks } from './funding-link-detection.mjs';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const RPC=process.env.SOLANA_RPC_URL||process.env.HELIUS_RPC_URL||'https://api.mainnet-beta.solana.com';
@@ -249,9 +250,9 @@ async function main(){
   const curated=await readJson(WALLETS,{version:1,wallets:[]}),tracked=new Set(curated.wallets.filter(w=>w.status==='ACTIVE').map(w=>w.address)),promoted=[],rejected=[];
   const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map();
   for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){rejected.push({address:c.address,fundingScanError:String(e)});}}
-  const sourceCounts=new Map();for(const source of sources.values())if(source)sourceCounts.set(source,(sourceCounts.get(source)||0)+1);
-  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,fundingLinked=!!source&&(knownDeployers.has(source)||tracked.has(source)||(sourceCounts.get(source)||0)>1),v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics});continue;}
-    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:source||'',metrics:m};
+  const fundingLinks=analyzeFundingLinks([...sources.keys()],sources,{knownRiskAddresses:knownDeployers,trackedAddresses:tracked,sharedSourceMin:2,maxDepth:2});
+  for(const c of candidates){if(!validAddress(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});continue;}
+    const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
   curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.wallets=curated.wallets.slice(0,50);curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
