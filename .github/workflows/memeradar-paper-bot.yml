@@ -43,7 +43,7 @@ jobs:
         run: node --test meme-radar-v5-*.test.mjs
 
       - name: Versioned D1 sync check after source update
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && vars.MEMERADAR_D1_SYNC_ENABLED == 'true'
         env:
           MEMERADAR_SYNC_SECRET: ${{ secrets.MEMERADAR_SYNC_SECRET }}
         run: node meme-radar-bot.mjs --sync-check
