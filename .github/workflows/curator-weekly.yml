@@ -59,7 +59,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ ! -f rpc-curator-usage.json ]; then printf '{"month":"%s","credits":0,"requests":0,"httpRequests":0,"byMethod":{}}\\n' "$(date -u +%Y-%m)" > rpc-curator-usage.json; fi
+          if [ ! -f rpc-curator-usage.json ]; then printf '{"month":"%s","credits":0,"requests":0,"httpRequests":0,"byMethod":{}}\n' "$(date -u +%Y-%m)" > rpc-curator-usage.json; fi
           git add smart_wallets.json smart_wallet_buys.json paper_wallet_outcomes.jsonl rpc-curator-usage.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: persist weekly smart-wallet curator state [skip ci]"
