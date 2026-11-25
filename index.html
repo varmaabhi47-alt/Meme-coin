@@ -895,6 +895,8 @@ node meme-radar-autobot-24-7.mjs
     const EVM_CHAIN_IDS = { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' };
     const BACKOFF_STEPS = [10, 20, 40, 60];
     const DEX_FEE_RATE = 0.003; // 0.30% realistic DEX swap fee
+    // The Telegram bot is the sole paper-trading executor; this page is a read-only shared dashboard.
+    const TELEGRAM_SHARED_READ_ONLY = true;
     const SECURITY_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
     const STORE_KEYS = {
@@ -1065,11 +1067,15 @@ node meme-radar-autobot-24-7.mjs
         const updatedAt = result.updatedAt || result.updated_at || '';
         if (updatedAt && updatedAt === remotePortfolioUpdatedAt) return true;
         state.cashUsd = remote.cashUsd;
-        state.autoTradeEnabled = remote.autoTradeEnabled ?? state.autoTradeEnabled;
+        state.config.startingBankroll = Number(remote.startingBankroll ?? state.config.startingBankroll ?? 1000);
+        state.autoTradeEnabled = TELEGRAM_SHARED_READ_ONLY ? false : (remote.autoTradeEnabled ?? state.autoTradeEnabled);
         state.openPositions = remote.openPositions;
         state.closedTrades = remote.closedTrades;
         state.cooldowns = remote.cooldowns || {};
         state.decisionLog = Array.isArray(remote.decisionLog) ? remote.decisionLog : [];
+        state.positionsStale = false;
+        state.positionsStaleReason = '';
+        state.lastPosSyncMs = updatedAt ? Date.parse(updatedAt) : Date.now();
         remotePortfolioUpdatedAt = updatedAt;
         persistPortfolio();
         renderAutoTraderView();
@@ -1380,6 +1386,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     function executePaperBuy(pair, tradeUsd, modeLabel, securitySummary) {
+      if (TELEGRAM_SHARED_READ_ONLY) { showToast('Read-only dashboard: paper buys are managed by the Telegram bot.', 'info'); return false; }
       if (tradeUsd <= 0 || tradeUsd > state.cashUsd) return false;
       const exec = calcBuyExecution(tradeUsd, pair.priceUsd, pair.liquidityUsd);
 
@@ -1419,6 +1426,7 @@ node meme-radar-autobot-24-7.mjs
     }
 
     function executePaperSell(posId, fraction, exitReason) {
+      if (TELEGRAM_SHARED_READ_ONLY) { showToast('Read-only dashboard: paper exits are managed by the Telegram bot.', 'info'); return false; }
       const idx = state.openPositions.findIndex(p => p.id === posId);
       if (idx === -1) return false;
       const pos = state.openPositions[idx];
@@ -1520,11 +1528,12 @@ node meme-radar-autobot-24-7.mjs
         }
       }
 
-      // Step 1: Refresh open positions strictly via /latest/dex/pairs/{chainId}/{pairs}
-      const posOk = await refreshOpenPositionsLive();
+      // Telegram is the only executor. Refresh its shared D1 portfolio before marking live prices.
+      if (TELEGRAM_SHARED_READ_ONLY) await syncPortfolioFromCloudflare();
 
-      // Step 2: If API is healthy and Auto-Paper-Trade is ON, run exits then buys
-      if (feedOk && posOk && state.autoTradeEnabled) {
+      // Refresh displayed position marks; never execute local buys or sells in shared read-only mode.
+      const posOk = await refreshOpenPositionsLive();
+      if (!TELEGRAM_SHARED_READ_ONLY && feedOk && posOk && state.autoTradeEnabled) {
         evaluateAutoExits();
         await evaluateAutoBuys();
       }
@@ -1857,6 +1866,18 @@ node meme-radar-autobot-24-7.mjs
 
     function renderAutoTraderHeaderStatus() {
       const btn = document.getElementById('master-auto-btn');
+      if (TELEGRAM_SHARED_READ_ONLY) {
+        const dot = document.getElementById('master-auto-dot');
+        const lbl = document.getElementById('master-auto-label');
+        const statusTxt = document.getElementById('at-status-text');
+        btn.disabled = true;
+        btn.title = 'Telegram bot is the only paper-trading executor. This webpage is read-only.';
+        btn.className = 'px-3 py-1.5 rounded-xl border font-mono text-xs font-bold flex items-center gap-2 transition bg-cyan-500/15 border-cyan-500/40 text-cyan-300 cursor-not-allowed';
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-cyan-400';
+        lbl.textContent = 'TELEGRAM BOT • SHARED';
+        if (statusTxt) { statusTxt.textContent = 'READ-ONLY • TELEGRAM BOT MANAGES TRADES'; statusTxt.className = 'mt-1 font-mono text-sm font-bold text-cyan-300'; }
+        return;
+      }
       const dot = document.getElementById('master-auto-dot');
       const lbl = document.getElementById('master-auto-label');
       const statusTxt = document.getElementById('at-status-text');
@@ -1967,8 +1988,7 @@ node meme-radar-autobot-24-7.mjs
                 <div class="${p.trailArmed ? 'text-cyan-300 font-bold' : 'text-slate-500'}">${p.trailArmed ? `TRAIL ARMED (-${state.config.trailDropPct}%)` : `Peak ${formatPrice(p.peakPrice)}`}</div>
               </td>
               <td class="py-3 px-4 text-right whitespace-nowrap">
-                <button onclick="executePaperSell('${p.id}', 0.5, 'MANUAL')" class="px-2 py-1 rounded-lg bg-term-card hover:bg-term-hover border border-term-border text-[11px] text-amber-300 mr-1">Sell 50%</button>
-                <button onclick="executePaperSell('${p.id}', 1, 'MANUAL')" class="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[11px] text-rose-300">Sell 100%</button>
+                <span class="text-[10px] font-mono text-cyan-300">Telegram bot manages exits</span>
               </td>
             </tr>
           `;
@@ -2232,6 +2252,7 @@ node meme-radar-autobot-24-7.mjs
     function executeManualPaperBuy() {
       const p = state.selectedPair;
       if (!p) return;
+      if (TELEGRAM_SHARED_READ_ONLY) { showToast('Manual paper buys are disabled; Telegram bot owns execution.', 'info'); return; }
       const usd = Number(document.getElementById('manual-buy-usd').value || 0);
       if (!Number.isFinite(usd) || usd <= 0) { showToast('Enter a valid USD amount.', 'error'); return; }
       if (usd > state.cashUsd) { showToast(`Insufficient cash ($${state.cashUsd.toFixed(2)} available).`, 'error'); return; }
@@ -2705,6 +2726,7 @@ main();
     }
 
     function handleResetBankrollClick() {
+      if (TELEGRAM_SHARED_READ_ONLY) { showToast('Bankroll is owned by the Telegram bot; reset is disabled on this dashboard.', 'warn'); return; }
       const btn = document.getElementById('btn-reset-bankroll');
       if (!state.resetConfirmPending) {
         state.resetConfirmPending = true;
@@ -2734,6 +2756,7 @@ main();
     }
 
     function toggleAutoPaperTrade() {
+      if (TELEGRAM_SHARED_READ_ONLY) { showToast('Telegram bot controls paper trading. This dashboard cannot toggle it.', 'info'); return; }
       state.autoTradeEnabled = !state.autoTradeEnabled;
       persistPortfolio();
       renderAutoTraderHeaderStatus();
