@@ -2327,7 +2327,16 @@ node meme-radar-autobot-24-7.mjs
     function populateInspector(p) {
       const ch = getChainMeta(p.chainId);
       const av = document.getElementById('insp-avatar');
-      av.innerHTML = p.icon ? `<img src="${esc(p.icon)}" class="w-full h-full object-cover" onerror="this.parentElement.textContent='${esc(p.symbol.slice(0,2))}'" />` : esc(p.symbol.slice(0,2));
+      const initials = String(p.symbol ?? '').slice(0,2);
+      av.textContent = initials;
+      const iconUrl = String(p.icon ?? '');
+      if (/^https?:\\/\\//i.test(iconUrl)) {
+        const img = document.createElement('img');
+        img.src = iconUrl; img.alt = String(p.symbol ?? 'token logo');
+        img.className = 'w-full h-full object-cover';
+        img.onerror = () => { av.textContent = initials; };
+        av.textContent = ''; av.appendChild(img);
+      }
       document.getElementById('insp-symbol').textContent = p.symbol;
       document.getElementById('insp-name').textContent = p.name;
       const chEl = document.getElementById('insp-chain');
