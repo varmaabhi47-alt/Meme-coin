@@ -15,6 +15,7 @@
 import fs from 'node:fs/promises';
 import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarketWarnings, calculateTopHolderConcentration, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateDiscoveryPrefilter, calculateJupiterQuoteExit, analyzeNarrativeFootprint, summarizePaperLearning, evaluateSolanaHardSecurityGates } from './meme-radar-v5-intelligence.mjs';
 import { evaluatePositionRisk, calculatePositionSize, checkCircuitBreakers, parseTelegramCommand, makeStateLock } from './meme-radar-v5-risk-engine.mjs';
+import { RpcCreditGuard, SolanaEventListener, extractMintsFromTransaction, extractWalletTokenBuys, createSmartMoneyConfluence, computeEdgeProof } from './path2-runtime.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -22,7 +23,7 @@ const CONFIG = {
   SUPPORTED_CHAINS: ['solana', 'base', 'ethereum', 'bsc', 'arbitrum'],
   EVM_CHAIN_IDS: { ethereum: '1', bsc: '56', base: '8453', arbitrum: '42161' },
   POLL_SEC: 30,
-  MONITOR_SEC: 12,
+  MONITOR_SEC: 10,
   DISCOVERY_SEC: 180,
   DEX_FEE_RATE: 0.003,
   JUPITER_API_KEY: process.env.JUPITER_API_KEY || '',
@@ -31,8 +32,8 @@ const CONFIG = {
 
   // Synced Strategy & Liquidity Gate Settings
   STARTING_BANKROLL: 1000,
-  BASE_RISK_FRACTION: 0.06,
-  MAX_POOL_LIQ_FRACTION: 0.0035,
+  BASE_RISK_FRACTION: 0.05,
+  MAX_POOL_LIQ_FRACTION: 0.003,
   MAX_OPEN_POSITIONS: 5,
   TP_PCT: 40,
   SL_PCT: 18,
@@ -45,7 +46,7 @@ const CONFIG = {
   MIN_LIQ_FDV_PCT: 8,
   MIN_SELLS_1H: 10,
   MIN_VOLUME_24H: 50000,
-  MIN_BUY_RATIO_PCT: 52,
+  MIN_BUY_RATIO_PCT: 55,
 
   // Telegram & Persistence
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
@@ -67,6 +68,11 @@ let d1Version = 0;
 let stateLock = makeStateLock();
 let consecutiveRiskExits = 0;
 let telegramOffset = 0;
+const rpcGuard = new RpcCreditGuard({ maxRps: Number(process.env.RPC_MAX_RPS || 6), monthlyLimit: Number(process.env.RPC_MONTHLY_CREDIT_LIMIT || 800000), stateFile: 'rpc-usage.json' });
+const holderAuditCache = new Map();
+const eventMintQueue = new Set();
+const smartMoneyConfluence = createSmartMoneyConfluence();
+let eventListener = null;
 
 let portfolio = {
   autoTradeEnabled: true,
@@ -207,16 +213,10 @@ function calcSell(tokens, price, liq) {
 }
 
 async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
-  const rpc = async (method, params, id) => {
-    const response = await fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
-    });
-    if (!response.ok) throw new Error(`Solana RPC HTTP ${response.status}`);
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message || 'Solana RPC error');
-    return data.result;
-  };
+  const cachedAudit = holderAuditCache.get(tokenAddress);
+  if (cachedAudit && Date.now() - cachedAudit.ts < 900000) return cachedAudit.value;
+  const endpoint = process.env.SOLANA_RPC_HTTP || 'https://api.mainnet-beta.solana.com';
+  const rpc = (method, params, id) => rpcGuard.rpc(endpoint, method, params, { credits: 1, cacheKey: 'solana:' + method + ':' + JSON.stringify(params) });
   try {
     const [largest, supply, mintInfo] = await Promise.all([
       rpc('getTokenLargestAccounts', [tokenAddress, { commitment: 'confirmed' }], 1),
@@ -261,12 +261,9 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     creatorSignals.crossTokenClusters = relatedClusters;
     creatorSignals.crossTokenClusterCount = relatedClusters.length;
     creatorSignals.crossTokenTokensObserved = [...new Set(relatedClusters.flatMap(cluster => cluster.tokens))].length;
-    return { holderDistribution, creatorSignals };
+    const value = { holderDistribution, creatorSignals }; holderAuditCache.set(tokenAddress, { ts: Date.now(), value }); return value;
   } catch (error) {
-    return {
-      holderDistribution: { known: false, reason: error.message, source: 'Solana public RPC' },
-      creatorSignals: { known: false, warnings: [], reason: error.message }
-    };
+    const value = { holderDistribution: { known: false, reason: error.message, source: 'Solana RPC' }, creatorSignals: { known: false, warnings: [], reason: error.message } }; holderAuditCache.set(tokenAddress, { ts: Date.now(), value }); return value;
   }
 }
 
@@ -354,7 +351,7 @@ async function monitorResearchSnapshots(){
  await saveState();
 }
 
-async function monitorPositions() {
+async function monitorPositions({ discover = false } = {}) {
   // 1. Refresh Open Positions
   const byChainPos = new Map();
   for (const pos of portfolio.openPositions) {
@@ -410,8 +407,8 @@ async function monitorPositions() {
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
   }
 
-  // 2. Scan Feed for New Auto-Buys
-  if (portfolio.openPositions.length < CONFIG.MAX_OPEN_POSITIONS && portfolio.cashUsd > 0) {
+  // 2. Discovery is a separate 3-minute loop; fast position monitor never scans feeds.
+  if (discover && portfolio.openPositions.length < CONFIG.MAX_OPEN_POSITIONS && portfolio.cashUsd > 0) {
     const items = await fetchJsonStrict(CONFIG.FEED_URL);
     const byChain = new Map();
     for (const it of (items || [])) {
@@ -438,9 +435,12 @@ async function monitorPositions() {
       }
     }
 
+    const queuedMints = [...eventMintQueue];
+    if (queuedMints.length) { if (!byChain.has('solana')) byChain.set('solana', new Set()); for (const mint of queuedMints) byChain.get('solana').add(mint); }
     const held = new Set(portfolio.openPositions.map(x => x.pairId));
     let secChecks = 0;
     for (const [key, p] of best.entries()) {
+      if (p.baseToken?.address) eventMintQueue.delete(String(p.baseToken.address));
       if (portfolio.openPositions.length >= CONFIG.MAX_OPEN_POSITIONS || portfolio.cashUsd <= 0) break;
       if (held.has(key)) continue;
       if (Date.now() - (portfolio.cooldowns[key] || 0) < CONFIG.COOLDOWN_MINS * 60000) continue;
@@ -480,7 +480,7 @@ async function monitorPositions() {
         continue;
       }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
-      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
+      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const smartMoneySignal=!!portfolio.smartMoneySignals?.[String(p.baseToken.address)];const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash,tier:intelligence.tier,smartMoneyConfluence:smartMoneySignal});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
@@ -494,6 +494,8 @@ async function monitorPositions() {
     }
   }
 
+  portfolio.rpcTelemetry = rpcGuard.telemetry();
+  portfolio.edgeProof = computeEdgeProof(portfolio.closedTrades || []);
   lastPollIso = nowIso();
   lastError = '';
   await saveState();
@@ -506,7 +508,7 @@ async function monitorPositions() {
   }
 }
 
-async function pollCycle(){await monitorPositions();await updateCircuitBreaker();await discoveryCycle();await monitorResearchSnapshots();}
+async function pollCycle(){await monitorPositions({discover:true});await updateCircuitBreaker();await monitorResearchSnapshots();}
 
 // GitHub Actions mode: one scan per scheduled job; portfolio state is committed by workflow.
 
@@ -541,8 +543,8 @@ async function persistentRunner(){
  let lastMonitor=0,lastDiscovery=0,lastResearch=0;
  while(true){
   try{await pollTelegramCommands();const now=Date.now();
-   if(portfolio.openPositions.length&&now-lastMonitor>=CONFIG.MONITOR_SEC*1000){await monitorPositions();lastMonitor=Date.now();}
-   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await discoveryCycle();lastDiscovery=Date.now();}
+   if(portfolio.openPositions.length&&now-lastMonitor>=CONFIG.MONITOR_SEC*1000){await monitorPositions({discover:false});lastMonitor=Date.now();}
+   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await monitorPositions({discover:true});lastDiscovery=Date.now();}
    if(now-lastResearch>=300000){await monitorResearchSnapshots();lastResearch=Date.now();}
   }catch(e){lastError=e?.message||String(e);console.error('Persistent runner error: '+lastError);await saveState();}
   await sleep(5000);
