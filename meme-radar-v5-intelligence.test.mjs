@@ -190,3 +190,14 @@ test('Engine 6 reports descriptive paper-trade outcomes and sample sufficiency',
   assert.equal(enough.evidence, 'SAMPLE_AVAILABLE');
   assert.equal(enough.sampleSize, 20);
 });
+
+test('Solana hard security gates reject active authorities, concentration, overlap and reused authority',()=>{
+ const result=evaluateSolanaHardSecurityGates({
+  mintAuthority:'MintAuthorityAddress111111111111111111111',
+  freezeAuthority:'FreezeAuthorityAddress222222222222222222222',
+  holderDistribution:{known:true,top5Pct:30,top10Pct:45},
+  creatorSignals:{authorityHolderOverlap:['MintAuthorityAddress111111111111111111111'],reusedMintAuthorityTokens:2}
+ });
+ assert.equal(result.pass,false);
+ assert.ok(result.reasons.length>=5);
+});
