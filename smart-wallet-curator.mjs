@@ -179,9 +179,12 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   return {pass:reasons.length===0,reasons,metrics:{closedTrades:trades.length,profitableTokens:profitableMints.size,realizedWinRate30d:winRate,realizedWinRate7d:win7,profitFactor30d:pf,medianHoldMins:medianHold,medianBuySol:medianBuy,largestTokenPnlShare:largest,realizedPnlSol:pnl,realizedPnl7dSol:recent7.reduce((s,t)=>s+t.pnlSol,0),confidenceScore:confidence,swaps30d:swaps.length,swaps7d:days7.length}};
 }
 async function findFundingSource(address){
-  const sigs=await signatures(address,Date.now()/1000-LOOKBACK),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,12);
+  // Search the earliest signatures available in a bounded 10k-signature window,
+  // not just recent 30-day activity, because initial wallet funding may be older.
+  const sigs=await signatures(address,0),oldest=sigs.filter(s=>s.blockTime).sort((a,b)=>a.blockTime-b.blockTime).slice(0,30);
   for(const s of oldest){const tx=await rpc('getTransaction',[s.signature,{encoding:'jsonParsed',maxSupportedTransactionVersion:0,commitment:'confirmed'}]);if(!tx?.meta||tx.meta.err)continue;
-    const msg=tx.transaction?.message;for(const ix of msg?.instructions||[]){if(ix.program==='system'&&ix.parsed?.type==='transfer'){const info=ix.parsed.info;if(String(info.destination)===address&&String(info.source)!==address&&Number(info.lamports)>0)return String(info.source);}}
+    const msg=tx.transaction?.message,inner=(tx.meta.innerInstructions||[]).flatMap(x=>x.instructions||[]);
+    for(const ix of [...(msg?.instructions||[]),...inner]){if(ix.program==='system'&&ix.parsed?.type==='transfer'){const info=ix.parsed.info;if(String(info.destination)===address&&String(info.source)!==address&&Number(info.lamports)>0)return String(info.source);}}
   }return null;
 }
 async function vetCandidate(c,{fundingSource=null,fundingLinked=false}={}){
