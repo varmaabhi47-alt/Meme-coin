@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MEME.RADAR v4 // AUTO-TRADER — Zero-Simulation Live Terminal</title>
+  <title>MEME.RADAR V6 // SMART-MONEY RADAR — Zero-Simulation Live Terminal</title>
 
   <!-- Fonts: Inter for UI, JetBrains Mono for tabular financial precision -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -99,7 +99,7 @@
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white">
                 MEME<span class="text-emerald-400">.RADAR</span>
-                <span class="text-slate-500 font-mono font-normal">v4</span>
+                <span class="text-slate-500 font-mono font-normal">V6</span>
                 <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-mono text-[10px] font-bold">AUTO-TRADER</span>
               </h1>
               <span id="hud-health-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
@@ -107,7 +107,7 @@
                 <span id="hud-health-text">BOOTING</span>
               </span>
             </div>
-            <p class="text-[11px] text-slate-400 hidden sm:block">Zero-Simulation Live Scanner • Strict Liquidity &amp; Security Gates • Autonomous Paper Execution</p>
+            <p class="text-[11px] text-slate-400 hidden sm:block">V6 Smart-Money Confluence • Strict Liquidity &amp; Security Gates • Paper-Research Only</p>
           </div>
         </div>
 
@@ -200,7 +200,10 @@
         <span>V5 Research Lab</span>
         <span id="badge-research-count" class="px-1.5 py-0.5 rounded-md bg-term-card border border-term-border text-[10px] font-mono text-cyan-300">0</span>
       </button>
-      <button onclick="switchTab('telemetry')" id="tab-btn-telemetry" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+            <button onclick="switchTab('v6')" id="tab-btn-v6" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
+        <span>V6 Smart Money</span><span id="badge-v6-signal" class="px-1.5 py-0.5 rounded-md bg-term-card border border-term-border text-[10px] font-mono text-emerald-300">LIVE</span>
+      </button>
+<button onclick="switchTab('telemetry')" id="tab-btn-telemetry" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
         <span>API Telemetry</span>
         <span id="badge-err-count" class="hidden px-1.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-[10px] font-mono font-bold text-rose-300">0 ERR</span>
       </button>
@@ -729,6 +732,34 @@ node meme-radar-autobot-24-7.mjs
     <!-- ====================================================================== -->
     <!-- TAB 5: API TELEMETRY CONSOLE                                           -->
     <!-- ====================================================================== -->
+    <section id="view-v6" class="hidden space-y-3.5">
+      <div class="p-4 rounded-2xl bg-term-panel border border-term-border flex flex-wrap items-center justify-between gap-3">
+        <div><div class="flex items-center gap-2"><h2 class="text-sm font-bold text-white font-mono">V6 SMART-MONEY CONFLUENCE</h2><span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">LIVE D1</span></div>
+        <p class="text-xs text-slate-400 mt-1">Read-only view of actual Helius webhook events and curator records. No synthetic wallet data.</p></div>
+        <button onclick="loadV6Dashboard()" class="px-3 py-2 rounded-lg bg-term-bg border border-term-border hover:border-emerald-500/50 text-xs font-mono text-emerald-300">Refresh live data</button>
+      </div>
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
+        <div class="p-3.5 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] uppercase tracking-wider text-slate-500 font-mono">Active curated wallets</div><div id="v6-active-wallets" class="mt-2 text-2xl font-bold font-mono text-emerald-300 tabular-nums">—</div><div id="v6-watch-wallets" class="mt-1 text-[11px] text-slate-500 font-mono">WATCH —</div></div>
+        <div class="p-3.5 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] uppercase tracking-wider text-slate-500 font-mono">Real buys · 15m</div><div id="v6-recent-buys" class="mt-2 text-2xl font-bold font-mono text-cyan-300 tabular-nums">—</div><div id="v6-recent-mints" class="mt-1 text-[11px] text-slate-500 font-mono">Distinct mints —</div></div>
+        <div class="p-3.5 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] uppercase tracking-wider text-slate-500 font-mono">Fresh passing gates</div><div id="v6-fresh-gates" class="mt-2 text-2xl font-bold font-mono text-amber-300 tabular-nums">—</div><div class="mt-1 text-[11px] text-slate-500 font-mono">Gate evidence ≤ 5m old</div></div>
+        <div class="p-3.5 rounded-xl bg-term-panel border border-term-border"><div class="text-[10px] uppercase tracking-wider text-slate-500 font-mono">Curator state</div><div id="v6-api-state" class="mt-2 text-sm font-bold font-mono text-slate-300">CONNECTING</div><div id="v6-last-updated" class="mt-1 text-[11px] text-slate-500 font-mono">Awaiting live response</div></div>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-3.5">
+        <div class="xl:col-span-2 p-4 rounded-2xl bg-term-panel border border-term-border">
+          <h3 class="text-xs font-bold text-white font-mono">MINT CONFLUENCE CHECK</h3><p class="mt-1 text-xs text-slate-400">Check actual independent-wallet buys over the last 15 minutes and the fresh V6 hard-gate record.</p>
+          <form class="mt-3 flex flex-col sm:flex-row gap-2" onsubmit="lookupV6Mint(event)">
+            <input id="v6-mint-input" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Solana mint address" class="min-w-0 flex-1 px-3 py-2.5 rounded-lg bg-term-bg border border-term-border text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/60" />
+            <button type="submit" class="px-4 py-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold">Check mint</button>
+          </form>
+          <div id="v6-mint-result" class="mt-3 p-3 rounded-xl bg-term-bg border border-term-border text-xs font-mono text-slate-400 whitespace-pre-wrap">No mint checked yet.</div>
+        </div>
+        <div class="p-4 rounded-2xl bg-term-panel border border-term-border"><h3 class="text-xs font-bold text-white font-mono">V6 SIGNAL RULE</h3>
+          <ul class="mt-3 space-y-2 text-xs text-slate-400"><li>• At least 2 independent active wallet groups</li><li>• Buys occur in distinct slots</li><li>• Buy size ≥ 50% of wallet median</li><li>• Passing token gate ≤ 5 minutes old</li><li>• Research-only; no live trade execution</li></ul>
+          <div class="mt-3 pt-3 border-t border-term-border text-[11px] text-slate-500 font-mono">Wallet addresses and sync secrets are not exposed by this public endpoint.</div>
+        </div>
+      </div>
+    </section>
+
     <section id="view-telemetry" class="hidden space-y-3.5">
       <div class="p-3.5 rounded-2xl bg-term-panel border border-term-border flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2979,9 +3010,62 @@ main();
       }, null, 2), 'paper_portfolio.json', 'application/json');
     }
 
+    const V6_DASHBOARD_API = 'https://memeradar-v6-public.varmaabhi47.workers.dev';
+    async function loadV6Dashboard() {
+      const stateEl = document.getElementById('v6-api-state');
+      if (!stateEl) return;
+      stateEl.textContent = 'LOADING LIVE D1';
+      try {
+        const response = await fetch(V6_DASHBOARD_API + '/dashboard', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.detail || data.error || ('HTTP ' + response.status));
+        const wc = data.walletCounts || {};
+        document.getElementById('v6-active-wallets').textContent = Number(wc.ACTIVE || 0).toLocaleString();
+        document.getElementById('v6-watch-wallets').textContent = 'WATCH ' + Number(wc.WATCH || 0).toLocaleString() + ' · MUTED ' + Number(wc.MUTED || 0).toLocaleString();
+        document.getElementById('v6-recent-buys').textContent = Number(data.recentBuys15m || 0).toLocaleString();
+        document.getElementById('v6-recent-mints').textContent = 'Distinct mints ' + Number(data.distinctMints15m || 0).toLocaleString();
+        document.getElementById('v6-fresh-gates').textContent = Number(data.freshPassingGates || 0).toLocaleString();
+        stateEl.textContent = 'CONNECTED · REAL DATA';
+        stateEl.className = 'mt-2 text-sm font-bold font-mono text-emerald-300';
+        document.getElementById('v6-last-updated').textContent = 'Updated ' + new Date(Number(data.observedAt)).toLocaleTimeString();
+      } catch (error) {
+        stateEl.textContent = 'API ERROR';
+        stateEl.className = 'mt-2 text-sm font-bold font-mono text-rose-300';
+        document.getElementById('v6-last-updated').textContent = String(error.message || error).slice(0, 140);
+      }
+    }
+    async function lookupV6Mint(event) {
+      if (event) event.preventDefault();
+      const input = document.getElementById('v6-mint-input');
+      const resultEl = document.getElementById('v6-mint-result');
+      const mint = input.value.trim();
+      if (!mint) { resultEl.textContent = 'Enter a mint address first.'; return; }
+      resultEl.textContent = 'Checking actual D1 buy records and gate evidence…';
+      try {
+        const response = await fetch(V6_DASHBOARD_API + '/dashboard?mint=' + encodeURIComponent(mint), { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.detail || data.error || ('HTTP ' + response.status));
+        const c = data.mintConfluence;
+        if (!c) throw new Error('No confluence result returned');
+        resultEl.textContent = [
+          'MINT: ' + c.mint,
+          'STATUS: ' + (c.signal || 'NO QUALIFIED CONFLUENCE'),
+          'Independent groups: ' + c.independentGroups + ' / ' + c.required,
+          'Distinct slots: ' + c.distinctSlots,
+          'Fresh passing gate: ' + (c.gateFresh ? 'YES' : 'NO'),
+          'Latest qualifying buy: ' + (c.latest ? new Date(c.latest).toLocaleString() : 'none'),
+          'Current blockers: ' + (c.reasons.length ? c.reasons.join(', ') : 'none')
+        ].join('\n');
+        await loadV6Dashboard();
+      } catch (error) {
+        resultEl.textContent = 'LIVE LOOKUP FAILED: ' + String(error.message || error);
+      }
+    }
+    setInterval(() => { if (state.activeTab === 'v6') loadV6Dashboard(); }, 60000);
+
     function switchTab(tab) {
       state.activeTab = tab;
-      ['radar', 'autotrader', 'ledger', 'bot', 'telemetry', 'research'].forEach(t => {
+      ['radar', 'autotrader', 'ledger', 'bot', 'telemetry', 'research', 'v6'].forEach(t => {
         const v = document.getElementById(`view-${t}`);
         const b = document.getElementById(`tab-btn-${t}`);
         if (t === tab) {
@@ -2998,6 +3082,7 @@ main();
       if (tab === 'autotrader') renderAutoTraderView();
       if (tab === 'ledger') renderLedger();
       if (tab === 'telemetry') loadV5ApiHealth();
+      if (tab === 'v6') loadV6Dashboard();
     }
 
     function selectFeed(feed) {
