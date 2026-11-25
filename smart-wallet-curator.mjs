@@ -258,4 +258,4 @@ async function main(){
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
-export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,decodeSwap,analyzeTrades,vetWallet,validAddress,MONTHLY_LIMIT,MAX_RPS};
+export {resolvedKeys,instructionProgramIds,tokenDeltaByOwner,solDeltaByAccount,decodeSwap,analyzeTrades,vetWallet,validAddress,MONTHLY_LIMIT,MAX_RPS};
