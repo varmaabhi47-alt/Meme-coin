@@ -23,7 +23,7 @@ const dexPair = {
   fdv: 1800000,
   liquidity: { usd: 180000 },
   volume: { h1: 42000, h24: 650000 },
-  txns: { h1: { buys: 210, sells: 130 }, h24: { buys: 2400, sells: 1800 } },
+  txns: { m5: { buys: 60, sells: 40 }, h1: { buys: 210, sells: 130 }, h24: { buys: 2400, sells: 1800 } },
   priceChange: { m5: 2.4, h1: 8.1, h24: 19.5 },
   pairCreatedAt: 1760000000000,
   info: {
