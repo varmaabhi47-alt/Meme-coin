@@ -33,8 +33,8 @@ const CONFIG = {
 
   // Synced Strategy & Liquidity Gate Settings
   STARTING_BANKROLL: 1000,
-  BASE_RISK_FRACTION: 0.05,
-  MAX_POOL_LIQ_FRACTION: 0.003,
+  BASE_RISK_FRACTION: 0.06,
+  MAX_POOL_LIQ_FRACTION: 0.0035,
   MAX_OPEN_POSITIONS: 5,
   TP_PCT: 40,
   SL_PCT: 18,
@@ -47,7 +47,12 @@ const CONFIG = {
   MIN_LIQ_FDV_PCT: 8,
   MIN_SELLS_1H: 10,
   MIN_VOLUME_24H: 50000,
-  MIN_BUY_RATIO_PCT: 55,
+  MIN_BUY_RATIO_PCT: 52,
+  MIN_BUY_RATIO_1H_PCT: 52,
+  MIN_BUY_RATIO_5M_PCT: 55,
+  MIN_PAIR_AGE_MINUTES: 15,
+  MAX_CHANGE_5M_PCT: 35,
+  MAX_CHANGE_1H_PCT: 150,
 
   // Telegram & Persistence
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
@@ -529,7 +534,7 @@ async function monitorPositions({ discover = false } = {}) {
       const firstLiq = Number(portfolio.firstLiquidityByPair[key] || liq);
       if (firstLiq > 0 && liq < firstLiq * 0.95) { await recordResearch(p,{pass:false,checked:false,reason:'Liquidity declined >5% from first observed snapshot'},{score:null,tier:'REJECT',components:{},metrics:{firstLiquidityUsd:firstLiq,currentLiquidityUsd:liq},reasons:['liquidity decay >5%']},'REJECT'); logDecision('REJECT',p.baseToken.symbol,p.chainId,'liquidity decay >5% since first observed'); continue; }
       portfolio.lastLiquidityByPair[key] = liq;
-      const prefilter = evaluateDiscoveryPrefilter(p, CONFIG);
+      const prefilter = evaluateDiscoveryPrefilter(p, { ...CONFIG, PREVIOUS_LIQUIDITY_USD: priorLiq, REQUIRE_LIQUIDITY_STABILITY: true });
       if (!prefilter.pass) {
         await recordResearch(p, { pass: false, checked: false, reason: 'Not security-audited: rejected by inexpensive discovery prefilter' },
           { score: null, tier: 'PREFILTER_REJECT', components: {}, metrics: prefilter.metrics, reasons: prefilter.reasons },
@@ -608,7 +613,7 @@ async function updateCircuitBreaker(){
  const snaps=(portfolio.dailyEquitySnapshots||[]).filter(x=>now-Number(x.ts)<=86400000);snaps.push({ts:now,equity});portfolio.dailyEquitySnapshots=snaps;
  const base=Number(snaps[0]?.equity||equity),pnl=equity-base,old=portfolio.breaker||{},decision=checkCircuitBreakers({realizedUnrealizedPnlUsd:pnl,dailyStartingEquityUsd:base,now,breaker:old,consecutiveRiskExits});
  let pauseUntil=Number(old.pauseUntil||0),reason=old.reason||null;
- if(decision.dailyDrawdownPct<=-10&&!(reason==='DAILY_DRAWDOWN_10'&&pauseUntil>now)){pauseUntil=now+12*3600000;reason='DAILY_DRAWDOWN_10';}
+ if(decision.dailyDrawdownPct<=-12&&!(reason==='DAILY_DRAWDOWN_12'&&pauseUntil>now)){pauseUntil=now+12*3600000;reason='DAILY_DRAWDOWN_12';}
  if(consecutiveRiskExits>=3&&Number(old.triggeredLossCount||0)<consecutiveRiskExits){pauseUntil=Math.max(pauseUntil,now+2*3600000);reason='CONSECUTIVE_RISK_EXITS';}
  if(pauseUntil<=now){pauseUntil=0;reason=null;}
  portfolio.breaker={pauseUntil,reason,dailyDrawdownPct:decision.dailyDrawdownPct,dailyStartingEquityUsd:base,equityUsd:equity,triggeredLossCount:consecutiveRiskExits,checkedAt:now};
