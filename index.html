@@ -1957,7 +1957,7 @@ node meme-radar-autobot-24-7.mjs
           ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Passes Liquidity & Sellability Gate">PASS</span>`
           : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700" title="${esc(gate.reason)}">FAIL</span>`;
         const avatar = p.icon
-          ? `<img src="${esc(p.icon)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0">${esc(p.symbol.slice(0,2))}</div>`
+          ? `<img src="${esc(p.icon)}" class="w-8 h-8 rounded-lg object-cover bg-term-bg border border-term-border shrink-0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="w-8 h-8 rounded-lg bg-term-card border border-term-border items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0"><span data-radar-initials></span></div>`
           : `<div class="w-8 h-8 rounded-lg bg-term-card border border-term-border flex items-center justify-center font-mono text-xs font-bold text-emerald-400 shrink-0">${esc(p.symbol.slice(0,2))}</div>`;
 
         return `
@@ -1967,10 +1967,10 @@ node meme-radar-autobot-24-7.mjs
                 ${avatar}
                 <div class="min-w-0">
                   <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-white truncate max-w-[95px]">${esc(p.symbol)}</span>
+                    <span class="font-bold text-white truncate max-w-[95px]" data-radar-symbol></span>
                     <span class="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${ch.cls}">${ch.label}</span>
                   </div>
-                  <div class="text-[11px] text-slate-400 truncate max-w-[150px]">${esc(p.name)} • <span class="font-mono text-[10px] text-slate-500">${formatAge(p.pairCreatedAt)}</span></div>
+                  <div class="text-[11px] text-slate-400 truncate max-w-[150px]"><span data-radar-name></span> • <span class="font-mono text-[10px] text-slate-500">${formatAge(p.pairCreatedAt)}</span></div>
                 </div>
               </div>
             </td>
@@ -1995,6 +1995,10 @@ node meme-radar-autobot-24-7.mjs
           </tr>
         `;
       }).join('');
+      tbody.querySelectorAll('[data-radar-symbol]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'');});
+      tbody.querySelectorAll('[data-radar-name]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.name??'');});
+      tbody.querySelectorAll('[data-radar-initials]').forEach((el,i)=>{el.textContent=String(rows[i]?.p?.symbol??'').slice(0,2);});
+
     }
 
     function setRadarStatePanel(title, sub) {
@@ -2112,7 +2116,7 @@ node meme-radar-autobot-24-7.mjs
             <tr class="hover:bg-term-hover/40">
               <td class="py-3 px-4">
                 <div class="flex items-center gap-1.5">
-                  <span class="font-bold text-white">${esc(p.symbol)}</span>
+                  <span class="font-bold text-white" data-position-symbol></span>
                   <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${ch.cls}">${ch.label}</span>
                   ${p.partialTpDone ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">50% TP</span>' : ''}
                   ${p.entryQuoteFallback ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40">ENTRY FALLBACK</span>' : ''}
@@ -2120,7 +2124,7 @@ node meme-radar-autobot-24-7.mjs
                   ${p.stale ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40">STALE</span>' : ''}
                 </div>
                 <div class="text-[10px] text-slate-500">${formatDateTime(p.entryTime)}</div>
-                ${p.dataStaleReason ? `<div class="text-[10px] text-amber-300">${esc(p.dataStaleReason)}</div>` : ''}
+                ${p.dataStaleReason ? '<div class="text-[10px] text-amber-300" data-position-stale-reason></div>' : ''}
               </td>
               <td class="py-3 px-2.5 text-right text-slate-300">${formatPrice(p.buyPrice)}</td>
               <td class="py-3 px-2.5 text-right text-white font-semibold">${formatPrice(p.lastPrice)}</td>
@@ -2140,6 +2144,9 @@ node meme-radar-autobot-24-7.mjs
             </tr>
           `;
         }).join('');
+        tbody.querySelectorAll('[data-position-symbol]').forEach((el,i)=>{el.textContent=String(state.openPositions[i]?.symbol??'');});
+        tbody.querySelectorAll('[data-position-stale-reason]').forEach((el,i)=>{el.textContent=String(state.openPositions[i]?.dataStaleReason??'');});
+
       }
       renderDecisionLog();
     }
@@ -2163,7 +2170,7 @@ node meme-radar-autobot-24-7.mjs
           <div class="px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-term-hover/30">
             <div class="flex items-center gap-2 min-w-0">
               <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${cls}">${d.action}</span>
-              <span class="font-bold text-white shrink-0">${esc(d.symbol)}</span>
+              <span class="font-bold text-white shrink-0" data-decision-symbol></span>
               <span class="text-slate-500 shrink-0">[${esc((d.chainId || '').toUpperCase())}]</span>
               <span class="text-slate-300 truncate">${esc(d.reason)}</span>
             </div>
@@ -2171,6 +2178,8 @@ node meme-radar-autobot-24-7.mjs
           </div>
         `;
       }).join('');
+      list.querySelectorAll('[data-decision-symbol]').forEach((el,i)=>{el.textContent=String(state.decisionLog[i]?.symbol??'');});
+
     }
 
     function renderLedger() {
@@ -2234,7 +2243,7 @@ node meme-radar-autobot-24-7.mjs
         return `
           <tr class="hover:bg-term-hover/40">
             <td class="py-2.5 px-3.5 whitespace-nowrap">
-              <span class="font-bold text-white">${esc(t.symbol)}</span>
+              <span class="font-bold text-white" data-ledger-symbol></span>
               <span class="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold border ${ch.cls}">${ch.label}</span>
             </td>
             <td class="py-2.5 px-2.5 text-slate-400 whitespace-nowrap">${formatDateTime(t.entryTime)}</td>
