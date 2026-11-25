@@ -11,7 +11,7 @@ Path 2 is an event-driven, paper-first Solana discovery and asymmetric-exit engi
 - `meme-radar-v5-risk-engine.mjs`: pure position risk rules, position sizing, daily/consecutive-loss circuit breakers, and serialized state lock.
 - `meme-radar-bot.mjs`: persistent runtime. Fast position monitor runs every 10 seconds only when positions exist; discovery runs every 180 seconds or when an event requests it. Both loops use a shared lock. The scheduled GitHub Actions workflow remains a separate one-scan mode and is not a 24/7 process.
 - `execution-adapter.mjs`: paper adapter is the default. Live adapter remains disabled unless both explicit live flags/confirmation are present and its required transaction client is configured.
-- `memeradar-state-api/worker.js`: Helius webhook intake and D1-backed state/smart-wallet endpoints. D1 state auth/version checks are not included in this change.
+- `memeradar-state-api/worker.js`: Helius webhook intake and D1-backed state/smart-wallet endpoints. D1 state auth/version checks are not included in this change. The push-time D1 CI gate is disabled unless repository variable `MEMERADAR_D1_SYNC_ENABLED=true` is set.
 - `index.html`: dashboard reads the Worker authoritative portfolio and shows a sync-failure status without loading a browser-local portfolio. Continue reviewing remaining DOM render paths for metadata injection.
 - `smart_wallets.json`: only RPC-vetted wallets may be populated. The checked-in list is empty; do not seed guessed addresses or statistics.
 - `Dockerfile` / `.env.example`: Node 22 low-memory persistent host configuration; all credentials are environment secrets.
@@ -40,7 +40,7 @@ Run on the persistent host/repository after configuration. Never use fabricated 
 
 ## Known limitations / honest status
 
-- D1 sync is deferred; do not expect state synchronization to work until credentials are fixed.
+- D1 sync is deferred; do not expect state synchronization to work until credentials are fixed. The workflow now skips push-time D1 sync by default; turn it back on only after repairing the secret.
 - No smart wallets are seeded; real confluence requires manually curated, RPC-vetted addresses.
 - GitHub Actions schedule is 5-minute scan mode; persistent mode requires a continuously running Node host. Free hosting may sleep or impose limits; do not claim guaranteed free 24/7 uptime.
 - Standard WSS event subscriptions and quote/exit behavior require live integration verification; unit tests alone do not establish provider connectivity.
