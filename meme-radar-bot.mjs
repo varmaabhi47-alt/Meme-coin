@@ -585,15 +585,57 @@ async function pollTelegramCommands(){
  }catch(e){console.error('Telegram command poll failed: '+e.message);}
 }
 async function persistentRunner(){
- let lastMonitor=0,lastDiscovery=0,lastResearch=0;
- while(true){
-  try{await pollTelegramCommands();const now=Date.now();
-   if(portfolio.openPositions.length&&now-lastMonitor>=CONFIG.MONITOR_SEC*1000){await monitorPositions({discover:false});lastMonitor=Date.now();}
-   if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await updateCircuitBreaker();await monitorPositions({discover:true});lastDiscovery=Date.now();}
-   if(now-lastResearch>=300000){await monitorResearchSnapshots();lastResearch=Date.now();}
-  }catch(e){lastError=e?.message||String(e);console.error('Persistent runner error: '+lastError);await saveState();}
-  await sleep(5000);
- }
+  await rpcGuard.load();
+  const runnerLock=makeStateLock();
+  if(process.env.SOLANA_RPC_WSS){
+    try{
+      const walletConfig=JSON.parse(await fs.readFile(process.env.SMART_WALLETS_FILE||'smart_wallets.json','utf8'));
+      const wallets=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>typeof x==='string'&&x.trim()).slice(0,30):[];
+      eventListener=new SolanaEventListener({
+        wallets,
+        onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
+        onMint:async event=>{
+          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx))eventMintQueue.add(mint);console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
+          catch(error){console.error('Migration transaction lookup failed; no mint inferred: '+error.message);}
+        },
+        onWalletLog:async event=>{
+          try{
+            const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});
+            if(!(tx?.meta?.logMessages||[]).some(line=>/swap/i.test(line)))return;
+            for(const mint of extractWalletTokenBuys(tx,event.wallet)){
+              if([USDC_MINT,'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB','So11111111111111111111111111111111111111112'].includes(mint))continue;
+              const signal=smartMoneyConfluence(event.wallet,mint);
+              if(signal){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]=signal;logDecision(signal.signal,mint,'solana',signal.wallets+' tracked wallets bought within 15m');await runnerLock(async()=>{await saveState();await syncPortfolioToCloudflare();});}
+            }
+          }catch(error){console.error('Smart-wallet transaction lookup failed; no signal inferred: '+error.message);}
+        }
+      }).start();
+      console.log('Standard Solana WebSocket triggers active; tracked wallets='+wallets.length);
+    }catch(error){console.error('Solana event listener not started: '+error.message);}
+  }else console.warn('SOLANA_RPC_WSS not configured; migration and wallet event triggers disabled.');
+
+  const fastPositionLoop=async()=>{
+    while(true){
+      try{if(portfolio.openPositions.length)await runnerLock(()=>monitorPositions({discover:false}));}
+      catch(error){lastError=error?.message||String(error);console.error('Fast position monitor error: '+lastError);await saveState();}
+      await sleep(CONFIG.MONITOR_SEC*1000);
+    }
+  };
+  const discoveryControlLoop=async()=>{
+    let lastDiscovery=0,lastResearch=0,lastTelegram=0,lastBreaker=0;
+    while(true){
+      try{
+        const now=Date.now();
+        if(now-lastTelegram>=5000){await pollTelegramCommands();lastTelegram=Date.now();}
+        if(now-lastBreaker>=30000){await runnerLock(()=>updateCircuitBreaker());lastBreaker=Date.now();}
+        if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000){await runnerLock(async()=>{await updateCircuitBreaker();await monitorPositions({discover:true});});lastDiscovery=Date.now();}
+        if(now-lastResearch>=60000){await runnerLock(()=>monitorResearchSnapshots());lastResearch=Date.now();}
+      }catch(error){lastError=error?.message||String(error);console.error('Discovery/control loop error: '+lastError);await saveState();}
+      await sleep(1000);
+    }
+  };
+  console.log('Path 2 persistent mode: independent 10s position loop (idle with zero positions) + 180s discovery loop.');
+  await Promise.all([fastPositionLoop(),discoveryControlLoop()]);
 }
 async function main(){
  if(process.argv.includes('--dry-run')){
