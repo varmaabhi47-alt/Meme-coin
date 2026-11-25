@@ -158,8 +158,24 @@ function calcBuy(usd, price, liq) {
   return { feeUsd: result.feeUsd, impactUsd: result.impactUsd, impactRate: result.impactRate, effPrice: result.effectivePrice, tokens: result.tokens, model: result.model };
 }
 
+function estimatedNetworkFeeUsd(chain){return chain==='solana'?0.35:chain==='ethereum'?4.00:chain==='base'?0.20:chain==='bsc'?0.25:chain==='arbitrum'?0.30:0.50;}
+async function calcPaperEntry(usd,pair,security,decimals){
+ const chain=String(pair.chainId||'').toLowerCase(),networkFeeUsd=estimatedNetworkFeeUsd(chain),tax=Number(security?.buyTaxRate||0);
+ if(chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED&&pair.baseToken?.address&&Number.isInteger(Number(decimals))&&Number(decimals)>=0&&Number(decimals)<=18){
+  try{const amount=String(Math.floor(usd*1e6)),params=new URLSearchParams({inputMint:USDC_MINT,outputMint:pair.baseToken.address,amount});const headers=CONFIG.JUPITER_API_KEY?{'x-api-key':CONFIG.JUPITER_API_KEY}:{};
+   const q=await fetchJsonStrict('https://api.jup.ag/swap/v2/order?'+params,9000,headers);const raw=String(q.outAmount||'');if(!/^\\d+$/.test(raw)||Number(raw)<=0)throw Error('invalid Jupiter entry output');
+   const tokens=Number(raw)/(10**Number(decimals));if(!(tokens>0&&Number.isFinite(tokens)))throw Error('invalid Jupiter token quantity');
+   const impact=Number(q.priceImpactPct||0);return {tokens,effPrice:(usd+networkFeeUsd)/tokens,feeUsd:networkFeeUsd,impactUsd:Math.max(0,usd*impact),impactRate:impact,model:'jupiter-entry-route-quote',quoteSource:'jupiter',quoteFallback:false,networkFeeUsd,buyTaxRate:0};
+  }catch(e){console.warn('Jupiter entry quote failed; conservative labelled fallback: '+e.message);}
+ }
+ const est=calcBuy(usd,Number(pair.priceUsd),Number(pair.liquidity?.usd||0));
+ const fallbackPenalty=chain==='solana'?0.05:0;
+ const tokens=est.tokens*(1-fallbackPenalty)*(1-tax);
+ return {...est,tokens,effPrice:(usd+networkFeeUsd)/tokens,feeUsd:est.feeUsd+networkFeeUsd+usd*tax,networkFeeUsd,buyTaxRate:tax,quoteSource:'constant-product-fallback',quoteFallback:chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED,fallbackPenaltyPct:fallbackPenalty*100};
+}
+
 async function calcPaperExit(pos, price, liq) {
-  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||5))/100;return {...est,netProceeds:est.netProceeds*(1-penalty),quoteSource:'constant-product-fallback',quoteFallback:true,fallbackPenaltyPct:penalty*100};};
+  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=pos.chainId==='solana'?Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||5))/100:0;const tax=Number(pos.sellTaxRate||0),networkFeeUsd=estimatedNetworkFeeUsd(pos.chainId);const afterTax=est.netProceeds*(1-tax);return {...est,netProceeds:Math.max(0,afterTax*(1-penalty)-networkFeeUsd),feeUsd:est.feeUsd+networkFeeUsd+est.netProceeds*tax,quoteSource:'constant-product-fallback',quoteFallback:pos.chainId==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED,fallbackPenaltyPct:penalty*100,networkFeeUsd};};
   if (!CONFIG.JUPITER_QUOTE_ENABLED || pos.chainId !== 'solana' ||
       !pos.address || pos.tokenDecimals == null || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
   const decimals = Number(pos.tokenDecimals);
@@ -179,7 +195,7 @@ async function calcPaperExit(pos, price, liq) {
     const result = calculateJupiterQuoteExit({ quote, tokens: qty, spotPrice: price, outputDecimals: 6 });
     const value = {
       effPrice: result.effectivePrice, impactUsd: result.impactUsd, impactRate: result.impactRate,
-      feeUsd: result.feeUsd, netProceeds: result.netProceeds, model: result.model,
+      feeUsd: result.feeUsd + estimatedNetworkFeeUsd('solana'), netProceeds: Math.max(0,result.netProceeds-estimatedNetworkFeeUsd('solana')), model: result.model, networkFeeUsd: estimatedNetworkFeeUsd('solana'),
       quoteSource: 'jupiter', quoteFallback: false, router: result.router
     };
     jupiterQuoteCache.set(cacheKey, { ts: Date.now(), value });
@@ -285,7 +301,7 @@ async function auditSecurity(pair) {
       const danger = (r.risks || []).find(x => (x.level || '').toLowerCase() === 'danger');
       const pass = !r.rugged && score <= 2000 && !danger;
       const reason = pass ? `RugCheck PASS (Score ${score})` : `RugCheck REJECT (rugged=${!!r.rugged}, score=${score}, danger=${danger?.name || 'none'})`;
-      const out = { ts: Date.now(), pass, reason };
+      const out = { ts: Date.now(), pass, reason, buyTaxRate: bt, sellTaxRate: st };
       secCache.set(key, out);
       return out;
     } catch (e) {
@@ -433,14 +449,12 @@ async function monitorPositions() {
         continue;
       }
       const equityUsd=portfolio.cashUsd+portfolio.openPositions.reduce((sum,x)=>sum+Number(x.lastPrice||x.buyPrice)*Number(x.remainingTokens??x.tokens),0);
-      const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:portfolio.cashUsd});
-      if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}
-      const ex=calcBuy(sizeUsd,Number(p.priceUsd),liq);portfolio.cashUsd-=sizeUsd;
+      const entryFee=estimatedNetworkFeeUsd(pairObj.chainId);const usableCash=Math.max(0,portfolio.cashUsd-entryFee);const sizeUsd=calculatePositionSize({equityUsd,poolLiquidityUsd:liq,score:intelligence.score,cashUsd:usableCash});if(!(sizeUsd>0)){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'position size below usable cash/liquidity cap');continue;}const ex=await calcPaperEntry(sizeUsd,p,sec,holderData?.decimals);const totalCost=sizeUsd+entryFee;portfolio.cashUsd-=totalCost;
       portfolio.openPositions.unshift({
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
         entryTime: Date.now(), entrySpotPrice: Number(p.priceUsd), buyPrice: ex.effPrice, tokens: ex.tokens, tokenDecimals: holderData?.decimals ?? null,
-        costUsd:sizeUsd,originalCostUsd:sizeUsd,remainingCostUsd:sizeUsd,remainingTokens:ex.tokens,partialTpDone:false,realizedPartialPnlUsd:0,partialExitProceedsUsd:0,partialExits:[],buyFeeAndImpactUsd:ex.feeUsd+ex.impactUsd,entryLiquidityUsd:liq,
+        costUsd:totalCost,originalCostUsd:totalCost,remainingCostUsd:totalCost,remainingTokens:ex.tokens,partialTpDone:false,realizedPartialPnlUsd:0,partialExitProceedsUsd:0,partialExits:[],buyFeeAndImpactUsd:ex.feeUsd+ex.impactUsd,entryLiquidityUsd:liq,buyTaxRate:Number(sec.buyTaxRate||0),sellTaxRate:Number(sec.sellTaxRate||0),entryQuoteSource:ex.quoteSource,entryQuoteFallback:!!ex.quoteFallback,
         lastPrice: Number(p.priceUsd), lastLiquidityUsd: liq, peakPrice: Number(p.priceUsd), trailArmed: false, securitySummary: sec.reason
       });
       held.add(key);
