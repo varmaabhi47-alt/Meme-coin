@@ -51,7 +51,7 @@ async function rpc(method,params){
   while(true){
     lastReq=Date.now();
     const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++rpcId,method,params})});
-    usage.httpRequests=(usage.httpRequests||0)+1;
+    usage.httpRequests=(usage.httpRequests||0)+1;await writeJson(USAGE,usage);
     if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
     const raw=await res.text();let body;try{body=JSON.parse(raw);}catch{throw new Error('RPC returned non-JSON HTTP '+res.status);}
     usage.credits++;usage.requests++;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
@@ -74,7 +74,7 @@ async function rpcBatch(method,paramsList){
     while(true){
       lastReq=Date.now();
       const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
-      usage.httpRequests=(usage.httpRequests||0)+1;
+      usage.httpRequests=(usage.httpRequests||0)+1;await writeJson(USAGE,usage);
       if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
       const raw=await res.text();try{body=JSON.parse(raw);}catch{throw new Error('RPC provider rejected JSON-RPC batch request (non-JSON HTTP '+res.status+').');}
       if(!res.ok)throw new Error('RPC batch failed HTTP '+res.status+': '+JSON.stringify(body).slice(0,500));
