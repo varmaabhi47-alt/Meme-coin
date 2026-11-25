@@ -3,7 +3,7 @@ import * as requireHolderModule from './meme-radar-v5-intelligence.mjs';
 import assert from 'node:assert/strict';
 import {
   scoreCandidate, estimateConstantProductImpact,
-  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, evaluateDiscoveryPrefilter, analyzeNarrativeFootprint, summarizePaperLearning, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters
+  calculatePaperBuy, calculatePaperSell, calculateJupiterQuoteExit, evaluateDiscoveryPrefilter, analyzeNarrativeFootprint, summarizePaperLearning, detectBasicMarketWarnings, analyzeCreatorSignals, summarizeCrossTokenClusters, evaluateSolanaHardSecurityGates
 } from './meme-radar-v5-intelligence.mjs';
 
 const healthyPair = {
