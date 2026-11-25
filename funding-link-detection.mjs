@@ -30,7 +30,9 @@ export function analyzeFundingLinks(candidateAddresses, fundingSources, {
     if([...roots].some(root=>trackedAddresses.has(root)))reasons.push('funding-linked-to-tracked-wallet');
     if([...roots].some(root=>(rootCounts.get(root)||0)>=sharedSourceMin))reasons.push('shared-funding-cluster');
     const immediate=(parents.get(address)||[])[0]||null;
-    result.set(address,{linked:reasons.length>0,reasons,fundingSource:immediate,correlationGroup:immediate||''});
+    const sharedRoots=[...roots].filter(root=>(rootCounts.get(root)||0)>=sharedSourceMin).sort((a,b)=>(rootCounts.get(b)||0)-(rootCounts.get(a)||0));
+    const correlationGroup=sharedRoots[0]||immediate||'';
+    result.set(address,{linked:reasons.length>0,reasons,fundingSource:immediate,correlationGroup});
   }
   return result;
 }
