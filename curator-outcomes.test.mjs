@@ -7,9 +7,9 @@ test('attributes independent 15m/60m/4h price outcomes to wallet buy event',()=>
   const buys=[{wallet:'W1',mint:'M1',signature:'S1',occurred_at:t,sol_amount:0.4}];
   const research=[
     {token:'M1',recordedAt:new Date(t+1000).toISOString(),priceUsd:2},
-    {token:'M1',recordedAt:new Date(t+15*60000).toISOString(),priceUsd:3},
-    {token:'M1',recordedAt:new Date(t+60*60000).toISOString(),priceUsd:1},
-    {token:'M1',recordedAt:new Date(t+240*60000).toISOString(),priceUsd:4}
+    {token:'M1',recordedAt:new Date(t+15*60000+1000).toISOString(),priceUsd:3},
+    {token:'M1',recordedAt:new Date(t+60*60000+1000).toISOString(),priceUsd:1},
+    {token:'M1',recordedAt:new Date(t+240*60000+1000).toISOString(),priceUsd:4}
   ];
   const result=attributeWalletOutcomes(buys,research);
   assert.equal(result.length,1);assert.equal(result[0].outcomes['15m'].returnPct,50);
