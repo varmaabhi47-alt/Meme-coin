@@ -371,17 +371,22 @@ async function monitorResearchSnapshots(){
  const tracked=Object.values(portfolio.researchTracked||{});if(!tracked.length)return;
  const targets=[5,15,30,60,240],now=Date.now();
  for(const item of tracked){
-  const due=targets.filter(m=>now-Number(item.entryAt)>=m*60000&&!(item.intervalsLogged||[]).includes(m));
+  const elapsed=(now-Number(item.entryAt))/60000;
+  const due=targets.filter(m=>elapsed>=m&&!(item.intervalsLogged||[]).includes(m));
   if(!due.length)continue;
+  const target=due.find(m=>elapsed<=m+2)||null;
+  for(const missed of due.filter(m=>m!==target)){
+    await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify({schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,decision:'SNAPSHOT_MISSED',researchIntervalMin:missed,elapsedMinutes:elapsed,priceUsd:null,liquidityUsd:null,source:'target window missed; no historical price fabricated'})+'\n','utf8');
+    item.intervalsLogged=[...(item.intervalsLogged||[]),missed];
+  }
+  if(!target)continue;
   try{
    const data=await fetchJsonStrict(`https://api.dexscreener.com/latest/dex/pairs/${item.chainId}/${item.pairAddress}`,10000);
    const pair=(data?.pairs||[]).find(x=>String(x.pairAddress||'').toLowerCase()===String(item.pairAddress).toLowerCase());
    if(!pair||!(Number(pair.priceUsd)>0&&Number(pair.liquidity?.usd)>0))throw Error('live pair mark/liquidity unavailable');
-   for(const target of due){
-    const row={schemaVersion:2,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:(now-Number(item.entryAt))/60000,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
-    await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
-   }
-  }catch(e){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot poll failed; no mark recorded: ${e.message}`);}
+   const row={schemaVersion:3,recordedAt:nowIso(),token:item.token,symbol:item.symbol,chainId:item.chainId,pairAddress:item.pairAddress,priceUsd:Number(pair.priceUsd),liquidityUsd:Number(pair.liquidity.usd),score:item.score,tier:item.tier,decision:'SNAPSHOT',researchIntervalMin:target,elapsedMinutes:elapsed,entryAt:new Date(item.entryAt).toISOString(),entryPrice:item.entryPrice,security:item.security,networkFeeUsd:estimatedNetworkFeeUsd(item.chainId),entryQuoteFallback:String(item.chainId||'').toLowerCase()==='solana',quoteFallback:String(item.chainId||'').toLowerCase()==='solana',source:'DexScreener live pair mark'};
+   await fs.appendFile(CONFIG.RESEARCH_FILE,JSON.stringify(row)+'\n','utf8');item.intervalsLogged=[...(item.intervalsLogged||[]),target];
+  }catch(error){logDecision('RESEARCH_STALE',item.symbol,item.chainId,`snapshot target ${target}m not recorded; no mark fabricated: ${error.message}`);}
  }
  for(const item of tracked){if(targets.every(m=>(item.intervalsLogged||[]).includes(m)))delete portfolio.researchTracked[item.token];}
  await saveState();
