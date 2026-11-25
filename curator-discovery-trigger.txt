@@ -1,0 +1,1 @@
+Trigger live smart-wallet discovery once the bounded discovery workflow is committed. This file contains no wallet data or credentials.
