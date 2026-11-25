@@ -88,6 +88,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const nowIso = () => new Date().toISOString();
 
 async function loadState() {
+  try { const cache=JSON.parse(await fs.readFile('audit-cache.json','utf8')); for(const [key,value] of Object.entries(cache)) if(value&&Date.now()-Number(value.ts)<900000)secCache.set(key,value); } catch {}
   try {
     const raw = await fs.readFile(CONFIG.PORTFOLIO_FILE, 'utf8');
     const parsed = JSON.parse(raw);
@@ -102,7 +103,7 @@ async function loadState() {
   }
 }
 
-async function saveState() { return stateLock(async()=>{portfolio.lastHourlySummaryMs=lastHourlySummaryMs;const tmp=CONFIG.PORTFOLIO_FILE+'.tmp';await fs.writeFile(tmp,JSON.stringify(portfolio,null,2),'utf8');await fs.rename(tmp,CONFIG.PORTFOLIO_FILE);}); }
+async function saveState() { return stateLock(async()=>{portfolio.lastHourlySummaryMs=lastHourlySummaryMs;portfolio.rpcTelemetry=rpcGuard.telemetry();portfolio.edgeProof=computeEdgeProof(portfolio.closedTrades||[]);const tmp=CONFIG.PORTFOLIO_FILE+'.tmp';await fs.writeFile(tmp,JSON.stringify(portfolio,null,2),'utf8');await fs.rename(tmp,CONFIG.PORTFOLIO_FILE);await fs.writeFile('audit-cache.json',JSON.stringify(Object.fromEntries(secCache)),'utf8');}); }
 
 async function appendCsv(t) {
   let exists=true;try{await fs.access(CONFIG.CSV_FILE);}catch{exists=false;}
@@ -159,7 +160,7 @@ function calcBuy(usd, price, liq) {
   return { feeUsd: result.feeUsd, impactUsd: result.impactUsd, impactRate: result.impactRate, effPrice: result.effectivePrice, tokens: result.tokens, model: result.model };
 }
 
-function estimatedNetworkFeeUsd(chain){return chain==='solana'?0.35:chain==='ethereum'?4.00:chain==='base'?0.20:chain==='bsc'?0.25:chain==='arbitrum'?0.30:0.50;}
+function estimatedNetworkFeeUsd(chain){return chain==='solana'?Math.min(0.75,Math.max(0.35,Number(process.env.SOLANA_FEE_USD_ESTIMATE||0.55))):chain==='ethereum'?4.00:chain==='base'?0.20:chain==='bsc'?0.25:chain==='arbitrum'?0.30:0.50;}
 async function calcPaperEntry(usd,pair,security,decimals){
  const chain=String(pair.chainId||'').toLowerCase(),networkFeeUsd=estimatedNetworkFeeUsd(chain),tax=Number(security?.buyTaxRate||0);
  if(chain==='solana'&&CONFIG.JUPITER_QUOTE_ENABLED&&pair.baseToken?.address&&decimals!==null&&decimals!==undefined&&decimals!==''&&Number.isInteger(Number(decimals))&&Number(decimals)>=0&&Number(decimals)<=18){
@@ -170,13 +171,13 @@ async function calcPaperEntry(usd,pair,security,decimals){
   }catch(e){console.warn('Jupiter entry quote failed; conservative labelled fallback: '+e.message);}
  }
  const est=calcBuy(usd,Number(pair.priceUsd),Number(pair.liquidity?.usd||0));
- const fallbackPenalty=chain==='solana'?0.05:0;
+ const fallbackPenalty=chain==='solana'?Math.min(0.15,Math.max(0.08,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||8))/100):0;
  const tokens=est.tokens*(1-fallbackPenalty)*(1-tax);
  return {...est,tokens,effPrice:(usd+networkFeeUsd)/tokens,feeUsd:est.feeUsd+networkFeeUsd+usd*tax,networkFeeUsd,buyTaxRate:tax,quoteSource:'constant-product-fallback',quoteFallback:chain==='solana',fallbackPenaltyPct:fallbackPenalty*100};
 }
 
 async function calcPaperExit(pos, price, liq) {
-  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=pos.chainId==='solana'?Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||5))/100:0;const tax=Number(pos.sellTaxRate||0),networkFeeUsd=estimatedNetworkFeeUsd(pos.chainId);const afterTax=est.netProceeds*(1-tax);return {...est,netProceeds:Math.max(0,afterTax*(1-penalty)-networkFeeUsd),feeUsd:est.feeUsd+networkFeeUsd+est.netProceeds*tax,quoteSource:'constant-product-fallback',quoteFallback:pos.chainId==='solana',fallbackPenaltyPct:penalty*100,networkFeeUsd};};
+  const qty=Number(pos.remainingTokens??pos.tokens);const fallback=()=>{const est=calcSell(qty,price,liq);const penalty=pos.chainId==='solana'?Math.max(0,Number(process.env.QUOTE_FALLBACK_SLIPPAGE_PCT||8))/100:0;const tax=Number(pos.sellTaxRate||0),networkFeeUsd=estimatedNetworkFeeUsd(pos.chainId);const afterTax=est.netProceeds*(1-tax);return {...est,netProceeds:Math.max(0,afterTax*(1-penalty)-networkFeeUsd),feeUsd:est.feeUsd+networkFeeUsd+est.netProceeds*tax,quoteSource:'constant-product-fallback',quoteFallback:pos.chainId==='solana',fallbackPenaltyPct:penalty*100,networkFeeUsd};};
   if (!CONFIG.JUPITER_QUOTE_ENABLED || pos.chainId !== 'solana' ||
       !pos.address || pos.tokenDecimals == null || !Number.isInteger(Number(pos.tokenDecimals))) return fallback();
   const decimals = Number(pos.tokenDecimals);
@@ -332,18 +333,18 @@ async function auditSecurity(pair) {
       const danger = (r.risks || []).find(x => (x.level || '').toLowerCase() === 'danger');
       const pass = !r.rugged && score <= 2000 && !danger;
       const reason = pass ? `RugCheck PASS (Score ${score})` : `RugCheck REJECT (rugged=${!!r.rugged}, score=${score}, danger=${danger?.name || 'none'})`;
-      const out = { ts: Date.now(), pass, reason, buyTaxRate: bt, sellTaxRate: st };
+      const out = { ts: Date.now(), pass, reason, buyTaxRate: 0, sellTaxRate: 0 };
       secCache.set(key, out);
       return out;
     } catch (e) {
-      return { ts: Date.now(), pass: false, reason: `Skipped: Security API unreachable (RugCheck: ${e.message})` };
+      const out={ ts: Date.now(), pass: false, reason: `Skipped: Security API unreachable (RugCheck: ${e.message})` };secCache.set(key,out);return out;
     }
   } else if (CONFIG.EVM_CHAIN_IDS[pair.chainId]) {
     const id = CONFIG.EVM_CHAIN_IDS[pair.chainId];
     try {
       const gp = await fetchJsonStrict(`https://api.gopluslabs.io/api/v1/token_security/${id}?contract_addresses=${pair.address}`, 9000);
       const d = gp?.result?.[pair.address.toLowerCase()];
-      if (!d) return { ts: Date.now(), pass: false, reason: 'GoPlus REJECT: Unindexed contract' };
+      if (!d) { const out={ ts: Date.now(), pass: false, reason: 'GoPlus REJECT: Unindexed contract' };secCache.set(key,out);return out; }
       const bt = Number(d.buy_tax || 0), st = Number(d.sell_tax || 0);
       const pass = d.is_honeypot !== '1' && d.cannot_sell_all !== '1' && bt <= 0.05 && st <= 0.05;
       const reason = pass ? `GoPlus PASS (Tax ${(bt*100).toFixed(1)}%/${(st*100).toFixed(1)}%)` : `GoPlus REJECT (honey=${d.is_honeypot}, sellTax=${(st*100).toFixed(1)}%)`;
@@ -351,7 +352,7 @@ async function auditSecurity(pair) {
       secCache.set(key, out);
       return out;
     } catch (e) {
-      return { ts: Date.now(), pass: false, reason: `Skipped: Security API unreachable (GoPlus: ${e.message})` };
+      const out={ ts: Date.now(), pass: false, reason: `Skipped: Security API unreachable (GoPlus: ${e.message})` };secCache.set(key,out);return out;
     }
   }
   return { ts: Date.now(), pass: false, reason: 'Unsupported chain' };
@@ -570,6 +571,7 @@ async function pollTelegramCommands(){
    else if(cmd.command==='positions'){await sendTelegram(portfolio.openPositions.length?portfolio.openPositions.map(p=>`${p.symbol} ${p.chainId}: ${Number(p.remainingTokens??p.tokens).toFixed(4)} tokens • partialTP ${!!p.partialTpDone}`).join('\n'):'No open positions.');}
    else if(cmd.command==='pause'){portfolio.autoTradeEnabled=false;await sendTelegram('New paper entries PAUSED. Position monitoring and exits remain active.');}
    else if(cmd.command==='resume'){portfolio.autoTradeEnabled=true;await sendTelegram('New paper entries RESUMED (unless circuit breaker is active).');}
+   else if(cmd.command==='kill'){portfolio.autoTradeEnabled=false;for(const p of portfolio.openPositions)p.manualCloseRequested=true;await sendTelegram('KILL SWITCH: new entries disabled; open paper positions flagged for exit at next live monitor quote. No live swaps are enabled.');}
    else if(cmd.command==='close'){const p=portfolio.openPositions.find(x=>String(x.symbol).toUpperCase()===cmd.symbol);if(!p)await sendTelegram('No open position matches '+cmd.symbol+'.');else{p.manualCloseRequested=true;await sendTelegram('Close requested for '+p.symbol+'; next live monitor quote will evaluate exit.');}}
   }
   if(updatesProcessed){await saveState();await syncPortfolioToCloudflare();}
