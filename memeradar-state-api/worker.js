@@ -21,7 +21,7 @@ async function getConfluence(env,mint){
   const gate=await env.DB.prepare("SELECT passed,checked_at,reasons FROM token_gate_status WHERE mint=?").bind(mint).first();
   const gateFresh=!!gate&&Number(gate.passed)===1&&Date.now()-Number(gate.checked_at)<=5*60*1000;
   const ready=unique.length>=minimum&&slots.size>=minimum&&gateFresh;
-  return {mint,wallets:new Set(unique.map(r=>r.wallet)).size,independentGroups:unique.length,distinctSlots:slots.size,required:minimum,gateFresh,signal:ready?"SMART_MONEY_CONFLUENCE":null,latest:Math.max(0,...unique.map(r=>Number(r.occurred_at||0)))};
+  return {mint,wallets:new Set(unique.map(r=>r.wallet)).size,walletAddresses:[...new Set(unique.map(r=>r.wallet))],independentGroups:unique.length,distinctSlots:slots.size,required:minimum,gateFresh,signal:ready?"SMART_MONEY_CONFLUENCE":null,latest:Math.max(0,...unique.map(r=>Number(r.occurred_at||0)))};
 }
 function authorized(request,env){const expected=String(env.BOT_SYNC_SECRET||"");return expected.length>0&&(request.headers.get("Authorization")||"")===`Bearer ${expected}`;}
 export default {
