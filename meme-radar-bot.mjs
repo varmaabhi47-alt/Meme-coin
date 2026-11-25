@@ -87,7 +87,7 @@ async function loadState() {
     const parsed = JSON.parse(raw);
     portfolio = { ...portfolio, ...parsed };
     lastHourlySummaryMs = Number(parsed.lastHourlySummaryMs || 0);
-    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);
+    consecutiveRiskExits = Number(parsed.consecutiveRiskExits || 0);\n    telegramOffset = Number(parsed.telegramOffset || 0);
     console.log(`[${nowIso()}] Loaded ${CONFIG.PORTFOLIO_FILE} | Cash: $${portfolio.cashUsd.toFixed(2)} | Open: ${portfolio.openPositions.length} | Closed: ${portfolio.closedTrades.length}`);
   } catch {
     await saveState();
@@ -403,7 +403,7 @@ async function monitorPositions() {
     }else if(risk.action==='EXIT_ALL'){
       const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await calcPaperExit({...pos,tokens:qty,remainingTokens:qty},pos.lastPrice,currentLiquidityUsd),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
       portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
-      portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else consecutiveRiskExits=0;portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(`AUTO-SELL [${risk.reason}] ${pos.symbol}: net $${pnl.toFixed(2)} incl partials; fallback ${!!ex.quoteFallback}`);
+      portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else{consecutiveRiskExits=0;if(portfolio.breaker)portfolio.breaker.triggeredLossCount=0;}portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(`AUTO-SELL [${risk.reason}] ${pos.symbol}: net $${pnl.toFixed(2)} incl partials; fallback ${!!ex.quoteFallback}`);
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
   }
 
@@ -522,15 +522,16 @@ async function pollTelegramCommands(){
  if(!CONFIG.TELEGRAM_BOT_TOKEN||!CONFIG.TELEGRAM_CHAT_ID)return;
  try{
   const data=await fetchJsonStrict(`https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/getUpdates?offset=${telegramOffset+1}&timeout=0&allowed_updates=%5B%22message%22%5D`,8000);
-  for(const update of data.result||[]){telegramOffset=Math.max(telegramOffset,Number(update.update_id||0));const msg=update.message;if(!msg)continue;
+  let updatesProcessed=false;for(const update of data.result||[]){telegramOffset=Math.max(telegramOffset,Number(update.update_id||0));portfolio.telegramOffset=telegramOffset;updatesProcessed=true;const msg=update.message;if(!msg)continue;
    if(String(msg.chat?.id)!==String(CONFIG.TELEGRAM_CHAT_ID)){console.warn('Ignored Telegram command from unauthorized chat.');continue;}
    const cmd=parseTelegramCommand(msg.text);if(!cmd)continue;
    if(cmd.command==='status'){const realized=portfolio.closedTrades.reduce((a,t)=>a+Number(t.netPnlUsd||0),0);await sendTelegram(`STATUS\nCash $${portfolio.cashUsd.toFixed(2)} • Open ${portfolio.openPositions.length} • Closed ${portfolio.closedTrades.length}\nRealized PnL $${realized.toFixed(2)}\nBreaker ${portfolio.breaker?.reason||'clear'}`);}
    else if(cmd.command==='positions'){await sendTelegram(portfolio.openPositions.length?portfolio.openPositions.map(p=>`${p.symbol} ${p.chainId}: ${Number(p.remainingTokens??p.tokens).toFixed(4)} tokens • partialTP ${!!p.partialTpDone}`).join('\n'):'No open positions.');}
-   else if(cmd.command==='pause'){portfolio.autoTradeEnabled=false;await saveState();await syncPortfolioToCloudflare();await sendTelegram('New paper entries PAUSED. Position monitoring and exits remain active.');}
-   else if(cmd.command==='resume'){portfolio.autoTradeEnabled=true;await saveState();await syncPortfolioToCloudflare();await sendTelegram('New paper entries RESUMED (unless circuit breaker is active).');}
-   else if(cmd.command==='close'){const p=portfolio.openPositions.find(x=>String(x.symbol).toUpperCase()===cmd.symbol);if(!p)await sendTelegram('No open position matches '+cmd.symbol+'.');else{p.manualCloseRequested=true;await saveState();await sendTelegram('Close requested for '+p.symbol+'; next live monitor quote will evaluate exit.');}}
+   else if(cmd.command==='pause'){portfolio.autoTradeEnabled=false;await sendTelegram('New paper entries PAUSED. Position monitoring and exits remain active.');}
+   else if(cmd.command==='resume'){portfolio.autoTradeEnabled=true;await sendTelegram('New paper entries RESUMED (unless circuit breaker is active).');}
+   else if(cmd.command==='close'){const p=portfolio.openPositions.find(x=>String(x.symbol).toUpperCase()===cmd.symbol);if(!p)await sendTelegram('No open position matches '+cmd.symbol+'.');else{p.manualCloseRequested=true;await sendTelegram('Close requested for '+p.symbol+'; next live monitor quote will evaluate exit.');}}
   }
+  if(updatesProcessed){await saveState();await syncPortfolioToCloudflare();}
  }catch(e){console.error('Telegram command poll failed: '+e.message);}
 }
 async function persistentRunner(){
