@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvedKeys,instructionProgramIds,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS} from './smart-wallet-curator.mjs';
+import {resolvedKeys,instructionProgramIds,solDeltaByAccount,vetWallet,analyzeTrades,MONTHLY_LIMIT,MAX_RPS} from './smart-wallet-curator.mjs';
 
 test('versioned message account keys append runtime-loaded ALT addresses in correct writable/readonly order',()=>{
   const tx={transaction:{message:{staticAccountKeys:['payer','staticA'],addressTableLookups:[{accountKey:'lookupTable',writableIndexes:[2],readonlyIndexes:[5]}],instructions:[{programIdIndex:2,accounts:[0,2,3],data:''}]}},meta:{loadedAddresses:{writable:['altWritable'],readonly:['altReadonly']}}};
@@ -30,4 +30,21 @@ test('RPC request budget is capped at one million monthly calls and six RPS',()=
 test('local parser and rejection tests do not call any RPC endpoint',()=>{
   assert.equal(typeof resolvedKeys,'function');
   assert.equal(typeof vetWallet,'function');
+});
+
+test('versioned transaction without resolved lookup addresses is rejected instead of guessed',()=>{
+  const tx={transaction:{message:{staticAccountKeys:['payer'],addressTableLookups:[{accountKey:'table',writableIndexes:[0],readonlyIndexes:[]}],instructions:[]}},meta:{}};
+  assert.throws(()=>resolvedKeys(tx),/missing meta.loadedAddresses/);
+});
+
+test('versioned transaction with incomplete ALT address resolution is rejected',()=>{
+  const tx={transaction:{message:{staticAccountKeys:['payer'],addressTableLookups:[{accountKey:'table',writableIndexes:[0,1],readonlyIndexes:[2]}],instructions:[]}},meta:{loadedAddresses:{writable:['onlyOne'],readonly:['readOnly']}}};
+  assert.throws(()=>resolvedKeys(tx),/count does not match/);
+});
+
+test('fee payer SOL delta is corrected by the recorded transaction fee',()=>{
+  const tx={transaction:{message:{staticAccountKeys:['payer','wallet'],instructions:[]}},meta:{preBalances:[1000000000,500000000],postBalances:[899000000,400000000],fee:1000000}};
+  const d=solDeltaByAccount(tx);
+  assert.equal(d.get('payer'),-0.1);
+  assert.equal(d.get('wallet'),-0.1);
 });
