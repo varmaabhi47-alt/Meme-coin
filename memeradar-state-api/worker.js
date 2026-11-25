@@ -31,7 +31,7 @@ export default {
           buyPrice:Number(p.buyPrice||0),tokens:Number(p.tokens||0),remainingTokens:Number(p.remainingTokens??p.tokens??0),
           costUsd:Number(p.costUsd||0),remainingCostUsd:Number(p.remainingCostUsd??p.costUsd??0),realizedPartialPnlUsd:Number(p.realizedPartialPnlUsd||0),
           partialTpDone:!!p.partialTpDone,partialExits:Array.isArray(p.partialExits)?p.partialExits:[],partialExitProceedsUsd:Number(p.partialExitProceedsUsd||0),partialFeesImpactUsd:Number(p.partialFeesImpactUsd||0),breakevenStopNetPct:Number(p.breakevenStopNetPct||0),entryQuoteSource:cleanText(p.entryQuoteSource),entryQuoteFallback:!!p.entryQuoteFallback,buyTaxRate:Number(p.buyTaxRate||0),sellTaxRate:Number(p.sellTaxRate||0),entryLiquidityUsd:Number(p.entryLiquidityUsd||0),
-          lastPrice:Number(p.lastPrice||0),lastLiquidityUsd:Number(p.lastLiquidityUsd||0),peakPrice:Number(p.peakPrice||0),lastRiskCheckAt:Number(p.lastRiskCheckAt||0),dataStale:!!p.dataStale,dataStaleReason:cleanText(p.dataStaleReason),emergencyNoLiquidity:!!p.emergencyNoLiquidity
+          lastPrice:Number(p.lastPrice||0),lastLiquidityUsd:Number(p.lastLiquidityUsd||0),peakPrice:Number(p.peakPrice||0),lastRiskCheckAt:Number(p.lastRiskCheckAt||0),dataStale:!!p.dataStale,stale:!!p.dataStale,dataStaleReason:cleanText(p.dataStaleReason),emergencyNoLiquidity:!!p.emergencyNoLiquidity
         })),
         closedTrades:(Array.isArray(raw.closedTrades)?raw.closedTrades:[]).map(t=>({
           id:cleanText(t.id),symbol:cleanText(t.symbol),chainId:cleanText(t.chainId),address:cleanText(t.address),
