@@ -26,6 +26,7 @@ export class RpcCreditGuard {
   async cached(key, fn) {
     const row = this.cache.get(key);
     if (row && now() - row.at < this.cacheMs) return row.value;
+    for(const [oldKey,oldRow] of this.cache)if(now()-oldRow.at>=this.cacheMs)this.cache.delete(oldKey);
     const value = await fn(); this.cache.set(key, { at: now(), value });
     try { await fs.writeFile(this.stateFile+'.cache',JSON.stringify(Object.fromEntries(this.cache)),'utf8'); } catch {}
     return value;
@@ -81,6 +82,7 @@ export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
   const buys = new Map();
   return (wallet, mint, at = now()) => {
     if (!wallet || !mint) return null;
+    for(const [oldMint,oldRows] of buys){const fresh=oldRows.filter(x=>at-x.at<=windowMs);if(fresh.length)buys.set(oldMint,fresh);else buys.delete(oldMint);}
     const key = String(mint); const rows = (buys.get(key) || []).filter(x => at - x.at <= windowMs && x.wallet !== wallet);
     rows.push({ wallet: String(wallet), at }); buys.set(key, rows);
     const distinct = [...new Set(rows.map(x => x.wallet))];
@@ -131,11 +133,8 @@ export class SolanaEventListener {
 }
 
 export async function extractMintsFromTransaction(tx) {
-  const keys = tx?.transaction?.message?.accountKeys || [];
-  const accounts = keys.map(x => typeof x === 'string' ? x : x.pubkey).filter(Boolean);
   const pre = tx?.meta?.preTokenBalances || [], post = tx?.meta?.postTokenBalances || [];
-  const changed = new Set([...pre, ...post].map(x => x.mint).filter(Boolean));
-  return [...changed].filter(mint => !accounts.includes(mint) || accounts.includes(mint));
+  return [...new Set([...pre, ...post].map(x => x.mint).filter(Boolean))];
 }
 
 export function computeEdgeProof(trades = []) {
