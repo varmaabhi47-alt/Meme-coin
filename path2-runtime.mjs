@@ -97,6 +97,7 @@ export class SolanaEventListener {
   start() {
     if (!this.wsUrl) throw new Error('SOLANA_RPC_WSS missing; event listener not started');
     if (!this.WebSocketImpl) throw new Error('WebSocket API unavailable; use Node 22+');
+    this.subscriptions.clear(); this.nextId=1;
     this.socket = new this.WebSocketImpl(this.wsUrl);
     this.socket.addEventListener('open', () => {
       this.subscribeLogs(this.pumpProgramId, 'pump-migration');
@@ -105,7 +106,7 @@ export class SolanaEventListener {
     });
     this.socket.addEventListener('message', event => { try { this.handle(JSON.parse(String(event.data))); } catch (e) { this.onError(e); } });
     this.socket.addEventListener('error', () => this.onError(new Error('Solana WebSocket connection error')));
-    this.socket.addEventListener('close', () => { if (!this.closed) this.onError(new Error('Solana WebSocket closed; restart process to reconnect')); });
+    this.socket.addEventListener('close', () => { if (!this.closed) { this.onError(new Error('Solana WebSocket closed; reconnecting in 5 seconds')); setTimeout(() => { if (!this.closed) this.start(); }, 5000); } });
     return this;
   }
   subscribeLogs(address, kind) {
