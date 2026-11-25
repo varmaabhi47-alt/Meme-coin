@@ -44,7 +44,7 @@ export function evaluatePositionRisk(position, { markPrice, liquidityUsd, now = 
   if (!position.partialTpDone && netPct !== null && netPct >= EXIT_RULES.partialTakeProfitNetPct) {
     return { action: 'PARTIAL_EXIT', reason: 'PARTIAL_TP_40', fraction: EXIT_RULES.partialTakeProfitFraction, netPct, peakPrice: peak };
   }
-  if (position.partialTpDone && netPct !== null && netPct <= -EXIT_RULES.breakevenNetPct) {
+  if (position.partialTpDone && netPct !== null && netPct <= EXIT_RULES.breakevenNetPct) {
     return { action: 'EXIT_ALL', reason: 'BREAKEVEN_STOP', netPct, peakPrice: peak };
   }
   if (!position.partialTpDone && netPct !== null && netPct <= EXIT_RULES.stopLossNetPct) {
