@@ -68,7 +68,7 @@ Weekly pruning uses observed last activity and actual attributed outcomes:
 - two or more explicitly recorded rug entries.
 
 The weekly workflow runs Sunday 03:15 UTC and requires these GitHub Actions secrets:
-`HELIUS_API_KEY`, `HELIUS_RPC_URL`, `HELIUS_WEBHOOK_URL`, `HELIUS_WEBHOOK_AUTH`, and `BOT_SYNC_SECRET`. Optional Telegram secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. `HELIUS_WEBHOOK_AUTH` must match the Worker `HELIUS_WEBHOOK_SECRET`; the Worker must have `BOT_SYNC_SECRET` and its D1 schema deployed.
+`HELIUS_API_KEY`, `HELIUS_RPC_URL`, `HELIUS_WEBHOOK_URL`, `HELIUS_WEBHOOK_AUTH`, and `BOT_SYNC_SECRET`. Optional Telegram secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. `HELIUS_WEBHOOK_AUTH` must match the Worker `HELIUS_WEBHOOK_SECRET`; the Worker must have `BOT_SYNC_SECRET` and its D1 schema deployed. For an existing D1 database, apply `memeradar-state-api/migrations/0002_smart_wallet_curator.sql` **once** before the Worker update. If `sol_amount` or `correlation_group` were already added manually, omit those corresponding `ALTER TABLE` statements. Replace the placeholder database ID in `memeradar-state-api/wrangler.toml` before using Wrangler. Do not re-run the full `schema.sql` on an already-migrated database.
 
 ## Verification
 
