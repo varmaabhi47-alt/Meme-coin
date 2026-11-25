@@ -213,10 +213,10 @@ async function pruneWallets(){
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
     if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
     w.performance14d={observations:recent.length,horizonSamples:allHorizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:h4.length?h4.reduce((s,v)=>s+v,0)/h4.length:null};
-    if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
+    if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else if(w.status==='ACTIVE'){active.push(w);}else{w.status='WATCH';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
-  const kept=active.slice(0,50);for(const w of active.slice(50)){w.status='WATCH';}
+  const kept=active.filter(w=>w.status==='ACTIVE').slice(0,50);for(const w of active.filter(w=>w.status!=='ACTIVE'))w.status='WATCH';for(const w of active.filter(w=>w.status==='ACTIVE').slice(50))w.status='WATCH';
   j.wallets=[...kept,...active.slice(50),...muted.map(x=>(j.wallets||[]).find(w=>w.address===x.address)),...mutedExisting].filter(Boolean);
   j.updated_at=iso(Date.now());await writeJson(WALLETS,j);
   const top=[...kept].sort((a,b)=>Number(b.performance14d?.mean4hPct??-Infinity)-Number(a.performance14d?.mean4hPct??-Infinity)).slice(0,5);
@@ -254,7 +254,7 @@ async function main(){
     const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
     curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
   }catch(e){rejected.push({address:c.address,error:String(e)});}}
-  curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.wallets=curated.wallets.slice(0,50);curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
+  curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));for(let i=0;i<curated.wallets.length;i++)curated.wallets[i].status=i<50?'ACTIVE':'WATCH';curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(e=>{console.error('[curator error]',e.message);process.exitCode=1;});
