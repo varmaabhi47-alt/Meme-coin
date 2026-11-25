@@ -19,3 +19,21 @@ export function selectWinningResearchMints(researchRows=[],closedTrades=[],{minS
   }
   return [...eligible].filter(mint=>{const row=totals.get(mint);return !!row&&row.samples>=minSamples&&row.netPnlUsd>0;});
 }
+
+/**
+ * Bounded discovery fallback: recent, explicitly security-checked RESEARCH
+ * snapshots may seed candidate discovery. These mints do NOT qualify wallets;
+ * every discovered wallet still has to pass the full live RPC curator gates.
+ */
+export function selectRecentPassingResearchMints(rows=[],{now=Date.now(),maxAgeMs=7*24*60*60*1000,maxMints=3}={}){
+  const latest=new Map();
+  for(const row of rows||[]){
+    const mint=String(row.token??row.mint??''),chain=String(row.chainId??'').toLowerCase();
+    const at=Date.parse(row.recordedAt??'');
+    if(chain!=='solana'||!mint||!row.pairAddress||row.security?.pass!==true||row.security?.checked!==true||String(row.decision??'').toUpperCase()!=='RESEARCH')continue;
+    if(!Number.isFinite(at)||at>now||now-at>maxAgeMs)continue;
+    const prior=latest.get(mint);
+    if(!prior||at>Date.parse(prior.recordedAt))latest.set(mint,row);
+  }
+  return [...latest.values()].sort((a,b)=>Date.parse(b.recordedAt)-Date.parse(a.recordedAt)).slice(0,Math.max(0,maxMints)).map(row=>String(row.token??row.mint));
+}
