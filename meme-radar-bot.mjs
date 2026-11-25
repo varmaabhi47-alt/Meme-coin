@@ -652,7 +652,7 @@ async function persistentRunner(){
         const now=Date.now();
         if(now-lastTelegram>=5000){await pollTelegramCommands();lastTelegram=Date.now();}
         if(now-lastBreaker>=30000){await runnerLock(()=>updateCircuitBreaker());lastBreaker=Date.now();}
-        if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000||portfolio.eventDiscoveryRequested){portfolio.eventDiscoveryRequested=false;await runnerLock(async()=>{await updateCircuitBreaker();await monitorPositions({discover:true});});lastDiscovery=Date.now();}
+        if(now-lastDiscovery>=CONFIG.DISCOVERY_SEC*1000||portfolio.eventDiscoveryRequested){portfolio.eventDiscoveryRequested=false;await runnerLock(async()=>{await updateCircuitBreaker();if(rpcGuard.telemetry().throttled){logDecision('RPC_BUDGET_THROTTLE','SYSTEM','solana','projected monthly RPC credits exceed 800,000; discovery paused, open-position monitor remains active');await monitorPositions({discover:false});}else await monitorPositions({discover:true});});lastDiscovery=Date.now();}
         if(now-lastResearch>=60000){await runnerLock(()=>monitorResearchSnapshots());lastResearch=Date.now();}
       }catch(error){lastError=error?.message||String(error);console.error('Discovery/control loop error: '+lastError);await saveState();}
       await sleep(1000);
