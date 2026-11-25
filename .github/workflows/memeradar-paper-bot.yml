@@ -48,6 +48,19 @@ jobs:
           MEMERADAR_SYNC_SECRET: ${{ secrets.MEMERADAR_SYNC_SECRET }}
         run: node meme-radar-bot.mjs --sync-check
 
+      - name: Verify live feed and authenticated D1 read (read-only)
+        if: github.event_name == 'push'
+        env:
+          MEMERADAR_SYNC_SECRET: ${{ secrets.MEMERADAR_SYNC_SECRET }}
+        run: node meme-radar-bot.mjs --dry-run
+
+      - name: Verify Telegram delivery (test message only)
+        if: github.event_name == 'push'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node meme-radar-bot.mjs --telegram-test
+
       - name: Run one paper-trading scan
         if: github.event_name != 'push'
         env:
