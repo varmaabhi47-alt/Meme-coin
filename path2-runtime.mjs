@@ -134,14 +134,17 @@ export async function extractMintsFromTransaction(tx) {
 }
 
 export function computeEdgeProof(trades = []) {
-  const valid = trades.filter(t => Number.isFinite(Number(t.netPnlUsd)));
-  const wins = valid.filter(t => Number(t.netPnlUsd) > 0), losses = valid.filter(t => Number(t.netPnlUsd) < 0);
-  const grossWin = wins.reduce((s, t) => s + Number(t.netPnlUsd), 0), grossLoss = Math.abs(losses.reduce((s, t) => s + Number(t.netPnlUsd), 0));
-  const largest = valid.reduce((best, t) => Number(t.netPnlUsd) > Number(best?.netPnlUsd ?? -Infinity) ? t : best, null);
-  const adjusted = valid.filter(t => t !== largest);
-  const adjustedWins = adjusted.filter(t => Number(t.netPnlUsd) > 0).reduce((s,t)=>s+Number(t.netPnlUsd),0);
-  const adjustedLosses = Math.abs(adjusted.filter(t => Number(t.netPnlUsd) < 0).reduce((s,t)=>s+Number(t.netPnlUsd),0));
-  return { closedTrades: valid.length, winRatePct: valid.length ? wins.length / valid.length * 100 : null, profitFactor: grossLoss ? grossWin / grossLoss : (grossWin ? null : 0), maxDrawdownPct: null, outlierAdjustedPnlUsd: adjusted.reduce((s,t)=>s+Number(t.netPnlUsd),0), outlierAdjustedProfitFactor: adjustedLosses ? adjustedWins / adjustedLosses : (adjustedWins ? null : 0), EDGE_VERIFIED: valid.length >= 100 && adjustedWins > adjustedLosses && adjustedWins > 0 };
+  const valid=trades.filter(t=>Number.isFinite(Number(t.netPnlUsd)));
+  const wins=valid.filter(t=>Number(t.netPnlUsd)>0),losses=valid.filter(t=>Number(t.netPnlUsd)<0);
+  const grossWin=wins.reduce((s,t)=>s+Number(t.netPnlUsd),0),grossLoss=Math.abs(losses.reduce((s,t)=>s+Number(t.netPnlUsd),0));
+  const largestWinningTrade=wins.reduce((best,t)=>Number(t.netPnlUsd)>Number(best?.netPnlUsd??-Infinity)?t:best,null);
+  const adjusted=largestWinningTrade?valid.filter(t=>t!==largestWinningTrade):valid;
+  const adjustedWins=adjusted.filter(t=>Number(t.netPnlUsd)>0).reduce((s,t)=>s+Number(t.netPnlUsd),0);
+  const adjustedLosses=Math.abs(adjusted.filter(t=>Number(t.netPnlUsd)<0).reduce((s,t)=>s+Number(t.netPnlUsd),0));
+  const adjustedProfitFactor=adjustedLosses?adjustedWins/adjustedLosses:(adjustedWins>0?null:0);
+  let equity=1,peak=1,maxDrawdownPct=0;
+  for(const trade of valid){const ret=Number(trade.netPnlPct);if(Number.isFinite(ret))equity*=Math.max(0,1+ret/100);peak=Math.max(peak,equity);if(peak>0)maxDrawdownPct=Math.max(maxDrawdownPct,(peak-equity)/peak*100);}
+  return {closedTrades:valid.length,winRatePct:valid.length?wins.length/valid.length*100:null,profitFactor:grossLoss?grossWin/grossLoss:(grossWin>0?null:0),maxDrawdownPct,netPnlUsd:valid.reduce((s,t)=>s+Number(t.netPnlUsd),0),outlierAdjustedPnlUsd:adjusted.reduce((s,t)=>s+Number(t.netPnlUsd),0),outlierAdjustedProfitFactor:adjustedProfitFactor,largestWinningTradePnlUsd:largestWinningTrade?Number(largestWinningTrade.netPnlUsd):null,EDGE_VERIFIED:valid.length>=100&&adjustedWins>adjustedLosses&&adjustedWins>0};
 }
 
 export function extractWalletTokenBuys(tx, wallet) {
