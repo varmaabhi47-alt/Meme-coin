@@ -140,9 +140,9 @@ function analyzeTrades(swaps){
   for(const s of swaps){if(s.side==='BUY'){const q=open.get(s.mint)||[];q.push(s);open.set(s.mint,q);continue;}
     const q=open.get(s.mint);if(!q?.length)continue;
     // FIFO proportional lot closure. SOL amounts are actual wallet SOL deltas, including fees/tips.
-    let remaining=s.tokenAmount,proceeds=s.solAmount,matchedCost=0,matchedTokens=0,first=Infinity;
-    while(remaining>1e-12&&q.length){const lot=q[0],take=Math.min(remaining,lot.tokenAmount),ratio=take/lot.tokenAmount;matchedCost+=lot.solAmount*ratio;matchedTokens+=take;first=Math.min(first,lot.blockTime);lot.tokenAmount-=take;lot.solAmount*=1-ratio;remaining-=take;if(lot.tokenAmount<=1e-12)q.shift();}
-    if(matchedTokens>0){const sellMatched=s.tokenAmount?proceeds*(matchedTokens/s.tokenAmount):0;closed.push({mint:s.mint,buyTime:first,sellTime:s.blockTime,holdMins:(s.blockTime-first)/60,costSol:matchedCost,proceedsSol:sellMatched,pnlSol:sellMatched-matchedCost});}
+    let remaining=s.tokenAmount,proceeds=s.solAmount,matchedCost=0,matchedTokens=0,first=Infinity,firstSlot=Infinity;
+    while(remaining>1e-12&&q.length){const lot=q[0],take=Math.min(remaining,lot.tokenAmount),ratio=take/lot.tokenAmount;matchedCost+=lot.solAmount*ratio;matchedTokens+=take;first=Math.min(first,lot.blockTime);firstSlot=Math.min(firstSlot,Number(lot.slot||Infinity));lot.tokenAmount-=take;lot.solAmount*=1-ratio;remaining-=take;if(lot.tokenAmount<=1e-12)q.shift();}
+    if(matchedTokens>0){const sellMatched=s.tokenAmount?proceeds*(matchedTokens/s.tokenAmount):0;closed.push({mint:s.mint,buyTime:first,buySlot:firstSlot,sellTime:s.blockTime,sellSlot:Number(s.slot||0),holdMins:(s.blockTime-first)/60,costSol:matchedCost,proceedsSol:sellMatched,pnlSol:sellMatched-matchedCost});}
   }return closed;
 }
 function median(a){if(!a.length)return null;const x=[...a].sort((a,b)=>a-b),m=Math.floor(x.length/2);return x.length%2?x[m]:(x[m-1]+x[m])/2;}
@@ -156,14 +156,16 @@ function vetWallet(address,trades,swaps,{knownBad=new Set(),knownTracked=new Set
   const winRate=trades.length?wins.length/trades.length*100:null;
   const grossWin=wins.reduce((s,t)=>s+t.pnlSol,0),grossLoss=Math.abs(losses.reduce((s,t)=>s+t.pnlSol,0));
   const pf=grossLoss?grossWin/grossLoss:(grossWin>0?Infinity:null);
-  const profitableMints=new Set(wins.map(t=>t.mint)),pnlByMint=new Map();for(const t of trades)pnlByMint.set(t.mint,(pnlByMint.get(t.mint)||0)+t.pnlSol);
-  const largest=pnl>0?Math.max(0,...pnlByMint.values())/pnl:1;
+  const pnlByMint=new Map();for(const t of trades)pnlByMint.set(t.mint,(pnlByMint.get(t.mint)||0)+t.pnlSol);
+  const profitableMints=new Set([...pnlByMint].filter(([,net])=>net>0).map(([mint])=>mint));
+  const positiveMintPnl=[...pnlByMint.values()].filter(v=>v>0),positivePnlTotal=positiveMintPnl.reduce((a,b)=>a+b,0);
+  const largest=positivePnlTotal>0?Math.max(0,...positiveMintPnl)/positivePnlTotal:1;
   const holds=trades.map(t=>t.holdMins).filter(Number.isFinite),medianHold=median(holds);
   const buySizes=swaps.filter(x=>x.side==='BUY').map(x=>x.solAmount),medianBuy=median(buySizes);
-  if(profitableMints.size<5)reasons.push('less-than-5-profitable-tokens');
+  if(profitableMints.size<5)reasons.push('less-than-5-net-profitable-tokens');
   if(largest>0.6)reasons.push('single-token-pnl-concentration');
   if(medianHold===null||medianHold<10)reasons.push('median-hold-under-10m');
-  if(swaps.some((s,i)=>swaps.slice(0,i).some(p=>p.mint===s.mint&&p.side!==s.side&&(p.slot===s.slot||(s.blockTime-p.blockTime)>=0&&(s.blockTime-p.blockTime)<60))))reasons.push('wash-loop-under-1m-or-same-slot');
+  if(trades.some(t=>Number.isFinite(t.buySlot)&&Number.isFinite(t.sellSlot)&&Math.abs(t.sellSlot-t.buySlot)<=1&&t.holdMins<1))reasons.push('same-slot-or-next-slot-roundtrip');
   if(trades.length<10)reasons.push('less-than-10-closed-trades');
   if(medianBuy===null||medianBuy<0.25)reasons.push('median-buy-under-0.25-sol');
   if(winRate===null||winRate<45)reasons.push('win-rate-under-45pct');
@@ -210,7 +212,7 @@ async function pruneWallets(){
     if(liveLast===null&&telemetryErrors.some(x=>x.address===w.address)){/* RPC failure: do not infer inactivity from stale data. */}
     else if(age>14*DAY*1000)reasons.push('inactive-14d');
     if(hitRate!==null&&hitRate<35)reasons.push('14d-hit-rate-under-35');if(rugCount>=2)reasons.push('two-rug-entries');
-    w.performance14d={observations:recent.length,horizonSamples:horizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:h4.length?h4.reduce((s,v)=>s+v,0)/h4.length:null};
+    w.performance14d={observations:recent.length,horizonSamples:allHorizons.length,hitRatePct:hitRate,rugEntries:rugCount,mean4hPct:h4.length?h4.reduce((s,v)=>s+v,0)/h4.length:null};
     if(reasons.length){w.status='MUTED';w.muted_at=iso(Date.now());w.mute_reasons=reasons;muted.push({address:w.address,reasons});}else{if(w.status!=='ACTIVE')promoted.push(w.address);w.status='ACTIVE';active.push(w);}
   }
   active.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));
