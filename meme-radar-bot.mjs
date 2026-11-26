@@ -623,36 +623,42 @@ async function monitorPositions({ discover = false } = {}) {
       const intelligence = scoreCandidate(p, sec);
       const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
+      let walletSignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
+      let signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
+      let freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
       let hardGate={pass:true,reasons:[]},bundleGate={pass:true,reason:'not-applicable'};
       if(pairObj.chainId==='solana'){
         hardGate=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData,tokenProgramId:creatorData?.tokenProgramId,tokenExtensions:creatorData?.tokenExtensions});
         if(!hardGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...hardGate.reasons);}
-        if(sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass){
+        // Launch-bundle analysis is required for both legacy and wallet-originated entries.
+        if(sec.pass&&hardGate.pass&&(intelligence.tier==='RESEARCH'||freshTrackedBuy)){
           bundleGate=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
           if(!bundleGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundleGate.reason);}
         }
-        const mintForGate=String(p.baseToken.address||''),gatePass=sec.pass&&intelligence.tier==='RESEARCH'&&hardGate.pass&&bundleGate.pass;
+        const mintForGate=String(p.baseToken.address||''),gatePass=sec.pass&&hardGate.pass&&bundleGate.pass;
         const gateReasons=[...(sec.pass?[]:[sec.reason]),...hardGate.reasons,...(bundleGate.pass?[]:[bundleGate.reason])];
         const gatePublished=await publishV6Gate(mintForGate,gatePass,gateReasons);
+        // D1 wallet confluence can qualify a WATCH-tier token too, but never bypasses security gates.
         if(gatePass&&gatePublished)await fetchSmartMoneySignal(mintForGate);else if(portfolio.smartMoneySignals)delete portfolio.smartMoneySignals[mintForGate];
+        walletSignal=portfolio.smartMoneySignals?.[mintForGate];
+        signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
+        freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
       }
-      intelligence.smartMoneyConfluence=!!portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
-      await recordResearch(p, sec, intelligence, intelligence.tier, holders);
-      if (!sec.pass || intelligence.tier !== 'RESEARCH') {
-        logDecision('SKIPPED', p.baseToken.symbol, pairObj.chainId,
-          `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
+      intelligence.smartMoneyConfluence=freshTrackedBuy;
+      const legacyDiscoveryQualified=intelligence.tier==='RESEARCH'&&sec.pass&&hardGate.pass&&bundleGate.pass;
+      // Wallet-originated selection is a separate, smaller-risk route. It may
+      // accept WATCH/soft-REJECT scores, but never hard rejects or failed gates.
+      const walletSignalQualified=freshTrackedBuy&&sec.pass&&intelligence.hardReject!==true&&intelligence.score>=65&&hardGate.pass&&bundleGate.pass;
+      const walletOnlyQualified=walletSignalQualified&&!legacyDiscoveryQualified;
+      await recordResearch(p,sec,intelligence,walletOnlyQualified?'WALLET_SIGNAL':intelligence.tier,holders);
+      if(!legacyDiscoveryQualified&&!walletSignalQualified){
+        logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,
+          `candidate blocked: legacyResearch=${legacyDiscoveryQualified}, verifiedWalletSignal=${walletSignalQualified}; score ${intelligence.score}/100 [${intelligence.tier}], hardReject=${!!intelligence.hardReject}, security=${sec.pass}, creator/bundle=${hardGate.pass&&bundleGate.pass}`);
         continue;
       }
-      const walletSignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
-      const signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
-      const freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
-      // Preserve the original V5 discovery/score selection path as well as V6 tracked-wallet signals.
-      // Both paths have already passed live security, liquidity, creator, bundle and score gates above.
-      const legacyDiscoveryQualified=intelligence.tier==='RESEARCH'&&sec.pass;
-      if(!legacyDiscoveryQualified&&!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: neither legacy discovery qualification nor a fresh tracked-wallet buy signal');continue;}
       const entrySignal=freshTrackedBuy?walletSignal:{signal:'LEGACY_DISCOVERY',source:'legacy-dexscreener-selection',walletAddresses:[]};
-      const selectionSource=freshTrackedBuy?'tracked-wallet':'legacy-discovery';
-      logDecision('SELECTED',p.baseToken.symbol,pairObj.chainId,'entry selected by '+selectionSource+'; shared live safety gates passed');
+      const selectionSource=walletOnlyQualified?'tracked-wallet':'legacy-discovery';
+      logDecision('SELECTED',p.baseToken.symbol,pairObj.chainId,'entry selected by '+selectionSource+'; live security, creator and bundle gates passed');
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
