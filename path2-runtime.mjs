@@ -42,27 +42,47 @@ export class RpcCreditGuard {
     return value;
   }
   async rpc(endpoint, method, params = [], { credits = this.creditCost, cacheKey = null } = {}) {
-    if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
-    if (cacheKey) return this.cached(cacheKey, () => this.rpc(endpoint, method, params, { credits }));
+    const endpoints = [...new Set((Array.isArray(endpoint) ? endpoint : [endpoint]).map(x => String(x || '').trim()).filter(Boolean))];
+    if (!endpoints.length) throw new Error('SOLANA_RPC_URL is not configured; RPC audit unavailable');
+    if (cacheKey) return this.cached(cacheKey, () => this.rpc(endpoints, method, params, { credits }));
     const projected = this.usage.estimatedCredits + Number(credits || 0);
     if (projected * (30 / Math.max(1, new Date().getDate())) > this.monthlyLimit) {
-      this.usage.budgetThrottled=true;await this.save();throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'), { code: 'RPC_BUDGET' });
+      this.usage.budgetThrottled = true; await this.save();
+      throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'), { code: 'RPC_BUDGET' });
     }
-    let attempt = 0;
-    while (true) {
-      await this.rateLimit(1);
-      try {
-        const response = await this.fetchImpl(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: now(), method, params }) });
-        if (response.status === 429) throw Object.assign(new Error('Solana RPC HTTP 429'), { status: 429 });
-        if (!response.ok) throw new Error('Solana RPC HTTP ' + response.status);
-        const body = await response.json(); if (body.error) throw new Error('Solana RPC ' + body.error.code + ': ' + body.error.message);
-        this.usage.calls++; this.usage.estimatedCredits += Number(credits || 0); this.usage.daily[new Date().toISOString().slice(0,10)]=(this.usage.daily[new Date().toISOString().slice(0,10)]||0)+Number(credits||0); this.usage.lastAt = new Date().toISOString();
-        await this.save(); return body.result;
-      } catch (error) {
-        if (error.status !== 429 || attempt >= 5) throw error;
-        await sleep(Math.min(30_000, 500 * (2 ** attempt)) + Math.floor(Math.random() * 250)); attempt++;
+    let lastError = null;
+    for (let providerIndex = 0; providerIndex < endpoints.length; providerIndex++) {
+      const provider = endpoints[providerIndex];
+      for (let attempt = 0; attempt <= 5; attempt++) {
+        await this.rateLimit(1);
+        try {
+          const response = await this.fetchImpl(provider, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: now(), method, params }) });
+          if (!response.ok) {
+            const error = Object.assign(new Error(`Solana RPC HTTP ${response.status} ${response.statusText || ''}`.trim()), { status: response.status });
+            throw error;
+          }
+          const body = await response.json();
+          if (body.error) throw new Error('Solana RPC JSON-RPC ' + body.error.code + ': ' + body.error.message);
+          this.usage.calls++; this.usage.estimatedCredits += Number(credits || 0);
+          const day = new Date().toISOString().slice(0, 10);
+          this.usage.daily[day] = (this.usage.daily[day] || 0) + Number(credits || 0);
+          this.usage.lastAt = new Date().toISOString(); await this.save();
+          return body.result;
+        } catch (error) {
+          lastError = error;
+          const status = Number(error.status || 0);
+          const retryable = status === 429 || (status >= 500 && status <= 599) || status === 0;
+          console.error(`Solana RPC ${method} provider ${providerIndex + 1}/${endpoints.length} failed: ${error.message}`);
+          if (!retryable) throw error;
+          if (attempt < 5) {
+            const base = Math.min(30_000, 500 * (2 ** attempt));
+            await sleep(base + Math.floor(Math.random() * Math.min(1000, base * 0.25 + 1)));
+          }
+        }
       }
+      console.warn(`Solana RPC ${method}: provider ${providerIndex + 1} exhausted retries; ${providerIndex + 1 < endpoints.length ? 'trying configured fallback' : 'no fallback remains'}; last error: ${lastError?.message || 'unknown'}`);
     }
+    throw new Error(`Solana RPC ${method} failed on all configured endpoints: ${lastError?.message || 'unknown error'}`);
   }
   async batch(endpoint, requests, { credits = requests.length } = {}) {
     const all=[]; for(let i=0;i<requests.length;i+=this.maxRps){const chunk=requests.slice(i,i+this.maxRps);all.push(...await this.batchChunk(endpoint,chunk,{credits:chunk.length}));} return all.sort((a,b)=>Number(a?.slot||0)-Number(b?.slot||0));
