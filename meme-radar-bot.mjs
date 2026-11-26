@@ -778,7 +778,7 @@ async function persistentRunner(){
         wallets,
         onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
         onMint:async event=>{
-          try{const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx)){eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);}portfolio.eventDiscoveryRequested=true;console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
+          try{const tx=await rpcGuard.rpc(getSolanaRpcEndpoints(),'getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});for(const mint of await extractMintsFromTransaction(tx)){eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);}portfolio.eventDiscoveryRequested=true;console.log('Migration/pool event queued signature='+event.signature+' mintCount='+eventMintQueue.size);}
           catch(error){console.error('Migration transaction lookup failed; no mint inferred: '+error.message);}
         },
         onWalletLog:async event=>{
