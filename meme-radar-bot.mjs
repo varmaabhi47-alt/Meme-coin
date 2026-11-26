@@ -396,7 +396,7 @@ async function fetchSmartMoneySignal(mint) {
   try{
     const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
     const result=await fetchJsonStrict(url,7000,{Authorization:'Bearer '+secret});
-    if(result.signal==='SMART_MONEY_CONFLUENCE'){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:result.signal,wallets:Number(result.wallets||2),walletAddresses:Array.isArray(result.walletAddresses)?result.walletAddresses:[],latest:result.latest,source:'worker-gated',at:Number(result.latest||Date.now())};return true;}
+    if(['SMART_MONEY_CONFLUENCE','TRACKED_WALLET_BUY'].includes(result.signal)&&Number(result.wallets||1)>=1&&Number(result.latest||0)>0&&Date.now()-Number(result.latest)<=15*60*1000){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:Number(result.wallets||1),walletAddresses:Array.isArray(result.walletAddresses)?result.walletAddresses:[],latest:result.latest,source:'worker-gated',at:Number(result.latest)};return true;}
     return false;
   }catch(error){console.warn('Smart-money D1 query unavailable; no confluence applied: '+error.message);return false;}
 }
@@ -566,6 +566,10 @@ async function monitorPositions({ discover = false } = {}) {
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
       }
+      const entrySignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
+      const signalAt=Number(entrySignal?.at||entrySignal?.latest||0);
+      const freshTrackedBuy=entrySignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(entrySignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=15*60*1000&&Array.isArray(entrySignal.walletAddresses)&&entrySignal.walletAddresses.length>=1;
+      if(!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: no fresh tracked-wallet buy signal (15-minute expiry)');continue;}
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
@@ -656,9 +660,8 @@ async function persistentRunner(){
               const signal=smartMoneyConfluence(event.wallet,mint,Date.now());
               if(signal){
                 portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
-                portfolio.smartMoneySignals[mint]={signal:signal.signal,wallets:signal.wallets,walletAddresses:signal.walletAddresses||[],source:'standard-wss-wallet-events',at:signal.at};
-                logDecision('SMART_MONEY_CONFLUENCE',mint,'solana',signal.wallets+' distinct tracked wallet buys within 15 minutes');
-              }else logDecision('SMART_WALLET_BUY_OBSERVED',mint,'solana','one tracked wallet buy observed; awaiting a second distinct wallet within 15 minutes');
+                portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:1,walletAddresses:[event.wallet],source:'standard-wss-wallet-events',at:Date.now(),latest:Date.now()};
+                logDecision('TRACKED_WALLET_BUY',mint,'solana','one verified tracked-wallet buy observed; signal expires after 15 minutes');
               eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
               portfolio.eventDiscoveryRequested=true;
             }
