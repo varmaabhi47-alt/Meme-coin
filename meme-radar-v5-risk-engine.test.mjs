@@ -2,13 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluatePositionRisk,calculatePositionSize,checkCircuitBreakers,parseTelegramCommand,makeStateLock} from './meme-radar-v5-risk-engine.mjs';
 
-test('partial TP arms runner and fee-covered breakeven stop',()=>{
- const p={buyPrice:1,tokens:100,remainingTokens:100,costUsd:100,remainingCostUsd:100,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1,partialTpDone:false};
- const tp=evaluatePositionRisk(p,{markPrice:1.4,liquidityUsd:100000,now:Date.now()});
- assert.equal(tp.action,'PARTIAL_EXIT');
- p.partialTpDone=true;p.remainingTokens=50;p.remainingCostUsd=50;p.peakPrice=1.5;
- const stop=evaluatePositionRisk(p,{markPrice:1.01,liquidityUsd:100000,now:Date.now()});
- assert.equal(stop.action,'EXIT_ALL');assert.equal(stop.reason,'BREAKEVEN_STOP');
+test('V6 hard stop-loss triggers at -15% net PnL',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
+ assert.equal(evaluatePositionRisk(p,{markPrice:0.85,liquidityUsd:100000,netPnlPctOverride:-15}).reason,'STOP_LOSS');
+ assert.equal(evaluatePositionRisk(p,{markPrice:0.86,liquidityUsd:100000,netPnlPctOverride:-14}).action,'HOLD');
+});
+test('V6 trailing take-profit arms at +25% and exits on 10% drawdown from peak',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1.3,maxNetPnlPct:30};
+ const hold=evaluatePositionRisk(p,{markPrice:1.18,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:18});
+ assert.equal(hold.action,'HOLD');
+ const exit=evaluatePositionRisk(p,{markPrice:1.169,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:16.9});
+ assert.equal(exit.action,'EXIT_ALL');assert.equal(exit.reason,'TRAILING_TP');assert.equal(exit.trailDropPct,10);
+});
+test('V6 time stop exits after 45m if trade never reached +10% net',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now()-46*60000,peakPrice:1.04,maxNetPnlPct:8};
+ const exit=evaluatePositionRisk(p,{markPrice:1.01,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:1});
+ assert.equal(exit.action,'EXIT_ALL');assert.equal(exit.reason,'TIME_STOP');
+ const kept=evaluatePositionRisk({...p,maxNetPnlPct:10},{markPrice:1.01,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:1});
+ assert.equal(kept.action,'HOLD');
 });
 test('emergency liquidity exits use entry and consecutive-check thresholds',()=>{
  const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
@@ -59,14 +70,6 @@ test('smart-money uses five-percent base; standard research 0.75x and 0.30% pool
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:90,cashUsd:100,tier:'WATCH'}),0);
 });
 
-test('Path 2 runner trail widens to 22% above +100% peak gain',()=>{
- const p={buyPrice:1,tokens:10,remainingTokens:5,costUsd:10,remainingCostUsd:5,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:2.1,partialTpDone:true};
- const hold=evaluatePositionRisk(p,{markPrice:1.65,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:30});
- assert.equal(hold.action,'HOLD');
- const exit=evaluatePositionRisk(p,{markPrice:1.63,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:30});
- assert.equal(exit.action,'EXIT_ALL');
- assert.equal(exit.trailDropPct,22);
-});
 
 test('wallet-signal entries use a lower score threshold and conservative wallet-count sizing',()=>{
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:64,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:1}),0);
