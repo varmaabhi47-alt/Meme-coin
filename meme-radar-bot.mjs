@@ -7,7 +7,7 @@
  * - Polls live DexScreener feeds + enriches in 30-address batches
  * - Strict Liquidity & Sellability Gate + mandatory live RugCheck (Solana) / GoPlus (EVM)
  * - Realistic AMM impact (tradeUsd / (2 * liquidityUsd)) + 0.30% DEX fee on Buy & Sell
- * - Path 2 exits: 50% at +40% net; +2% net runner stop; 15%/22% peak trail; emergency liquidity exits (>30% from entry or >15% per check)
+ * - V6 paper exits: -15% hard stop; trailing TP arms at +25% and trails 10% below peak; 45m time stop unless +10% was reached; existing liquidity emergency gates retained
  * - Saves state persistently to paper_portfolio.json (importable into Web UI!) & paper_trades.csv
  * - Sends instant Telegram receipts on every AUTO-BUY and AUTO-SELL + hourly summary
  */
