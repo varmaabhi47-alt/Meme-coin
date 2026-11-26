@@ -19,6 +19,14 @@
 - Helius RPC usage is capped at 6 requests/second in the curator and tracked locally; provider errors and rate limits are surfaced.
 - Keep API keys and sync/webhook secrets in GitHub Actions Secrets and Cloudflare secret bindings. Never commit them or paste them into issues/chat.
 
+## Entry qualification (V6)
+- **Legacy route:** original DexScreener discovery and V5 scoring; only clean RESEARCH candidates (score >= 80) qualify.
+- **Tracked-wallet route:** a fresh, reconstructed on-chain wallet BUY may also qualify a clean WATCH candidate (score 65–79). It cannot bypass any score reason, token-security, creator/holder, launch-bundle, liquidity, or circuit-breaker gate.
+- Wallet signals use the transaction's on-chain block time and expire after 3 minutes. Ambiguous swap accounting, missing block time, stale events, or failed RPC evidence do not create a buy signal.
+- Wallet-only paper entries use smaller sizing: 0.25x base size for one wallet and 0.5x for two or more wallet observations; the pool-liquidity and available-cash caps still apply.
+- The event listener supports up to 50 configured ACTIVE wallets. Actual coverage depends on the configured WebSocket provider and successful subscriptions.
+- Current seed file intentionally has **zero ACTIVE wallets** until user-provided addresses pass live curator vetting; do not treat this as active wallet coverage.
+
 ## Verify locally
 
 Node.js 24+ recommended.
