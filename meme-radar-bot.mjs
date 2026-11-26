@@ -390,7 +390,7 @@ async function fetchSmartMoneySignal(mint) {
   portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
   for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>15*60*1000)delete portfolio.smartMoneySignals[oldMint];}
   const existing=portfolio.smartMoneySignals[mint],existingAt=Number(existing?.at||existing?.latest||0);
-  if(['worker-gated','standard-wss-wallet-events'].includes(existing?.source)&&existingAt>0&&Date.now()-existingAt<=15*60*1000)return true;
+  if(['worker-gated','standard-wss-wallet-events'].includes(existing?.source)&&existingAt>0&&Date.now()-existingAt>=0&&Date.now()-existingAt<=15*60*1000&&Array.isArray(existing.walletAddresses)&&existing.walletAddresses.length>=1){existing.signal='TRACKED_WALLET_BUY';return true;}
   if(existing)delete portfolio.smartMoneySignals[mint];
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
   try{
@@ -643,7 +643,7 @@ async function persistentRunner(){
       const walletConfig=JSON.parse(await fs.readFile(process.env.SMART_WALLETS_FILE||'smart_wallets.json','utf8'));
       const walletRecords=Array.isArray(walletConfig.wallets)?walletConfig.wallets.filter(x=>x&&x.status==='ACTIVE'&&typeof x.address==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.address.trim())).slice(0,50):[];
       const wallets=walletRecords.map(x=>x.address);
-      if(wallets.length<15)console.warn('Smart-money wallet tracker has '+wallets.length+' valid addresses; configure 15-30 verified wallets to enable meaningful confluence.');
+      if(wallets.length<15)console.warn('Single-wallet entry mode is active; only '+wallets.length+' ACTIVE tracked wallets are available, so wallet coverage is limited.');
       eventListener=new SolanaEventListener({
         wallets,
         onError:error=>{lastError=error.message;console.error('Solana event source: '+error.message);},
