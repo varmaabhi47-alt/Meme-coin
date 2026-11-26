@@ -37,7 +37,7 @@ const CONFIG = {
   BASE_RISK_FRACTION: 0.05,
   MAX_POOL_LIQ_FRACTION: 0.003,
   MAX_OPEN_POSITIONS: 5,
-  TRAIL_ARM_PCT: 40, // UI state only; authoritative exit thresholds live in v5-risk-engine
+  TRAIL_ARM_PCT: 25, // aligned with V6 trailing take-profit arm
   COOLDOWN_MINS: 60,
   MIN_LIQUIDITY_USD: 75000,
   MIN_LIQ_FDV_PCT: 8,
@@ -57,6 +57,11 @@ const CONFIG = {
   CSV_FILE: 'paper_trades.csv',
   RESEARCH_FILE: 'paper_research.jsonl'
 };
+
+function getSolanaRpcEndpoints() {
+  return [process.env.SOLANA_RPC_URL, ...(process.env.SOLANA_RPC_FALLBACK_URLS || '').split(',')]
+    .map(value => String(value || '').trim()).filter(Boolean);
+}
 
 const secCache = new Map();
 const jupiterQuoteCache = new Map();
@@ -117,8 +122,8 @@ async function saveState() { return stateLock(async()=>{portfolio.lastHourlySumm
 
 async function appendCsv(t) {
   let exists=true;try{await fs.access(CONFIG.CSV_FILE);}catch{exists=false;}
-  if(!exists)await fs.writeFile(CONFIG.CSV_FILE,'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason,TokensSold,RemainingTokens,RealizedPartialPnLUSD,QuoteFallback,EntryQuoteFallback\n','utf8');
-  const line=[new Date(t.entryTime).toISOString(),new Date(t.exitTime).toISOString(),t.symbol,t.chainId,t.buyPrice,t.tokensBought,t.costUsd.toFixed(2),Math.round(t.entryLiquidityUsd),t.sellPrice,t.exitValueUsd.toFixed(2),t.feesImpactUsd.toFixed(2),t.netPnlUsd.toFixed(2),t.netPnlPct.toFixed(2),t.exitReason,t.tokensSold??t.tokensBought,t.remainingTokens??0,t.realizedPartialPnlUsd??0,!!t.quoteFallback,!!t.entryQuoteFallback].join(',')+'\n';
+  if(!exists)await fs.writeFile(CONFIG.CSV_FILE,'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason,TokensSold,RemainingTokens,RealizedPartialPnLUSD,QuoteFallback,EntryQuoteFallback,EntrySlippagePct,ExitSlippagePct\n','utf8');
+  const line=[new Date(t.entryTime).toISOString(),new Date(t.exitTime).toISOString(),t.symbol,t.chainId,t.buyPrice,t.tokensBought,t.costUsd.toFixed(2),Math.round(t.entryLiquidityUsd),t.sellPrice,t.exitValueUsd.toFixed(2),t.feesImpactUsd.toFixed(2),t.netPnlUsd.toFixed(2),t.netPnlPct.toFixed(2),t.exitReason,t.tokensSold??t.tokensBought,t.remainingTokens??0,t.realizedPartialPnlUsd??0,!!t.quoteFallback,!!t.entryQuoteFallback,t.entrySlippagePct??'',t.exitSlippagePct??''].join(',')+'\n';
   await fs.appendFile(CONFIG.CSV_FILE,line,'utf8');
 }
 
@@ -306,8 +311,8 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
   for(const [mint,row] of holderAuditCache)if(Date.now()-row.ts>=900000)holderAuditCache.delete(mint);
   const cachedAudit = holderAuditCache.get(tokenAddress);
   if (cachedAudit && Date.now() - cachedAudit.ts < 900000) return cachedAudit.value;
-  const endpoint = process.env.SOLANA_RPC_HTTP || 'https://api.mainnet-beta.solana.com';
-  const rpc = (method, params, id) => rpcGuard.rpc(endpoint, method, params, { credits: 1, cacheKey: 'solana:' + method + ':' + JSON.stringify(params) });
+  const endpoints = getSolanaRpcEndpoints();
+  const rpc = (method, params) => rpcGuard.rpc(endpoints, method, params, { credits: 1, cacheKey: 'solana:' + method + ':' + JSON.stringify(params) });
   try {
     const [largest, supply, mintInfo] = await Promise.all([
       rpc('getTokenLargestAccounts', [tokenAddress, { commitment: 'confirmed' }], 1),
@@ -357,25 +362,28 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
     creatorSignals.crossTokenTokensObserved = [...new Set(relatedClusters.flatMap(cluster => cluster.tokens))].length;
     const value = { holderDistribution, creatorSignals }; holderAuditCache.set(tokenAddress, { ts: Date.now(), value }); return value;
   } catch (error) {
-    const value = { holderDistribution: { known: false, reason: error.message, source: 'Solana RPC' }, creatorSignals: { known: false, warnings: [], reason: error.message } }; holderAuditCache.set(tokenAddress, { ts: Date.now(), value }); return value;
+    const reason = String(error?.message || error);
+    console.error('RPC_AUDIT_INCOMPLETE token=' + tokenAddress + ' reason=' + reason);
+    return { holderDistribution: { known: false, reason, source: 'Solana RPC' }, creatorSignals: { known: false, warnings: [], reason } };
   }
 }
 
 
 async function checkLaunchBundle(pair, totalSupplyRaw) {
   try {
-    const endpoint=process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com';
-    const signatures=await rpcGuard.rpc(endpoint,'getSignaturesForAddress',[pair.pairAddress,{limit:25,commitment:'confirmed'}],{credits:1,cacheKey:'bundle-sigs:'+pair.pairAddress});
+    const endpoints=getSolanaRpcEndpoints();
+    if(!endpoints.length)throw new Error('SOLANA_RPC_URL is not configured');
+    const signatures=await rpcGuard.rpc(endpoints,'getSignaturesForAddress',[pair.pairAddress,{limit:25,commitment:'confirmed'}],{credits:1,cacheKey:'bundle-sigs:'+pair.pairAddress});
     if(!Array.isArray(signatures)||!signatures.length)throw new Error('pool signatures unavailable');
     const oldest=signatures[signatures.length-1];
     if(!oldest?.signature)throw new Error('oldest pool signature unavailable');
-    const creation=await rpcGuard.rpc(endpoint,'getTransaction',[oldest.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1,cacheKey:'bundle-create-tx:'+oldest.signature});
+    const creation=await rpcGuard.rpc(endpoints,'getTransaction',[oldest.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1,cacheKey:'bundle-create-tx:'+oldest.signature});
     const creationLogs=creation?.meta?.logMessages||[];
     if(!creation||!creationLogs.some(line=>/initialize.*pool|init.*pool|create.*pool|migrat/i.test(line)))return {pass:false,reason:'LAUNCH_BUNDLE_UNKNOWN: pool creation not found in latest 25 signatures'};
     const creationSlot=Number(creation.slot);
     const sameSlot=signatures.filter(x=>Number(x.slot)===creationSlot&&x.signature&&x.signature!==oldest.signature);
     const requests=sameSlot.map((x,i)=>({jsonrpc:'2.0',id:i+1,method:'getTransaction',params:[x.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]}));
-    const txs=requests.length?await rpcGuard.batch(endpoint,requests,{credits:requests.length}):[];
+    const txs=requests.length?await rpcGuard.batch(endpoints[0],requests,{credits:requests.length}):[];
     txs.push(creation);
     const buyerAmounts=new Map();
     for(const tx of txs){
@@ -392,6 +400,11 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
+  if (Number(pair?.liquidity?.usd) === 0) {
+    portfolio.skippedZeroLiquidityPairs = Number(portfolio.skippedZeroLiquidityPairs || 0) + 1;
+    console.info('RESEARCH_SKIP_ZERO_LIQUIDITY pair=' + String(pair?.pairAddress || 'unknown') + ' total=' + portfolio.skippedZeroLiquidityPairs);
+    return;
+  }
   const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=['worker-gated','standard-wss-wallet-events'].includes(signal?.source)&&signalAt>0&&Date.now()-signalAt<=3*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
@@ -539,6 +552,7 @@ async function monitorPositions({ discover = false } = {}) {
 
     const ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await calcPaperExit(pos,pos.lastPrice,currentLiquidityUsd);
     const pnlPct = ((ex.netProceeds - pos.costUsd) / pos.costUsd) * 100;
+    if (Number.isFinite(pnlPct)) pos.maxNetPnlPct = Math.max(Number(pos.maxNetPnlPct ?? -Infinity), pnlPct);
     const holdHrs = (Date.now() - pos.entryTime) / 3600000;
     const dropPeak = pos.peakPrice > 0 ? ((pos.peakPrice - pos.lastPrice) / pos.peakPrice) * 100 : 0;
     const liqDrop = pos.entryLiquidityUsd > 0 ? ((pos.entryLiquidityUsd - pos.lastLiquidityUsd) / pos.entryLiquidityUsd) * 100 : 0;
@@ -554,7 +568,7 @@ async function monitorPositions({ discover = false } = {}) {
       logDecision('PARTIAL_SELL',pos.symbol,pos.chainId,'50% sold at +40% net; runner stop +2% net');await sendTelegram(formatSellReceipt(pos,{price:ex.effPrice,tokensSold:sellQty,proceedsUsd:ex.netProceeds,allocatedCostUsd:soldCost,realizedPnlUsd:realized,remainingTokens:pos.remainingTokens,reason:'PARTIAL TAKE-PROFIT'}));
     }else if(risk.action==='EXIT_ALL'){
       const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await paperExecution.sell({position:{...pos,tokens:qty,remainingTokens:qty},price:pos.lastPrice,liquidity:currentLiquidityUsd}),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
-      portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),name:pos.name,symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
+      portfolio.cashUsd+=ex.netProceeds;const trade={id:'tr_'+Date.now(),name:pos.name,symbol:pos.symbol,chainId:pos.chainId,address:pos.address,entryTime:pos.entryTime,buyPrice:pos.buyPrice,tokensBought:pos.tokens,tokensSold:qty,remainingTokens:0,costUsd:totalCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitTime:Date.now(),sellPrice:ex.effPrice,exitQuoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,exitValueUsd:Number(pos.partialExitProceedsUsd||0)+ex.netProceeds,finalExitValueUsd:ex.netProceeds,entrySlippagePct:pos.entrySlippagePct??null,exitSlippagePct:Number.isFinite(Number(ex.impactRate))?Number(ex.impactRate)*100:null,feesImpactUsd:Number(pos.buyFeeAndImpactUsd||0)+Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd,realizedPartialPnlUsd:Number(pos.realizedPartialPnlUsd||0),partialExits:pos.partialExits||[],entryQuoteFallback:!!pos.entryQuoteFallback,netPnlUsd:pnl,netPnlPct:totalCost?pnl/totalCost*100:0,exitReason:risk.reason};
       portfolio.closedTrades.unshift(trade);portfolio.cooldowns[pos.pairId]=Date.now();if(['STOP_LOSS','LIQ_DROP_ENTRY','LIQ_DROP_CHECK'].includes(risk.reason))consecutiveRiskExits++;else{consecutiveRiskExits=0;if(portfolio.breaker)portfolio.breaker.triggeredLossCount=0;}portfolio.consecutiveRiskExits=consecutiveRiskExits;portfolio.openPositions.splice(i,1);await appendCsv(trade);logDecision('SOLD',pos.symbol,pos.chainId,`[${risk.reason}] PnL ${pnl.toFixed(2)} USD`);await sendTelegram(formatSellReceipt(trade,{price:ex.effPrice,tokensSold:qty,proceedsUsd:ex.netProceeds,allocatedCostUsd:remCost,realizedPnlUsd:ex.netProceeds-remCost,remainingTokens:0,reason:risk.reason,final:true}));
     }else if(risk.action==='HOLD_STALE'){pos.dataStale=true;pos.dataStaleReason=risk.reason;}
   }
@@ -584,6 +598,10 @@ async function monitorPositions({ discover = false } = {}) {
           if (!p.baseToken?.address || !Number(p.priceUsd)) continue;
           const key = `${chain}:${p.baseToken.address.toLowerCase()}`;
           const liq = Number(p.liquidity?.usd || 0);
+          if (liq === 0) {
+            portfolio.skippedZeroLiquidityPairs = Number(portfolio.skippedZeroLiquidityPairs || 0) + 1;
+            continue;
+          }
           if (!best.has(key) || liq > Number(best.get(key).liquidity?.usd || 0)) best.set(key, p);
         }
       }
@@ -623,6 +641,11 @@ async function monitorPositions({ discover = false } = {}) {
       const intelligence = scoreCandidate(p, sec);
       const holders = pairObj.chainId === 'solana' ? await inspectSolanaHolders(pairObj.address, p.pairAddress) : { holderDistribution: { known: false, reason: 'holder RPC not implemented for this chain' }, creatorSignals: { known: false, warnings: [], reason: 'Solana-only creator analysis' } };
       const holderData=holders.holderDistribution,creatorData=holders.creatorSignals;
+      const rpcAuditIncomplete = pairObj.chainId === 'solana' && (holderData?.known === false || creatorData?.known === false);
+      if (rpcAuditIncomplete) {
+        intelligence.tier='REJECT'; intelligence.hardReject=true;
+        intelligence.reasons.push('RPC_AUDIT_INCOMPLETE: holderDistribution=' + (holderData?.reason || (holderData?.known === false ? 'unknown' : 'known')) + '; creatorSignals=' + (creatorData?.reason || (creatorData?.known === false ? 'unknown' : 'known')));
+      }
       let walletSignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
       let signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
       let freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
@@ -644,6 +667,22 @@ async function monitorPositions({ discover = false } = {}) {
         signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
         freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
       }
+      const antiChaseFlags = [];
+      const change5m = Number(p.priceChange?.m5);
+      const turnover1h = Number(p.volume?.h1) / Math.max(1, Number(p.liquidity?.usd));
+      if (Number.isFinite(change5m) && change5m > 25) antiChaseFlags.push('extreme 5m price expansion >25%');
+      if (Number.isFinite(turnover1h) && turnover1h > 5 && Number(p.txns?.h1?.buys || 0) + Number(p.txns?.h1?.sells || 0) >= 20) antiChaseFlags.push('high 1h turnover vs liquidity');
+      const auditSafeForAntiChase = holderData?.known === true && creatorData?.known === true && hardGate.pass;
+      if (antiChaseFlags.length) {
+        intelligence.warnings = [...new Set([...(intelligence.warnings || []), ...antiChaseFlags])];
+        if (!auditSafeForAntiChase) {
+          intelligence.tier='REJECT'; intelligence.hardReject=true;
+          intelligence.reasons.push('ANTI_CHASE_UNSAFE: flagged entry without confirmed-safe holder and creator audits: ' + antiChaseFlags.join(', '));
+        } else {
+          intelligence.score = Math.max(0, Number(intelligence.score || 0) - 10 * antiChaseFlags.length);
+          intelligence.reasons.push('ANTI_CHASE_PENALTY: -' + (10 * antiChaseFlags.length) + ' points for ' + antiChaseFlags.join(', '));
+        }
+      }
       intelligence.smartMoneyConfluence=freshTrackedBuy;
       const legacyDiscoveryQualified=intelligence.tier==='RESEARCH'&&sec.pass&&hardGate.pass&&bundleGate.pass;
       // Wallet-originated selection is a separate, smaller-risk route.
@@ -651,7 +690,7 @@ async function monitorPositions({ discover = false } = {}) {
       // any score reason, failed security/creator/bundle gate, or stale signal.
       const walletSignalQualified=freshTrackedBuy&&sec.pass&&['WATCH','RESEARCH'].includes(intelligence.tier)&&intelligence.reasons.length===0&&intelligence.score>=65&&hardGate.pass&&bundleGate.pass;
       const walletOnlyQualified=walletSignalQualified&&!legacyDiscoveryQualified;
-      await recordResearch(p,sec,intelligence,walletOnlyQualified?'WALLET_SIGNAL':intelligence.tier,holders);
+      await recordResearch(p,sec,intelligence,rpcAuditIncomplete?'RPC_AUDIT_INCOMPLETE':walletOnlyQualified?'WALLET_SIGNAL':intelligence.tier,holders);
       if(!legacyDiscoveryQualified&&!walletSignalQualified){
         logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,
           `candidate blocked: legacyResearch=${legacyDiscoveryQualified}, verifiedWalletSignal=${walletSignalQualified}; score ${intelligence.score}/100 [${intelligence.tier}], hardReject=${!!intelligence.hardReject}, security=${sec.pass}, creator/bundle=${hardGate.pass&&bundleGate.pass}`);
@@ -670,7 +709,7 @@ async function monitorPositions({ discover = false } = {}) {
         id: 'pos_' + Date.now(), pairId: key, chainId: pairObj.chainId, pairAddress: p.pairAddress,
         address: p.baseToken.address, symbol: p.baseToken.symbol.toUpperCase(), name: p.baseToken.name || p.baseToken.symbol,
         entryTime: Date.now(), entrySpotPrice: Number(p.priceUsd), buyPrice: ex.effPrice, tokens: ex.tokens, tokenDecimals: holderData?.decimals ?? null,
-        costUsd:totalCost,originalCostUsd:totalCost,remainingCostUsd:totalCost,remainingTokens:ex.tokens,partialTpDone:false,realizedPartialPnlUsd:0,partialExitProceedsUsd:0,partialExits:[],buyFeeAndImpactUsd:ex.feeUsd+ex.impactUsd,entryLiquidityUsd:liq,buyTaxRate:Number(sec.buyTaxRate||0),sellTaxRate:Number(sec.sellTaxRate||0),entryQuoteSource:ex.quoteSource,entryQuoteFallback:!!ex.quoteFallback,
+        costUsd:totalCost,originalCostUsd:totalCost,remainingCostUsd:totalCost,remainingTokens:ex.tokens,partialTpDone:false,realizedPartialPnlUsd:0,partialExitProceedsUsd:0,partialExits:[],maxNetPnlPct:0,entrySlippagePct:Number.isFinite(Number(ex.impactRate))?Number(ex.impactRate)*100:null,buyFeeAndImpactUsd:ex.feeUsd+ex.impactUsd,entryLiquidityUsd:liq,buyTaxRate:Number(sec.buyTaxRate||0),sellTaxRate:Number(sec.sellTaxRate||0),entryQuoteSource:ex.quoteSource,entryQuoteFallback:!!ex.quoteFallback,
         lastPrice: Number(p.priceUsd), lastLiquidityUsd: liq, peakPrice: Number(p.priceUsd), trailArmed: false, securitySummary: sec.reason
       });
       held.add(key);
