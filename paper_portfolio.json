@@ -215,6 +215,86 @@
   },
   "decisionLog": [
     {
+      "ts": 1795703820621,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "Bangkok",
+      "chainId": "bsc",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 5m buy ratio unavailable; 5m price change unavailable; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820620,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "PLTY",
+      "chainId": "base",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h volume below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820619,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": " KVORK",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 1h buy ratio below minimum; 5m buy ratio unavailable; 5m price change unavailable; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820619,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "KOMARI",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 1h sells below minimum; 24h buy ratio below minimum; 1h buy ratio below minimum; 5m buy ratio unavailable; 5m price change unavailable; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820618,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "hep",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum; 1h buy ratio below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820617,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "PAIR",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820617,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "Legatum",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; 5m buy ratio below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820616,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "YARL",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; 24h volume below minimum; 24h buy ratio below minimum; 1h buy ratio below minimum; 5m buy ratio below minimum; pair age below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820615,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "KOMARI",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum; 1h buy ratio below minimum; 5m buy ratio below minimum; previous liquidity unavailable"
+    },
+    {
+      "ts": 1795703820615,
+      "timeStr": "14:37:00",
+      "action": "PREFILTER",
+      "symbol": "Irochan",
+      "chainId": "solana",
+      "reason": "liquidity below minimum; 5m buy ratio below minimum; previous liquidity unavailable"
+    },
+    {
       "ts": 1795681213675,
       "timeStr": "08:20:13",
       "action": "PREFILTER",
@@ -1333,86 +1413,6 @@
       "symbol": "BABYPUMP",
       "chainId": "solana",
       "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum; 1h sells below minimum; 24h volume below minimum; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "CHIBI",
-      "chainId": "solana",
-      "reason": "liquidity below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "Flatulence",
-      "chainId": "solana",
-      "reason": "liquidity below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "FATU",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "JENSEN",
-      "chainId": "solana",
-      "reason": "liquidity below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "GTS1",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795492568203,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "Mikan",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity"
-    },
-    {
-      "ts": 1795492568202,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "SORANA",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h buy ratio below minimum"
-    },
-    {
-      "ts": 1795492568202,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "TURKEY",
-      "chainId": "solana",
-      "reason": "liquidity unavailable; trade-to-liquidity unavailable; liquidity/FDV below minimum"
-    },
-    {
-      "ts": 1795492568202,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "GROKIA",
-      "chainId": "solana",
-      "reason": "liquidity below minimum"
-    },
-    {
-      "ts": 1795492568202,
-      "timeStr": "03:56:08",
-      "action": "PREFILTER",
-      "symbol": "THEO",
-      "chainId": "solana",
-      "reason": "liquidity below minimum; paper trade size too large for liquidity; 24h volume below minimum; 24h buy ratio below minimum"
     }
   ],
   "lastHourlySummaryMs": 0,
@@ -1487,7 +1487,17 @@
     "base:0x76a58b43f79c47b416567b847475f11a0d7ca601": 34114.64,
     "bsc:0x37922a99816cba52f02415870ad4344ab0948df0": 417269.85,
     "bsc:0x4da7d23db751e12be7a940b0ab42cb3e6cc3ffff": 0,
-    "bsc:0xdde27483de8c958e4d2657d64eb7551717457777": 59943.36
+    "bsc:0xdde27483de8c958e4d2657d64eb7551717457777": 59943.36,
+    "solana:bsmz6chw26adx25hkfrzvmtsu6q4d3ieixpx73hqpump": 17694.12,
+    "solana:emd4hywqkqvnmsaor4h44vm4d8arzctxsxsytkazpump": 1536.93,
+    "solana:8yypzqrlq1t9t8sxj2faktol2qsh2ncahnzdmxbnpump": 8911.13,
+    "solana:hkpsdyrcw4uqgrzzmdd5srnmpe4ungr1k8mrnxnbvtq2": 11824.86,
+    "solana:32rbxcfjcfnyqz41cepm5al67x1dcw8w83vzt6kxpump": 31756.04,
+    "solana:6hnhtwjuyeepgkme2ztvxofvqopndewjep945rpjpump": 1961.53,
+    "solana:7juwdhnyz1yt5hrmf7ksgrxcpagyfomi5mmbw8uepump": 1562.46,
+    "solana:f6mwejpjwguqszxfkvy8kclgx6wr89r6uxbbvnompump": 2670.15,
+    "base:0xde129391e97f34609bd1ad414fc5d40d5a7fb50e": 1068.07,
+    "bsc:0x98bec728b7c9f9b58e1d676e266d820f7fa37777": 3778.61
   },
   "firstLiquidityByPair": {
     "solana:aughnhb2zfz62chpkzmtutqrh75duvgn91yfeu3fpump": 13179.7,
@@ -1515,7 +1525,18 @@
     "solana:4vmwk3shxxsambij4qtbmmegi63riezbswfhfa6vpump": 1552.89,
     "base:0x76a58b43f79c47b416567b847475f11a0d7ca601": 34114.64,
     "bsc:0x37922a99816cba52f02415870ad4344ab0948df0": 417269.85,
-    "bsc:0xdde27483de8c958e4d2657d64eb7551717457777": 59943.36
+    "bsc:0xdde27483de8c958e4d2657d64eb7551717457777": 59943.36,
+    "solana:bsmz6chw26adx25hkfrzvmtsu6q4d3ieixpx73hqpump": 17694.12,
+    "solana:emd4hywqkqvnmsaor4h44vm4d8arzctxsxsytkazpump": 1536.93,
+    "solana:8yypzqrlq1t9t8sxj2faktol2qsh2ncahnzdmxbnpump": 8911.13,
+    "solana:hkpsdyrcw4uqgrzzmdd5srnmpe4ungr1k8mrnxnbvtq2": 11824.86,
+    "solana:32rbxcfjcfnyqz41cepm5al67x1dcw8w83vzt6kxpump": 31756.04,
+    "solana:6hnhtwjuyeepgkme2ztvxofvqopndewjep945rpjpump": 1961.53,
+    "solana:7juwdhnyz1yt5hrmf7ksgrxcpagyfomi5mmbw8uepump": 1562.46,
+    "solana:f6mwejpjwguqszxfkvy8kclgx6wr89r6uxbbvnompump": 2670.15,
+    "base:0xde129391e97f34609bd1ad414fc5d40d5a7fb50e": 1068.07,
+    "bsc:0x98bec728b7c9f9b58e1d676e266d820f7fa37777": 3778.61
   },
-  "consecutiveRiskExits": 0
+  "consecutiveRiskExits": 0,
+  "skippedZeroLiquidityPairs": 11
 }
