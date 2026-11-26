@@ -295,7 +295,7 @@ async function sendWeeklyTelegram(summary){
 }
 async function main(){
   const args=process.argv.slice(2),get=(flag)=>{const i=args.indexOf(flag),value=i>=0?args[i+1]:null;return value&&!value.startsWith('--')?value:null;};
-  if(args.includes('--help')){console.log('Usage: node smart-wallet-curator.mjs --import candidates.csv|json|txt | --from-mints MINT1,MINT2 | --from-research [file] | --prune | --dry-run');return;}
+  if(args.includes('--help')){console.log('Usage: node smart-wallet-curator.mjs --import candidates.csv|json|txt | --from-mints MINT1,MINT2 | --from-research [file] | --prune | --dry-run | --recheck');return;}
   if(args.includes('--prune')){const summary=await pruneWallets();console.log(JSON.stringify(summary,null,2));await sendWeeklyTelegram(summary);return;}
   if(args.includes('--dry-run')){const u=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});console.log(JSON.stringify({mode:'dry-run/no-RPC',rpcCreditsThisRun:0,monthlyUsage:u,monthlyLimit:MONTHLY_LIMIT,versionedTxParser:'resolved staticAccountKeys + meta.loadedAddresses; skips unresolved ALT transactions',veting:'strict gates reject incomplete evidence',note:'Use --verify-signature SIG --wallet ADDRESS for live RPC parser validation.'},null,2));return;}
   let candidates=[];
@@ -304,9 +304,11 @@ async function main(){
   if(args.includes('--from-research')){const f=get('--from-research')||path.join(ROOT,'paper_research.jsonl');mints.push(...await sourceResearchMints(f));}
   for(const mint of [...new Set(mints)])candidates.push(...await discoverFromMint(mint));
   const verify=get('--verify-signature'),wallet=get('--wallet');if(verify&&wallet){const tx=await txBySignature(verify);if(!tx)throw new Error('Signature not found');console.log(JSON.stringify({signature:verify,slot:tx.slot,resolvedAccountKeys:resolvedKeys(tx),loadedAddresses:tx.meta?.loadedAddresses||null,programs:instructionProgramIds(tx)},null,2));return;}
+  const q=await readJson(QUEUE,{version:1,candidates:[]}),queuedByAddress=new Map((q.candidates||[]).map(x=>[x.address,x]));
+  if(!args.includes('--recheck'))candidates=candidates.filter(c=>{const status=queuedByAddress.get(c.address)?.status;return !['ACTIVE','REJECTED'].includes(status);});
   if(!candidates.length){
     if(args.includes('--from-research')&&!imp){console.error('[curator] No wallet buyers were recoverable from the selected live research mint transactions; no wallet records changed.');return;}
-    throw new Error('No candidates. Supply --import file, --from-mints list, or --from-research [file].');
+    console.log('[curator] No unvetted candidates remain in the queue. Use --recheck to deliberately re-vet ACTIVE/REJECTED candidates.');return;
   }
   const candidateLimitRaw=Number(process.env.CURATOR_MAX_CANDIDATES||3),candidateLimit=Math.max(1,Math.min(100,Math.floor(Number.isFinite(candidateLimitRaw)?candidateLimitRaw:3)));
   if(candidateLimit>0){
@@ -314,7 +316,7 @@ async function main(){
     candidates=[...unique.values()].sort((a,b)=>Number(b.firstSeen||0)-Number(a.firstSeen||0)).slice(0,candidateLimit);
     console.error('[curator] Bounded live candidate vetting to '+candidates.length+' wallet(s) this run; cap='+candidateLimit+'.');
   }
-  const q=await readJson(QUEUE,{version:1,candidates:[]}),by=new Map((q.candidates||[]).map(x=>[x.address,x]));
+  const by=new Map((q.candidates||[]).map(x=>[x.address,x]));
   for(const c of candidates)if(validAddress(c.address))by.set(c.address,{...by.get(c.address),...c,queued_at:iso(Date.now()),status:'PENDING',last_vetting:null});
   q.candidates=[...by.values()];
   const updateQueue=(address,fields)=>{const item=q.candidates.find(x=>x.address===address);if(item)Object.assign(item,fields,{last_vetted_at:iso(Date.now())});};
