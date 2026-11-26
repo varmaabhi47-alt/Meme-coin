@@ -3,13 +3,11 @@
  * Pure helpers; all prices and liquidity must originate from live provider data.
  */
 export const EXIT_RULES = Object.freeze({
-  partialTakeProfitNetPct: 40,
-  partialTakeProfitFraction: 0.5,
-  breakevenNetPct: 2,
-  runnerTrailDropPct: 15,
-  runnerTrailDropAbove100Pct: 22,
-  runnerWideTrailGainPct: 100,
-  stopLossNetPct: -18,
+  stopLossNetPct: -15,
+  trailingActivateNetPct: 25,
+  trailingDropPct: 10,
+  timeStopMinutes: 45,
+  timeStopRequiredNetPct: 10,
   liquidityDropFromEntryPct: 30,
   liquidityDropPerCheckPct: 15,
   maxHoldHours: 24
@@ -41,21 +39,17 @@ export function evaluatePositionRisk(position, options = {}) {
   const netPct=Number.isFinite(override)?override:netReturnPct(position,price,frictionRate);
   if (dropEntry > EXIT_RULES.liquidityDropFromEntryPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_ENTRY', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
   if (dropCheck > EXIT_RULES.liquidityDropPerCheckPct) return { action: 'EXIT_ALL', reason: 'LIQ_DROP_CHECK', netPct, dropEntryPct: dropEntry, dropCheckPct: dropCheck, peakPrice: peak };
-  const remainingFraction = Number(position.remainingFraction ?? 1);
-  if (!position.partialTpDone && netPct !== null && netPct >= EXIT_RULES.partialTakeProfitNetPct) {
-    return { action: 'PARTIAL_EXIT', reason: 'PARTIAL_TP_40', fraction: EXIT_RULES.partialTakeProfitFraction, netPct, peakPrice: peak };
-  }
-  if (position.partialTpDone && netPct !== null && netPct <= EXIT_RULES.breakevenNetPct) {
-    return { action: 'EXIT_ALL', reason: 'BREAKEVEN_STOP', netPct, peakPrice: peak };
-  }
-  if (!position.partialTpDone && netPct !== null && netPct <= EXIT_RULES.stopLossNetPct) {
+  if (netPct !== null && netPct <= EXIT_RULES.stopLossNetPct) {
     return { action: 'EXIT_ALL', reason: 'STOP_LOSS', netPct, peakPrice: peak };
   }
-  const holdHours = (now - Number(position.entryTime || now)) / 3600000;
-  if (holdHours >= EXIT_RULES.maxHoldHours) return { action: 'EXIT_ALL', reason: 'MAX_HOLD', netPct, peakPrice: peak };
-  if (position.partialTpDone && gainPeak >= EXIT_RULES.partialTakeProfitNetPct) {
-    const trailPct = gainPeak > EXIT_RULES.runnerWideTrailGainPct ? EXIT_RULES.runnerTrailDropAbove100Pct : EXIT_RULES.runnerTrailDropPct;
-    if (dropPeak * 1 >= trailPct) return { action: 'EXIT_ALL', reason: 'RUNNER_TRAILING', netPct, peakPrice: peak, trailDropPct: trailPct };
+  const peakGainPct = entry > 0 ? (peak / entry - 1) * 100 : 0;
+  if (peakGainPct >= EXIT_RULES.trailingActivateNetPct && dropPeak >= EXIT_RULES.trailingDropPct) {
+    return { action: 'EXIT_ALL', reason: 'TRAILING_TP', netPct, peakPrice: peak, trailDropPct: EXIT_RULES.trailingDropPct };
+  }
+  const holdMs = now - Number(position.entryTime || now);
+  const maxNetPnlPct = Number(position.maxNetPnlPct ?? netPct ?? -Infinity);
+  if (holdMs >= EXIT_RULES.timeStopMinutes * 60_000 && maxNetPnlPct < EXIT_RULES.timeStopRequiredNetPct) {
+    return { action: 'EXIT_ALL', reason: 'TIME_STOP', netPct, peakPrice: peak, maxNetPnlPct };
   }
   return { action: 'HOLD', netPct, peakPrice: peak, dropEntryPct: dropEntry, dropCheckPct: dropCheck };
 }
