@@ -315,7 +315,7 @@ async function checkLaunchBundle(pair, totalSupplyRaw) {
 }
 
 async function recordResearch(pair, security, analysis, decision, holders = null) {
-  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=['worker-gated','standard-wss-wallet-events'].includes(signal?.source)&&signalAt>0&&Date.now()-signalAt<=15*60*1000;
+  const signal=portfolio.smartMoneySignals?.[String(pair.baseToken?.address||pair.address||'')],signalAt=Number(signal?.at||signal?.latest||0),recentSignal=['worker-gated','standard-wss-wallet-events'].includes(signal?.source)&&signalAt>0&&Date.now()-signalAt<=3*60*1000;
   const row = {
     schemaVersion: 1, recordedAt: nowIso(), token: pair.baseToken?.address || pair.address || null,
     symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN', chainId: pair.chainId || null,
@@ -388,15 +388,15 @@ async function publishV6Gate(mint,passed,reasons=[]){
 }
 async function fetchSmartMoneySignal(mint) {
   portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
-  for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>15*60*1000)delete portfolio.smartMoneySignals[oldMint];}
+  for(const [oldMint,signal] of Object.entries(portfolio.smartMoneySignals)){const signalAt=Number(signal?.at||signal?.latest||0);if(!signalAt||Date.now()-signalAt>3*60*1000)delete portfolio.smartMoneySignals[oldMint];}
   const existing=portfolio.smartMoneySignals[mint],existingAt=Number(existing?.at||existing?.latest||0);
-  if(['worker-gated','standard-wss-wallet-events'].includes(existing?.source)&&existingAt>0&&Date.now()-existingAt>=0&&Date.now()-existingAt<=15*60*1000&&Array.isArray(existing.walletAddresses)&&existing.walletAddresses.length>=1){existing.signal='TRACKED_WALLET_BUY';return true;}
+  if(['worker-gated','standard-wss-wallet-events'].includes(existing?.source)&&existingAt>0&&Date.now()-existingAt>=0&&Date.now()-existingAt<=3*60*1000&&Array.isArray(existing.walletAddresses)&&existing.walletAddresses.length>=1){existing.signal='TRACKED_WALLET_BUY';return true;}
   if(existing)delete portfolio.smartMoneySignals[mint];
   const secret=process.env.MEMERADAR_SYNC_SECRET;if(!secret)return false;
   try{
     const url='https://memeradar-state-api.varmaabhi47.workers.dev/smart-money?mint='+encodeURIComponent(mint);
     const result=await fetchJsonStrict(url,7000,{Authorization:'Bearer '+secret});
-    if(['SMART_MONEY_CONFLUENCE','TRACKED_WALLET_BUY'].includes(result.signal)&&Number(result.wallets||1)>=1&&Number(result.latest||0)>0&&Date.now()-Number(result.latest)<=15*60*1000){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:Number(result.wallets||1),walletAddresses:Array.isArray(result.walletAddresses)?result.walletAddresses:[],latest:result.latest,source:'worker-gated',at:Number(result.latest)};return true;}
+    if(['SMART_MONEY_CONFLUENCE','TRACKED_WALLET_BUY'].includes(result.signal)&&Number(result.wallets||1)>=1&&Number(result.latest||0)>0&&Date.now()-Number(result.latest)<=3*60*1000){portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:Number(result.wallets||1),walletAddresses:Array.isArray(result.walletAddresses)?result.walletAddresses:[],latest:result.latest,source:'worker-gated',at:Number(result.latest)};return true;}
     return false;
   }catch(error){console.warn('Smart-money D1 query unavailable; no confluence applied: '+error.message);return false;}
 }
@@ -568,8 +568,8 @@ async function monitorPositions({ discover = false } = {}) {
       }
       const entrySignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
       const signalAt=Number(entrySignal?.at||entrySignal?.latest||0);
-      const freshTrackedBuy=entrySignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(entrySignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=15*60*1000&&Array.isArray(entrySignal.walletAddresses)&&entrySignal.walletAddresses.length>=1;
-      if(!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: no fresh tracked-wallet buy signal (15-minute expiry)');continue;}
+      const freshTrackedBuy=entrySignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(entrySignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(entrySignal.walletAddresses)&&entrySignal.walletAddresses.length>=1;
+      if(!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: no fresh tracked-wallet buy signal (3-minute expiry)');continue;}
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
@@ -661,7 +661,7 @@ async function persistentRunner(){
               if(signal){
                 portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
                 portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:1,walletAddresses:[event.wallet],source:'standard-wss-wallet-events',at:Date.now(),latest:Date.now()};
-                logDecision('TRACKED_WALLET_BUY',mint,'solana','one verified tracked-wallet buy observed; signal expires after 15 minutes');
+                logDecision('TRACKED_WALLET_BUY',mint,'solana','one verified tracked-wallet buy observed; signal expires after 3 minutes');
               }
               eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
               portfolio.eventDiscoveryRequested=true;
