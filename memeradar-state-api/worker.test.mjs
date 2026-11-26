@@ -30,5 +30,8 @@ test('Helius webhook requires configured auth header and accepts only allowliste
  const DB=mockDb(),env={DB,HELIUS_WEBHOOK_SECRET:'Bearer webhook-secret'};
  const body=[{type:'SWAP',signature:'sig-buy',slot:123,timestamp:Date.now()/1000,tokenTransfers:[{toUserAccount:'WALLET_A',mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',tokenAmount:25}],nativeTransfers:[{fromUserAccount:'WALLET_A',toUserAccount:'DEX',amount:500000000}]}];
  const denied=await worker.fetch(new Request('https://worker.test/webhook/helius',{method:'POST',body:JSON.stringify(body)}),env);assert.equal(denied.status,401);
+ const missingTime=[{...body[0]}];delete missingTime[0].timestamp;
+ const rejectedTime=await worker.fetch(new Request('https://worker.test/webhook/helius',{method:'POST',headers:{Authorization:'Bearer webhook-secret','Content-Type':'application/json'},body:JSON.stringify(missingTime)}),env);
+ assert.equal(rejectedTime.status,200);const timeResult=await rejectedTime.json();assert.equal(timeResult.stored,0);assert.equal(timeResult.invalidTimestamp,1);
  const accepted=await worker.fetch(new Request('https://worker.test/webhook/helius',{method:'POST',headers:{Authorization:'Bearer webhook-secret','Content-Type':'application/json'},body:JSON.stringify(body)}),env);assert.equal(accepted.status,200);assert.equal((await accepted.json()).stored,1);
 });
