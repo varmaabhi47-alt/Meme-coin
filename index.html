@@ -107,7 +107,7 @@
                 <span id="hud-health-text">BOOTING</span>
               </span>
             </div>
-            <p class="text-[11px] text-slate-400 hidden sm:block">V6 Smart-Money Confluence • Strict Liquidity &amp; Security Gates • Paper-Research Only</p>
+            <p class="text-[11px] text-slate-400 hidden sm:block">V6 Wallet Intelligence • Fresh Smart-Money Signals • Strict Security &amp; Liquidity Gates • Paper Trading Only</p>
           </div>
         </div>
 
@@ -197,7 +197,7 @@
         <span>Bot Setup & Status</span>
       </button>
       <button onclick="switchTab('research')" id="tab-btn-research" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
-        <span>V5 Research Lab</span>
+        <span>Research & History</span>
         <span id="badge-research-count" class="px-1.5 py-0.5 rounded-md bg-term-card border border-term-border text-[10px] font-mono text-cyan-300">0</span>
       </button>
             <button onclick="switchTab('v6')" id="tab-btn-v6" class="px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap transition flex items-center gap-1.5">
@@ -734,8 +734,8 @@ node meme-radar-autobot-24-7.mjs
     <!-- ====================================================================== -->
     <section id="view-v6" class="hidden space-y-3.5">
       <div class="p-4 rounded-2xl bg-term-panel border border-term-border flex flex-wrap items-center justify-between gap-3">
-        <div><div class="flex items-center gap-2"><h2 class="text-sm font-bold text-white font-mono">V6 SMART-MONEY CONFLUENCE</h2><span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">LIVE D1</span></div>
-        <p class="text-xs text-slate-400 mt-1">Read-only view of actual Helius webhook events and curator records. No synthetic wallet data.</p></div>
+        <div><div class="flex items-center gap-2"><h2 class="text-sm font-bold text-white font-mono">V6 SMART-MONEY & WALLET INTELLIGENCE</h2><span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">LIVE D1</span></div>
+        <p class="text-xs text-slate-400 mt-1">Live view of real Helius wallet events, curator state and token-gate evidence. Candidate wallets must pass real-data vetting; no synthetic wallet activity.</p></div>
         <button onclick="loadV6Dashboard()" class="px-3 py-2 rounded-lg bg-term-bg border border-term-border hover:border-emerald-500/50 text-xs font-mono text-emerald-300">Refresh live data</button>
       </div>
       <div class="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
@@ -746,7 +746,7 @@ node meme-radar-autobot-24-7.mjs
       </div>
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-3.5">
         <div class="xl:col-span-2 p-4 rounded-2xl bg-term-panel border border-term-border">
-          <h3 class="text-xs font-bold text-white font-mono">MINT CONFLUENCE CHECK</h3><p class="mt-1 text-xs text-slate-400">Check actual independent-wallet buys over the last 15 minutes and the fresh V6 hard-gate record.</p>
+          <h3 class="text-xs font-bold text-white font-mono">MINT CONFLUENCE CHECK</h3><p class="mt-1 text-xs text-slate-400">Inspect real tracked-wallet buys and the latest V6 hard-gate evidence. Entry signals must be fresh (≤ 3 minutes); every security, liquidity and execution gate still applies.</p>
           <form class="mt-3 flex flex-col sm:flex-row gap-2" onsubmit="lookupV6Mint(event)">
             <input id="v6-mint-input" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Solana mint address" class="min-w-0 flex-1 px-3 py-2.5 rounded-lg bg-term-bg border border-term-border text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/60" />
             <button type="submit" class="px-4 py-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold">Check mint</button>
@@ -754,7 +754,7 @@ node meme-radar-autobot-24-7.mjs
           <div id="v6-mint-result" class="mt-3 p-3 rounded-xl bg-term-bg border border-term-border text-xs font-mono text-slate-400 whitespace-pre-wrap">No mint checked yet.</div>
         </div>
         <div class="p-4 rounded-2xl bg-term-panel border border-term-border"><h3 class="text-xs font-bold text-white font-mono">V6 SIGNAL RULE</h3>
-          <ul class="mt-3 space-y-2 text-xs text-slate-400"><li>• At least 2 independent active wallet groups</li><li>• Buys occur in distinct slots</li><li>• Buy size ≥ 50% of wallet median</li><li>• Passing token gate ≤ 5 minutes old</li><li>• Research-only; no live trade execution</li></ul>
+          <ul class="mt-3 space-y-2 text-xs text-slate-400"><li>• One qualifying tracked-wallet buy can trigger a signal</li><li>• Signal must be ≤ 3 minutes old</li><li>• Wallet must be ACTIVE and event source verified</li><li>• Token security, liquidity and market gates remain mandatory</li><li>• Paper trading only; live swaps remain disabled</li></ul>
           <div class="mt-3 pt-3 border-t border-term-border text-[11px] text-slate-500 font-mono">Wallet addresses and sync secrets are not exposed by this public endpoint.</div>
         </div>
       </div>
@@ -820,7 +820,7 @@ node meme-radar-autobot-24-7.mjs
       <div>
         <strong class="text-slate-300">Zero-Simulation Guarantee:</strong> Every price, liquidity pool, sell count, and security audit comes live from DexScreener, RugCheck &amp; GoPlus. Paper trades include realistic AMM impact + 0.30% DEX fee.
       </div>
-      <div class="font-mono text-slate-500 shrink-0">MEME.RADAR v4 // AUTO-TRADER</div>
+      <div class="font-mono text-slate-500 shrink-0">MEME.RADAR V6 // SMART-MONEY PAPER TRADER</div>
     </div>
   </footer>
 
