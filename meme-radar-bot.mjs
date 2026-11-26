@@ -208,24 +208,25 @@ async function sendTelegram(text) {
     console.error(`[${nowIso()}] Telegram not configured: missing bot token or chat ID.`);
     return false;
   }
+  const message = String(text || '');
+  const chunks = message.match(/[\\s\\S]{1,3800}/g) || [''];
   try {
-    const res = await fetch(`https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: CONFIG.TELEGRAM_CHAT_ID, text, disable_web_page_preview: true })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      throw new Error(data.description || `Telegram HTTP ${res.status}`);
+    for (const chunk of chunks) {
+      const res = await fetch(`https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: CONFIG.TELEGRAM_CHAT_ID, text: chunk, disable_web_page_preview: true })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.description || `Telegram HTTP ${res.status}`);
+      console.log(`[${nowIso()}] Telegram message delivered (message_id: ${data.result?.message_id ?? 'accepted'}).`);
     }
-    console.log(`[${nowIso()}] Telegram message delivered (message_id: ${data.result?.message_id ?? 'accepted'}).`);
     return true;
   } catch (e) {
     console.error(`[${nowIso()}] Telegram delivery failed: ${e.message}`);
     return false;
   }
 }
-
 function logDecision(action, symbol, chainId, reason) {
   portfolio.decisionLog.unshift({ ts: Date.now(), timeStr: nowIso().slice(11, 19), action, symbol, chainId, reason });
   if (portfolio.decisionLog.length > 150) portfolio.decisionLog.pop();
