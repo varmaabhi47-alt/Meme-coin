@@ -662,6 +662,7 @@ async function persistentRunner(){
                 portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
                 portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:1,walletAddresses:[event.wallet],source:'standard-wss-wallet-events',at:Date.now(),latest:Date.now()};
                 logDecision('TRACKED_WALLET_BUY',mint,'solana','one verified tracked-wallet buy observed; signal expires after 15 minutes');
+              }
               eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
               portfolio.eventDiscoveryRequested=true;
             }
