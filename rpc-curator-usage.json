@@ -1,11 +1,11 @@
 {
   "month": "2026-11",
-  "credits": 3290,
-  "requests": 3290,
-  "httpRequests": 858,
+  "credits": 4249,
+  "requests": 4249,
+  "httpRequests": 1036,
   "byMethod": {
-    "getSignaturesForAddress": 34,
-    "getTransaction": 3256
+    "getSignaturesForAddress": 52,
+    "getTransaction": 4197
   },
-  "rateLimitResponses": 277
+  "rateLimitResponses": 278
 }
