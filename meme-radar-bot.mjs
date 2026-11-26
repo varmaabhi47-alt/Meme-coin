@@ -336,7 +336,7 @@ async function inspectSolanaHolders(tokenAddress, pairAddress = null) {
       try {
         const signatures = await rpc('getSignaturesForAddress', [mintAuthority, { limit: 25, commitment: 'confirmed' }], 5);
         authoritySignatureCount = Array.isArray(signatures) ? signatures.length : null;
-      } catch {}
+      } catch (error) { throw new Error('creatorSignals authority signature audit failed: ' + error.message); }
     }
     const holderDistribution = {
       ...calculateTopHolderConcentration(accountsWithOwners, supply?.value?.amount, [pairAddress]),
