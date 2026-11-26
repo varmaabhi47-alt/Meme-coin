@@ -631,7 +631,7 @@ async function monitorPositions({ discover = false } = {}) {
         hardGate=evaluateSolanaHardSecurityGates({mintAuthority:creatorData?.mintAuthority,freezeAuthority:creatorData?.freezeAuthority,holderDistribution:holderData,creatorSignals:creatorData,tokenProgramId:creatorData?.tokenProgramId,tokenExtensions:creatorData?.tokenExtensions});
         if(!hardGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(...hardGate.reasons);}
         // Launch-bundle analysis is required for both legacy and wallet-originated entries.
-        if(sec.pass&&hardGate.pass&&(intelligence.tier==='RESEARCH'||freshTrackedBuy)){
+        if(sec.pass&&hardGate.pass){
           bundleGate=await checkLaunchBundle({pairAddress:p.pairAddress,address:p.baseToken.address},holderData?.totalSupplyRaw);
           if(!bundleGate.pass){intelligence.tier='REJECT';intelligence.hardReject=true;intelligence.reasons.push(bundleGate.reason);}
         }
