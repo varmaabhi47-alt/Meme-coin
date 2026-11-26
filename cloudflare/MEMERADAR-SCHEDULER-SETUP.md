@@ -1,8 +1,8 @@
 # Meme Radar GitHub Actions Scheduler
 
-This Worker is the external timer for the Meme Radar paper-bot workflow.
+The Cloudflare Worker `memeradar-github-scheduler` is deployed and its Cron Trigger is configured for every five minutes (UTC). The GitHub Actions workflow no longer has its own scheduled trigger, preventing duplicate timer runs.
 
-## Required secret
+## Required secret — not yet configured
 
 Create a GitHub fine-grained personal access token:
 - Repository access: only `varmaabhi47-alt/Meme-coin`
@@ -15,17 +15,10 @@ In Cloudflare Dashboard:
 3. Add a secret named `GITHUB_TOKEN` with the token value.
 4. Do not put the token in this repository, code, Telegram, or a chat message.
 
-## Activate
+Until the secret is added, scheduled invocations log a clear message and skip dispatch. Add it promptly to resume automated scans.
 
-Once the secret is set, add the Worker Cron Trigger:
-```
-*/5 * * * *
-```
+## How it works
 
-Then remove the `schedule:` trigger from `.github/workflows/memeradar-paper-bot.yml` so the GitHub timer and Cloudflare timer do not run duplicate scans. Keep `workflow_dispatch` and the existing push behavior.
+The Worker dispatches `memeradar-paper-bot.yml` on `main` using GitHub's workflow-dispatch API. GitHub Actions continues to perform the paper scan, authenticated D1 check, Telegram notifications, and portfolio save; this Worker does not simulate market data or execute trades.
 
-The Worker dispatches `memeradar-paper-bot.yml` on `main` using GitHub's workflow-dispatch API. GitHub Actions continues to perform the paper scan, D1 check, and portfolio save; this Worker does not simulate market data or trade.
-
-## Health check
-
-After enabling the Worker route / workers.dev subdomain, `GET /health` reports whether the secret is present. The response never exposes the secret.
+The workflow retains `workflow_dispatch` for manual runs and its existing push behavior. The Cloudflare Cron Trigger is `*/5 * * * *` (UTC).
