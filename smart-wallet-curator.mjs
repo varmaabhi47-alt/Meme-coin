@@ -101,7 +101,7 @@ async function transactionsBySignatures(signatures,encoding='json'){
 function parseCsvLine(line){const out=[];let value='',quoted=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){out.push(value.trim());value='';}else value+=ch;}out.push(value.trim());return out;}
 async function importCandidates(file){
   const txt=await fs.readFile(file,'utf8'), out=[];
-  if(file.endsWith('.json')){const j=JSON.parse(txt);for(const x of Array.isArray(j)?j:(j.wallets||j.candidates||[])){const a=typeof x==='string'?x:x.address;if(a)out.push({address:a,label:typeof x==='object'?(x.label||'imported'):'imported',source:'manual-import'});}}
+  if(file.endsWith('.json')){const j=JSON.parse(txt);for(const x of Array.isArray(j)?j:(j.wallets||j.candidates||[])){const a=typeof x==='string'?x:x.address;if(a){const meta=typeof x==='object'?{rank:x.rank,reported_pnl_30d_sol:x.reported_pnl_30d_sol,reported_win_rate_pct:x.reported_win_rate_pct,reported_trades_30d:x.reported_trades_30d,reported_profile:x.reported_profile,source_snapshot:x.source_snapshot}:{};out.push({address:a,label:typeof x==='object'?(x.label||x.alias||'imported'):'imported',source:typeof x==='object'?(x.source||'manual-import'):'manual-import',...Object.fromEntries(Object.entries(meta).filter(([,v])=>v!==undefined&&v!==null))});}}
   else for(const line of txt.split(/\r?\n/)){if(!line.trim()||line.trim().startsWith('#'))continue;const [address,label]=parseCsvLine(line);if(address&&address!=='address')out.push({address,label:label||'imported',source:'manual-import'});}
   return out;
 }
@@ -308,7 +308,7 @@ async function main(){
     if(args.includes('--from-research')&&!imp){console.error('[curator] No wallet buyers were recoverable from the selected live research mint transactions; no wallet records changed.');return;}
     throw new Error('No candidates. Supply --import file, --from-mints list, or --from-research [file].');
   }
-  const candidateLimitRaw=Number(process.env.CURATOR_MAX_CANDIDATES||0),candidateLimit=Math.max(0,Math.min(100,Math.floor(Number.isFinite(candidateLimitRaw)?candidateLimitRaw:0)));
+  const candidateLimitRaw=Number(process.env.CURATOR_MAX_CANDIDATES||3),candidateLimit=Math.max(1,Math.min(100,Math.floor(Number.isFinite(candidateLimitRaw)?candidateLimitRaw:3)));
   if(candidateLimit>0){
     const unique=new Map();for(const c of candidates)if(validAddress(c.address)){const prior=unique.get(c.address);if(!prior||Number(c.firstSeen||0)>Number(prior.firstSeen||0))unique.set(c.address,c);}
     candidates=[...unique.values()].sort((a,b)=>Number(b.firstSeen||0)-Number(a.firstSeen||0)).slice(0,candidateLimit);
