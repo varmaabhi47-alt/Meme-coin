@@ -17,6 +17,7 @@ import { scoreCandidate, calculatePaperBuy, calculatePaperSell, detectBasicMarke
 import { evaluatePositionRisk, calculatePositionSize, checkCircuitBreakers, parseTelegramCommand, makeStateLock } from './meme-radar-v5-risk-engine.mjs';
 import { RpcCreditGuard, SolanaEventListener, extractMintsFromTransaction, extractWalletTokenBuys, createSmartMoneyConfluence, computeEdgeProof } from './path2-runtime.mjs';
 import { PaperExecutionAdapter, SolanaLiveExecutionAdapter } from './execution-adapter.mjs';
+import { reconstructSolSwap } from './swap-reconstruction.mjs';
 
 const CONFIG = {
   FEED_URL: 'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -738,13 +739,21 @@ async function persistentRunner(){
           try{
             const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});
             if(!(tx?.meta?.logMessages||[]).some(line=>/swap/i.test(line)))return;
+            const txTime=Number(tx.blockTime)*1000;
+            const eventTimeValid=Number.isFinite(txTime)&&txTime>0&&txTime<=Date.now()+60000;
+            const reconstructed=reconstructSolSwap(tx,event.wallet);
             for(const mint of extractWalletTokenBuys(tx,event.wallet)){
               if([USDC_MINT,'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB','So11111111111111111111111111111111111111112'].includes(mint))continue;
-              const signal=smartMoneyConfluence(event.wallet,mint,Date.now());
-              if(signal){
-                portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
-                portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:1,walletAddresses:[event.wallet],source:'standard-wss-wallet-events',at:Date.now(),latest:Date.now()};
-                logDecision('TRACKED_WALLET_BUY',mint,'solana','one verified tracked-wallet buy observed; signal expires after 3 minutes');
+              const verifiedBuy=eventTimeValid&&reconstructed?.swap?.side==='BUY'&&reconstructed.swap.mint===mint;
+              if(verifiedBuy){
+                const signal=smartMoneyConfluence(event.wallet,mint,txTime);
+                if(signal){
+                  portfolio.smartMoneySignals=portfolio.smartMoneySignals||{};
+                  portfolio.smartMoneySignals[mint]={signal:'TRACKED_WALLET_BUY',wallets:signal.wallets,walletAddresses:signal.walletAddresses,source:'standard-wss-wallet-events',at:txTime,latest:txTime,signature:event.signature,slot:Number(tx.slot||reconstructed.swap.slot||0),swapAccounting:'verified-single-mint-sol-leg'};
+                  logDecision('TRACKED_WALLET_BUY',mint,'solana','verified swap buy from tracked wallet; signal timestamp uses on-chain blockTime and expires after 3 minutes');
+                }
+              }else{
+                logDecision('WALLET_EVENT_UNVERIFIED',mint,'solana',!eventTimeValid?'on-chain blockTime missing/invalid; no buy signal':'swap legs ambiguous or reconstructed as non-buy; no buy signal');
               }
               eventMintQueue.add(mint);if(eventMintQueue.size>2000)eventMintQueue.delete(eventMintQueue.values().next().value);
               portfolio.eventDiscoveryRequested=true;
