@@ -31,6 +31,12 @@ test('RPC guard retries HTTP 429 and counts observed calls/credits',async()=>{
  assert.equal(calls,2);assert.equal(guard.telemetry().estimatedCredits,1);
 });
 
+test('RPC guard retries HTTP 5xx with exact status and succeeds without counting failed calls',async()=>{
+ let calls=0;
+ const guard=new RpcCreditGuard({stateFile:'/tmp/path2-rpc-5xx-test.json',monthlyLimit:1000000,fetchImpl:async()=>{calls++;return calls===1?{status:503,ok:false,statusText:'Service Unavailable'}:{status:200,ok:true,json:async()=>({result:'slot'})};}});
+ assert.equal(await guard.rpc('https://rpc.invalid','getSlot',[],{credits:1}),'slot');
+ assert.equal(calls,2);assert.equal(guard.telemetry().estimatedCredits,1);
+});
 test('standard WebSocket listener triggers only migration and configured pool-init logs',()=>{
  class FakeSocket{
   listeners={};sent=[];
