@@ -182,9 +182,16 @@ function formatHourlyOverview(startMs, endMs) {
   const start = Number(startMs) || endMs - 3600000;
   const buys = (portfolio.decisionLog || []).filter(x => x.ts >= start && x.ts <= endMs && x.action === 'BOUGHT');
   const sells = (portfolio.decisionLog || []).filter(x => x.ts >= start && x.ts <= endMs && ['SOLD','PARTIAL_SELL'].includes(x.action));
-  const closed = (portfolio.closedTrades || []).filter(t => Number(t.exitTime || 0) >= start && Number(t.exitTime || 0) <= endMs);
-  const realizedClosed = closed.reduce((sum,t) => sum + Number(t.netPnlUsd || 0), 0);
+  const closedTrades = portfolio.closedTrades || [];
+  const closed = closedTrades.filter(t => Number(t.exitTime || 0) >= start && Number(t.exitTime || 0) <= endMs);
+  const finalExitPnl = closed.reduce((sum,t) => {
+    const partialCost = (t.partialExits || []).reduce((s,x) => s + Number(x.allocatedCostUsd || 0), 0);
+    const remainingCost = Math.max(0, Number(t.costUsd || 0) - partialCost);
+    return sum + Number(t.finalExitValueUsd ?? t.exitValueUsd ?? 0) - remainingCost;
+  }, 0);
+  const partialClosed = closedTrades.reduce((sum,t) => sum + (t.partialExits || []).filter(x => Number(x.at || 0) >= start && Number(x.at || 0) <= endMs).reduce((s,x) => s + Number(x.realizedPnlUsd || 0), 0), 0);
   const partialOpen = (portfolio.openPositions || []).reduce((sum,p) => sum + (p.partialExits || []).filter(x => Number(x.at || 0) >= start && Number(x.at || 0) <= endMs).reduce((s,x) => s + Number(x.realizedPnlUsd || 0), 0), 0);
+  const realizedClosed = finalExitPnl + partialClosed;
   const allTime = (portfolio.closedTrades || []).reduce((sum,t) => sum + Number(t.netPnlUsd || 0), 0) + (portfolio.openPositions || []).reduce((sum,p) => sum + Number(p.realizedPartialPnlUsd || 0), 0);
   const unrealized = (portfolio.openPositions || []).reduce((sum,p) => sum + Number(p.lastPrice || p.buyPrice || 0) * Number(p.remainingTokens ?? p.tokens ?? 0) - Number((p.remainingCostUsd ?? p.costUsd) || 0), 0);
   const buyLines = buys.slice(0,8).map(x => '• BUY ' + x.symbol + ' ' + String(x.chainId || '').toUpperCase() + ' — ' + x.reason);
