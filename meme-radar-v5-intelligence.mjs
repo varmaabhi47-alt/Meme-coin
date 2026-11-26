@@ -165,7 +165,7 @@ export function detectBasicMarketWarnings(pair) {
   const priceMove = num(pair?.priceChange?.m5);
   if (buys + sells >= 20 && volume > 0 && liquidity > 0 && volume / liquidity > 5) warnings.push('high 1h turnover vs liquidity');
   if (sells > buys * 1.8 && sells >= 10) warnings.push('sell pressure exceeds buys');
-  if (priceMove > 35) warnings.push('extreme 5m price expansion');
+  if (priceMove > 25) warnings.push('extreme 5m price expansion');
   if (!pair?.pairCreatedAt) warnings.push('pair age unavailable');
   return warnings;
 }
@@ -361,7 +361,8 @@ export function evaluateSolanaHardSecurityGates({ mintAuthority = null, freezeAu
   }
   if (mintAuthority) reasons.push('active mint authority');
   if (freezeAuthority) reasons.push('active freeze authority');
-  if (!holderDistribution?.known) reasons.push('holder concentration unknown');
+  if (holderDistribution?.known !== true) reasons.push('holder concentration unknown');
+  if (creatorSignals?.known !== true) reasons.push('creator signals unknown');
   else {
     if (Number(holderDistribution.top10Pct) > 30) reasons.push('top-10 concentration exceeds 30%');
     if (Number(holderDistribution.top5Pct) > 20) reasons.push('top-5 concentration exceeds 20%');
