@@ -157,7 +157,7 @@ function formatBuyReceipt(position, details) {
     'Tokens acquired: ' + Number(d.tokens || 0).toLocaleString('en-US', { maximumFractionDigits: 8 }),
     'Total cost: ' + usd(d.costUsd),
     'Pool liquidity: ' + usd(d.liquidityUsd),
-    'Smart-money signal: ' + (Array.isArray(d.signal && d.signal.walletAddresses) ? d.signal.walletAddresses.length + ' tracked wallet(s)' : 'verified signal'),
+    'Selection: ' + (d.signal?.source === 'legacy-dexscreener-selection' ? 'legacy DexScreener discovery' : (Array.isArray(d.signal && d.signal.walletAddresses) ? d.signal.walletAddresses.length + ' tracked wallet(s)' : 'verified signal')),
     'Contract: ' + (p.address || 'unavailable'),
     'Security: ' + (d.security || 'live audit passed'),
     'Mode: PAPER ONLY'].join('\n');
@@ -642,10 +642,16 @@ async function monitorPositions({ discover = false } = {}) {
           `V5 ${intelligence.score}/100 [${intelligence.tier}] ${[...intelligence.reasons, ...detectBasicMarketWarnings(p)].join('; ') || sec.reason}`);
         continue;
       }
-      const entrySignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
-      const signalAt=Number(entrySignal?.at||entrySignal?.latest||0);
-      const freshTrackedBuy=entrySignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(entrySignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(entrySignal.walletAddresses)&&entrySignal.walletAddresses.length>=1;
-      if(!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: no fresh tracked-wallet buy signal (3-minute expiry)');continue;}
+      const walletSignal=portfolio.smartMoneySignals?.[String(p.baseToken.address||'')];
+      const signalAt=Number(walletSignal?.at||walletSignal?.latest||0);
+      const freshTrackedBuy=walletSignal?.signal==='TRACKED_WALLET_BUY'&&['standard-wss-wallet-events','worker-gated'].includes(walletSignal?.source)&&signalAt>0&&Date.now()-signalAt>=0&&Date.now()-signalAt<=3*60*1000&&Array.isArray(walletSignal.walletAddresses)&&walletSignal.walletAddresses.length>=1;
+      // Preserve the original V5 discovery/score selection path as well as V6 tracked-wallet signals.
+      // Both paths have already passed live security, liquidity, creator, bundle and score gates above.
+      const legacyDiscoveryQualified=intelligence.tier==='RESEARCH'&&sec.pass;
+      if(!legacyDiscoveryQualified&&!freshTrackedBuy){logDecision('SKIPPED',p.baseToken.symbol,pairObj.chainId,'buy blocked: neither legacy discovery qualification nor a fresh tracked-wallet buy signal');continue;}
+      const entrySignal=freshTrackedBuy?walletSignal:{signal:'LEGACY_DISCOVERY',source:'legacy-dexscreener-selection',walletAddresses:[]};
+      const selectionSource=freshTrackedBuy?'tracked-wallet':'legacy-discovery';
+      logDecision('SELECTED',p.baseToken.symbol,pairObj.chainId,'entry selected by '+selectionSource+'; shared live safety gates passed');
       if (portfolio.autoTradeEnabled === false || process.env.DRY_RUN === 'true' || Number(portfolio.breaker?.pauseUntil || 0) > Date.now()) {
         logDecision('PAUSED', p.baseToken.symbol, pairObj.chainId, portfolio.breaker?.reason || 'new entries disabled');
         continue;
