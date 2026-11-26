@@ -1,6 +1,6 @@
 {
-  "name": "meme-radar-v5-paper-trader",
-  "version": "5.1.0",
+  "name": "meme-radar-v6-paper-trader",
+  "version": "6.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,9 +16,11 @@
     "curator-dry-run": "node smart-wallet-curator.mjs --dry-run",
     "curator-self-test": "node --test smart-wallet-curator.test.mjs && node smart-wallet-curator.mjs --dry-run",
     "attribute-wallet-outcomes": "node attribute-curator-outcomes.mjs",
-    "attribute-wallet-outcomes-dry-run": "node attribute-curator-outcomes.mjs --dry-run"
+    "attribute-wallet-outcomes-dry-run": "node attribute-curator-outcomes.mjs --dry-run",
+    "v6:verify": "npm run check && npm test"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4"
-  }
+  },
+  "description": "MEME.RADAR V6 — real-data smart-money research and paper-trading system; live trading disabled by default."
 }
