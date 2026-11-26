@@ -51,6 +51,7 @@ export function evaluatePositionRisk(position, options = {}) {
   if (holdMs >= EXIT_RULES.timeStopMinutes * 60_000 && maxNetPnlPct < EXIT_RULES.timeStopRequiredNetPct) {
     return { action: 'EXIT_ALL', reason: 'TIME_STOP', netPct, peakPrice: peak, maxNetPnlPct };
   }
+  if (holdMs >= EXIT_RULES.maxHoldHours * 3600_000) return { action: 'EXIT_ALL', reason: 'MAX_HOLD', netPct, peakPrice: peak };
   return { action: 'HOLD', netPct, peakPrice: peak, dropEntryPct: dropEntry, dropCheckPct: dropCheck };
 }
 
