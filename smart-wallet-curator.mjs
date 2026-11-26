@@ -40,21 +40,23 @@ const iso=ms=>new Date(ms).toISOString();
 const readJson=async(p,fb)=>{try{return JSON.parse(await fs.readFile(p,'utf8'));}catch{return fb;}};
 const writeJson=async(p,v)=>fs.writeFile(p,JSON.stringify(v,null,2)+'\n');
 function monthKey(){const d=new Date();return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');}
-let lastReq=0, rpcId=0;
+let lastReq=0, rpcId=0, effectiveRps=MAX_RPS, successStreak=0;
+function noteRpcSuccess(){successStreak++;if(successStreak>=20){effectiveRps=Math.min(MAX_RPS,effectiveRps+0.25);successStreak=0;}}
+function noteRpc429(){successStreak=0;effectiveRps=Math.max(1,effectiveRps*0.65);}
 async function rpc(method,params){
   if(!KEY||!/helius/i.test(RPC))throw new Error('Live curator RPC requires HELIUS_API_KEY and a Helius RPC URL; refusing an unmetered/unknown provider fallback.');
   const usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
   if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;usage.rateLimitResponses=0;}
   if(!canSpendRpcCredits(Number(usage.credits||0),1))throw new Error('RPC monthly credit budget exhausted; refusing further calls.');
-  const wait=Math.max(0,Math.ceil(1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
+  const wait=Math.max(0,Math.ceil(1000/effectiveRps)-(Date.now()-lastReq));if(wait)await sleep(wait);
   let attempt=0;
   while(true){
     lastReq=Date.now();
     const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++rpcId,method,params})});
     usage.httpRequests=(usage.httpRequests||0)+1;await writeJson(USAGE,usage);
-    if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
+    if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);noteRpc429();if(attempt++>=7)throw new Error('RPC 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep(Math.max(Number.isFinite(retry)&&retry>0?retry*1000:0,Math.min(60000,Math.ceil(1000/effectiveRps)*2**attempt))+Math.floor(Math.random()*500));continue;}
     const raw=await res.text();let body;try{body=JSON.parse(raw);}catch{throw new Error('RPC returned non-JSON HTTP '+res.status);}
-    usage.credits++;usage.requests++;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
+    noteRpcSuccess();usage.credits++;usage.requests++;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+1;await writeJson(USAGE,usage);
     if(!res.ok||body.error)throw new Error('RPC '+method+' failed HTTP '+res.status+': '+JSON.stringify(body.error||body).slice(0,500));
     if(!Object.hasOwn(body,'result'))throw new Error('RPC '+method+' response missing result');
     return body.result;
@@ -68,17 +70,17 @@ async function rpcBatch(method,paramsList){
     const params=paramsList.slice(offset,offset+RPC_BATCH_SIZE),usage=await readJson(USAGE,{month:monthKey(),credits:0,requests:0});
     if(usage.month!==monthKey()){usage.month=monthKey();usage.credits=0;usage.requests=0;usage.byMethod={};usage.httpRequests=0;usage.rateLimitResponses=0;}
     if(!canSpendRpcCredits(Number(usage.credits||0),params.length))throw new Error('RPC monthly credit budget would be exceeded by batch; refusing calls.');
-    const wait=Math.max(0,Math.ceil(params.length*1000/MAX_RPS)-(Date.now()-lastReq));if(wait)await sleep(wait);
+    const wait=Math.max(0,Math.ceil(params.length*1000/effectiveRps)-(Date.now()-lastReq));if(wait)await sleep(wait);
     const requests=params.map(p=>({jsonrpc:'2.0',id:++rpcId,method,params:p})),ids=requests.map(x=>x.id);
     let attempt=0,body;
     while(true){
       lastReq=Date.now();
       const res=await fetch(RPC_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requests)});
       usage.httpRequests=(usage.httpRequests||0)+1;await writeJson(USAGE,usage);
-      if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep((Number.isFinite(retry)&&retry>0?retry*1000:Math.min(60000,1000*2**attempt))+Math.floor(Math.random()*500));continue;}
+      if(res.status===429){usage.rateLimitResponses=(usage.rateLimitResponses||0)+1;await writeJson(USAGE,usage);noteRpc429();if(attempt++>=7)throw new Error('RPC batch 429 persisted after exponential backoff');const retry=Number(res.headers.get('retry-after'));await sleep(Math.max(Number.isFinite(retry)&&retry>0?retry*1000:0,Math.min(60000,Math.ceil(params.length*1000/effectiveRps)*2**attempt))+Math.floor(Math.random()*500));continue;}
       const raw=await res.text();try{body=JSON.parse(raw);}catch{throw new Error('RPC provider rejected JSON-RPC batch request (non-JSON HTTP '+res.status+').');}
       if(!res.ok)throw new Error('RPC batch failed HTTP '+res.status+': '+JSON.stringify(body).slice(0,500));
-      break;
+      noteRpcSuccess();break;
     }
     if(!Array.isArray(body))throw new Error('RPC provider rejected JSON-RPC batch request (response was not an array).');
     usage.credits+=requests.length;usage.requests+=requests.length;usage.byMethod=usage.byMethod||{};usage.byMethod[method]=(usage.byMethod[method]||0)+requests.length;await writeJson(USAGE,usage);
@@ -313,16 +315,18 @@ async function main(){
     console.error('[curator] Bounded live candidate vetting to '+candidates.length+' wallet(s) this run; cap='+candidateLimit+'.');
   }
   const q=await readJson(QUEUE,{version:1,candidates:[]}),by=new Map((q.candidates||[]).map(x=>[x.address,x]));
-  for(const c of candidates)if(validAddress(c.address))by.set(c.address,{...by.get(c.address),...c,queued_at:iso(Date.now()),status:'PENDING'});
-  q.candidates=[...by.values()];await writeJson(QUEUE,q);
+  for(const c of candidates)if(validAddress(c.address))by.set(c.address,{...by.get(c.address),...c,queued_at:iso(Date.now()),status:'PENDING',last_vetting:null});
+  q.candidates=[...by.values()];
+  const updateQueue=(address,fields)=>{const item=q.candidates.find(x=>x.address===address);if(item)Object.assign(item,fields,{last_vetted_at:iso(Date.now())});};
   const curated=await readJson(WALLETS,{version:1,wallets:[]}),tracked=new Set(curated.wallets.filter(w=>w.status==='ACTIVE').map(w=>w.address)),promoted=[],rejected=[];
   const knownDeployers=new Set(String(process.env.KNOWN_DEPLOYER_WALLETS||'').split(',').map(x=>x.trim()).filter(Boolean)),sources=new Map(),fundingScanFailed=new Set();
-  for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){fundingScanFailed.add(c.address);rejected.push({address:c.address,fundingScanError:String(e)});}}
+  for(const c of [...new Map(candidates.filter(x=>validAddress(x.address)).map(x=>[x.address,x])).values()]){try{sources.set(c.address,await findFundingSource(c.address));}catch(e){fundingScanFailed.add(c.address);const error=String(e);rejected.push({address:c.address,fundingScanError:error});updateQueue(c.address,{status:'REJECTED',last_vetting:{pass:false,reasons:['funding-provenance-scan-failed'],error}});}}
   const fundingLinks=analyzeFundingLinks([...sources.keys()],sources,{knownRiskAddresses:knownDeployers,trackedAddresses:tracked,sharedSourceMin:2,maxDepth:2});
-  for(const c of candidates){if(!validAddress(c.address)||fundingScanFailed.has(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});continue;}
+  for(const c of candidates){if(!validAddress(c.address)||fundingScanFailed.has(c.address))continue;try{const source=sources.get(c.address)||null,link=fundingLinks.get(c.address),fundingLinked=!!link?.linked,v=await vetCandidate(c,{fundingSource:source,fundingLinked});if(!v.pass){rejected.push({address:c.address,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]});updateQueue(c.address,{status:'REJECTED',last_vetting:{pass:false,reasons:v.reasons,metrics:v.metrics,fundingLinkReasons:link?.reasons||[]}});continue;}
     const m=v.metrics,w={address:c.address,label:c.label||'curated',added_at:iso(Date.now()),last_active_at:iso(Date.now()),realized_win_rate_30d:m.realizedWinRate30d,profit_factor_30d:m.profitFactor30d,median_hold_mins:m.medianHoldMins,median_buy_sol:m.medianBuySol,confidence_score:m.confidenceScore,status:'ACTIVE',correlation_group:link?.correlationGroup||source||'',funding_link_reasons:link?.reasons||[],metrics:m};
-    curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);
-  }catch(e){rejected.push({address:c.address,error:String(e)});}}
+    curated.wallets=[...curated.wallets.filter(x=>x.address!==c.address),w];promoted.push(w);updateQueue(c.address,{status:'ACTIVE',last_vetting:{pass:true,metrics:m,fundingLinkReasons:link?.reasons||[]}});
+  }catch(e){const error=String(e);rejected.push({address:c.address,error});updateQueue(c.address,{status:'REJECTED',last_vetting:{pass:false,error}});}}
+  await writeJson(QUEUE,q);
   const eligible=curated.wallets.filter(w=>w.status==='ACTIVE').sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));const activeSet=new Set(eligible.slice(0,50));for(const w of curated.wallets)if(w.status!=='MUTED')w.status=activeSet.has(w)?'ACTIVE':'WATCH';curated.wallets.sort((a,b)=>Number(b.confidence_score||0)-Number(a.confidence_score||0));curated.updated_at=iso(Date.now());await writeJson(WALLETS,curated);
   console.log(JSON.stringify({candidateCount:candidates.length,promoted:promoted.length,rejected,activeCount:curated.wallets.filter(w=>w.status==='ACTIVE').length,rpcUsage:await readJson(USAGE,{})},null,2));
 }
