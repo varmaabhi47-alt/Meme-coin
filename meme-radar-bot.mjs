@@ -783,7 +783,7 @@ async function persistentRunner(){
         },
         onWalletLog:async event=>{
           try{
-            const tx=await rpcGuard.rpc(process.env.SOLANA_RPC_HTTP||'https://api.mainnet-beta.solana.com','getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});
+            const tx=await rpcGuard.rpc(getSolanaRpcEndpoints(),'getTransaction',[event.signature,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}],{credits:1});
             if(!(tx?.meta?.logMessages||[]).some(line=>/swap/i.test(line)))return;
             const txTime=Number(tx.blockTime)*1000;
             const eventTimeValid=Number.isFinite(txTime)&&txTime>0&&txTime<=Date.now()+60000;
