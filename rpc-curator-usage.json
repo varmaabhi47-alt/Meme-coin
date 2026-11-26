@@ -1,1 +1,11 @@
-{"month":"2026-11","credits":0,"requests":0,"httpRequests":0,"byMethod":{}}
+{
+  "month": "2026-11",
+  "credits": 2646,
+  "requests": 2646,
+  "httpRequests": 741,
+  "byMethod": {
+    "getSignaturesForAddress": 27,
+    "getTransaction": 2619
+  },
+  "rateLimitResponses": 276
+}

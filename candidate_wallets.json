@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "candidates": [
+    {
+      "address": "6Gfahmxqn1VfJE1rZ3JsDZdztUKMc4F8bjR9pfu1XhWZ",
+      "label": "recent-passing-research-mint",
+      "source": "research-mint:3Tg6YnNrfPdFfsY14MaNsDMWLseAyrUDS3myJtbaJN6f",
+      "firstSeen": 1795675252,
+      "queued_at": "2026-11-26T06:41:52.664Z",
+      "status": "PENDING"
+    },
+    {
+      "address": "BhCdYex4TUD6TKPVyJ11xQC97ggviUEHqmrKK34uEZih",
+      "label": "recent-passing-research-mint",
+      "source": "research-mint:3Tg6YnNrfPdFfsY14MaNsDMWLseAyrUDS3myJtbaJN6f",
+      "firstSeen": 1795675252,
+      "queued_at": "2026-11-26T06:41:52.664Z",
+      "status": "PENDING"
+    }
+  ]
+}
