@@ -59,3 +59,10 @@ test('RPC audit cache reuses a successful mint audit for 15 minutes',async()=>{
  const second=await guard.rpc('https://rpc.invalid','getTokenSupply',['M'],{credits:1,cacheKey:'audit:M'});
  assert.deepEqual(first,{observed:true});assert.deepEqual(second,{observed:true});assert.equal(calls,1);assert.equal(guard.telemetry().estimatedCredits,1);
 });
+
+test('WebSocket listener retains up to 50 configured tracked wallets',()=>{
+ const wallets=Array.from({length:60},(_,i)=>'wallet-'+i);
+ const listener=new SolanaEventListener({wsUrl:'wss://rpc.example',wallets,WebSocketImpl:class{}});
+ assert.equal(listener.wallets.length,50);
+ assert.equal(listener.wallets[49],'wallet-49');
+});
