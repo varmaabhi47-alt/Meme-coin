@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "source_snapshot": "2026-11-26",
+  "source": "user-uploaded Solana 30-day realized-PnL leaderboard (reported metrics; not RPC-verified)",
+  "selection_policy": "Shortlist emphasizes non-HFT reported profiles and minimum reported sample; excludes leaderboard entries labeled HFT Scalper / Grinder and extreme win-rate outliers for now. This is screening only, not wallet approval.",
+  "candidates": [
+    {"address":"78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2","label":"Sheep","rank":17,"reported_pnl_30d_sol":380.71,"reported_win_rate_pct":64.8,"reported_trades_30d":532,"reported_profile":"High-Precision Specialist","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB","label":"Johnson","rank":14,"reported_pnl_30d_sol":412.6,"reported_win_rate_pct":58.1,"reported_trades_30d":596,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"2T5NgDDidkvhJQg8AHDi74uCFwgp25pYFMRZXBaCUNBH","label":"Idontpaytaxes","rank":19,"reported_pnl_30d_sol":334.91,"reported_win_rate_pct":57.2,"reported_trades_30d":327,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk","label":"Jijo","rank":26,"reported_pnl_30d_sol":240.12,"reported_win_rate_pct":53.0,"reported_trades_30d":372,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep","label":"Killua","rank":15,"reported_pnl_30d_sol":399.7,"reported_win_rate_pct":52.0,"reported_trades_30d":173,"reported_profile":"High-Conviction Swing","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"6S8GezkxYUfZy9JPtYnanbcZTMB87Wjt1qx3c6ELajKC","label":"Nyhrox","rank":36,"reported_pnl_30d_sol":145.64,"reported_win_rate_pct":50.8,"reported_trades_30d":262,"reported_profile":"High-Conviction Swing","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"G6fUXjMKPJzCY1rveAE6Qm7wy5U3vZgKDJmN1VPAdiZC","label":"clukz","rank":23,"reported_pnl_30d_sol":291.83,"reported_win_rate_pct":48.9,"reported_trades_30d":446,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"J23qr98GjGJJqKq9CBEnyRhHbmkaVxtTJNNxKu597wsA","label":"gr3g","rank":5,"reported_pnl_30d_sol":1169.31,"reported_win_rate_pct":46.8,"reported_trades_30d":154,"reported_profile":"High-Conviction Swing","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9PjwzMh","label":"xander","rank":1,"reported_pnl_30d_sol":2060.96,"reported_win_rate_pct":40.6,"reported_trades_30d":207,"reported_profile":"High-Conviction Swing","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"8oQoMhfBQnRspn7QtNAq2aPThRE4q94kLSTwaaFQvRgs","label":"big bags bobby","rank":38,"reported_pnl_30d_sol":136.91,"reported_win_rate_pct":47.7,"reported_trades_30d":174,"reported_profile":"High-Conviction Swing","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"BtMBMPkoNbnLF9Xn552guQq528KKXcsNBNNBre3oaQtr","label":"Letterbomb","rank":48,"reported_pnl_30d_sol":94.31,"reported_win_rate_pct":47.3,"reported_trades_30d":626,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"},
+    {"address":"CEUA7zVoDRqRYoeHTP58UHU6TR8yvtVbeLrX1dppqoXJ","label":"Tom","rank":45,"reported_pnl_30d_sol":106.36,"reported_win_rate_pct":45.0,"reported_trades_30d":427,"reported_profile":"Mid-Freq Rotator","source":"user-uploaded-leaderboard","status":"PENDING_LIVE_VETTING"}
+  ],
+  "note": "Reported leaderboard fields are screening metadata only. The curator must derive all activation metrics from live Helius RPC, reconstruct swaps, reject incomplete histories and funding-linked wallets, and apply its strict gates. No candidate is ACTIVE based on this file."
+}
