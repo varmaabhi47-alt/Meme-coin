@@ -6,7 +6,7 @@ test('smart-money confluence requires two distinct wallets; one wallet still emi
  const signal=createSmartMoneyConfluence();
  assert.equal(signal('A','M',1000).signal,'TRACKED_WALLET_BUY');
  assert.equal(signal('A','M',2000).signal,'TRACKED_WALLET_BUY');
- const confirmed=signal('B','M',3000);assert.equal(confirmed.signal,'SMART_MONEY_CONFLUENCE');assert.deepEqual(confirmed.walletAddresses,['A','B']);
+ const confirmed=signal('B','M',3000);assert.equal(confirmed.signal,'TRACKED_WALLET_BUY');assert.equal(confirmed.wallets,2);assert.deepEqual(confirmed.walletAddresses,['A','B']);
  assert.equal(signal('C','N',4000).signal,'TRACKED_WALLET_BUY');
 });
 test('edge gate stays false below 100 closed trades',()=>{
