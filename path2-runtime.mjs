@@ -106,7 +106,7 @@ export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
 /** A WebSocket source is event-only: no polling or reconnect spin. */
 export class SolanaEventListener {
   constructor({ wsUrl = process.env.SOLANA_RPC_WSS, wallets = [], pumpProgramId = process.env.PUMPFUN_PROGRAM_ID || '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', raydiumProgramIds = (process.env.RAYDIUM_PROGRAM_IDS || '').split(',').map(x => x.trim()).filter(Boolean), onMint = () => {}, onWalletLog = () => {}, onError = console.error, WebSocketImpl = globalThis.WebSocket } = {}) {
-    this.wsUrl = wsUrl; this.wallets = wallets.slice(0, 30); this.pumpProgramId = pumpProgramId;
+    this.wsUrl = wsUrl; this.wallets = wallets.slice(0, 50); this.pumpProgramId = pumpProgramId;
     this.raydiumProgramIds = raydiumProgramIds; this.onMint = onMint; this.onWalletLog = onWalletLog; this.onError = onError; this.WebSocketImpl = WebSocketImpl;
     this.socket = null; this.nextId = 1; this.subscriptions = new Map(); this.closed = false;
   }
