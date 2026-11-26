@@ -123,6 +123,14 @@ async function saveState() { return stateLock(async()=>{portfolio.lastHourlySumm
 async function appendCsv(t) {
   let exists=true;try{await fs.access(CONFIG.CSV_FILE);}catch{exists=false;}
   if(!exists)await fs.writeFile(CONFIG.CSV_FILE,'EntryTime,ExitTime,Symbol,Chain,BuyPrice,TokensBought,CostUSD,EntryLiqUSD,SellPrice,ExitValueUSD,FeesImpactUSD,NetPnLUSD,NetPnLPct,ExitReason,TokensSold,RemainingTokens,RealizedPartialPnLUSD,QuoteFallback,EntryQuoteFallback,EntrySlippagePct,ExitSlippagePct\n','utf8');
+  else {
+    const existing=await fs.readFile(CONFIG.CSV_FILE,'utf8'),rows=existing.split('\n');
+    if(rows[0]&&!rows[0].includes('EntrySlippagePct')) {
+      rows[0]+=',EntrySlippagePct,ExitSlippagePct';
+      for(let row=1;row<rows.length;row++)if(rows[row])rows[row]+=',,';
+      await fs.writeFile(CONFIG.CSV_FILE,rows.join('\n'),'utf8');
+    }
+  }
   const line=[new Date(t.entryTime).toISOString(),new Date(t.exitTime).toISOString(),t.symbol,t.chainId,t.buyPrice,t.tokensBought,t.costUsd.toFixed(2),Math.round(t.entryLiquidityUsd),t.sellPrice,t.exitValueUsd.toFixed(2),t.feesImpactUsd.toFixed(2),t.netPnlUsd.toFixed(2),t.netPnlPct.toFixed(2),t.exitReason,t.tokensSold??t.tokensBought,t.remainingTokens??0,t.realizedPartialPnlUsd??0,!!t.quoteFallback,!!t.entryQuoteFallback,t.entrySlippagePct??'',t.exitSlippagePct??''].join(',')+'\n';
   await fs.appendFile(CONFIG.CSV_FILE,line,'utf8');
 }
@@ -564,7 +572,7 @@ async function monitorPositions({ discover = false } = {}) {
       const remCost=Number(pos.remainingCostUsd??pos.costUsd),soldCost=remCost*.5,realized=ex.netProceeds-soldCost;
       portfolio.cashUsd+=ex.netProceeds;pos.remainingTokens=qty-sellQty;pos.remainingCostUsd=remCost-soldCost;pos.realizedPartialPnlUsd=Number(pos.realizedPartialPnlUsd||0)+realized;pos.partialExitProceedsUsd=Number(pos.partialExitProceedsUsd||0)+ex.netProceeds;pos.partialFeesImpactUsd=Number(pos.partialFeesImpactUsd||0)+ex.feeUsd+ex.impactUsd;pos.partialTpDone=true;pos.breakevenStopNetPct=2;
       pos.partialExits=[...(pos.partialExits||[]),{at:Date.now(),tokensSold:sellQty,proceedsUsd:ex.netProceeds,allocatedCostUsd:soldCost,realizedPnlUsd:realized,quoteSource:ex.quoteSource,quoteFallback:!!ex.quoteFallback,reason:'PARTIAL_TP_40'}];
-      await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,entryQuoteFallback:!!pos.entryQuoteFallback,exitReason:'PARTIAL_TP_40'});
+      await appendCsv({symbol:pos.symbol,chainId:pos.chainId,entryTime:pos.entryTime,exitTime:Date.now(),buyPrice:pos.buyPrice,sellPrice:ex.effPrice,tokensBought:pos.tokens,tokensSold:sellQty,remainingTokens:pos.remainingTokens,costUsd:soldCost,entryLiquidityUsd:pos.entryLiquidityUsd,entrySlippagePct:pos.entrySlippagePct??null,exitSlippagePct:Number.isFinite(Number(ex.impactRate))?Number(ex.impactRate)*100:null,exitValueUsd:ex.netProceeds,feesImpactUsd:ex.feeUsd+ex.impactUsd,netPnlUsd:realized,netPnlPct:soldCost?realized/soldCost*100:0,realizedPartialPnlUsd:realized,quoteFallback:!!ex.quoteFallback,entryQuoteFallback:!!pos.entryQuoteFallback,exitReason:'PARTIAL_TP_40'});
       logDecision('PARTIAL_SELL',pos.symbol,pos.chainId,'50% sold at +40% net; runner stop +2% net');await sendTelegram(formatSellReceipt(pos,{price:ex.effPrice,tokensSold:sellQty,proceedsUsd:ex.netProceeds,allocatedCostUsd:soldCost,realizedPnlUsd:realized,remainingTokens:pos.remainingTokens,reason:'PARTIAL TAKE-PROFIT'}));
     }else if(risk.action==='EXIT_ALL'){
       const qty=Number(pos.remainingTokens??pos.tokens),ex=pos.emergencyNoLiquidity?{effPrice:0,impactUsd:0,feeUsd:0,netProceeds:0,quoteSource:'no-live-liquidity',quoteFallback:true}:await paperExecution.sell({position:{...pos,tokens:qty,remainingTokens:qty},price:pos.lastPrice,liquidity:currentLiquidityUsd}),remCost=Number(pos.remainingCostUsd??pos.costUsd),pnl=Number(pos.realizedPartialPnlUsd||0)+ex.netProceeds-remCost,totalCost=Number(pos.originalCostUsd??pos.costUsd);
