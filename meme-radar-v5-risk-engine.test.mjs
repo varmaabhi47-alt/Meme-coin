@@ -67,3 +67,10 @@ test('Path 2 runner trail widens to 22% above +100% peak gain',()=>{
  assert.equal(exit.action,'EXIT_ALL');
  assert.equal(exit.trailDropPct,22);
 });
+
+test('wallet-signal entries use a lower score threshold and conservative wallet-count sizing',()=>{
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:64,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:1}),0);
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:1}),12.5);
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:2}),25);
+ assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WATCH',smartMoneyConfluence:true}),0);
+});
