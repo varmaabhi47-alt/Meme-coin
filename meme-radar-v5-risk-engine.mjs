@@ -60,14 +60,19 @@ export function evaluatePositionRisk(position, options = {}) {
   return { action: 'HOLD', netPct, peakPrice: peak, dropEntryPct: dropEntry, dropCheckPct: dropCheck };
 }
 
-export function calculatePositionSize({ equityUsd, poolLiquidityUsd, score, cashUsd, tier = 'RESEARCH', smartMoneyConfluence = false }) {
+export function calculatePositionSize({ equityUsd, poolLiquidityUsd, score, cashUsd, tier = 'RESEARCH', smartMoneyConfluence = false, walletSignalCount = 0 }) {
   const equity = Number(equityUsd), liquidity = Number(poolLiquidityUsd), cash = Number(cashUsd);
   if (!(equity > 0 && liquidity > 0 && cash > 0)) return 0;
-  if (String(tier).toUpperCase() !== 'RESEARCH') return 0;
-  const numericScore = Number(score);
-  if (!Number.isFinite(numericScore) || numericScore < 80) return 0;
+  const walletMode = String(tier).toUpperCase() === 'WALLET_SIGNAL';
+  if (String(tier).toUpperCase() !== 'RESEARCH' && !walletMode) return 0;
+  const numericScore = Number(score), minimumScore = walletMode ? 65 : 80;
+  if (!Number.isFinite(numericScore) || numericScore < minimumScore) return 0;
   const scoreMultiplier = smartMoneyConfluence ? 1 : 0.75;
-  const base = equity * 0.05 * scoreMultiplier;
+  // Wallet-only entries are deliberately smaller than legacy RESEARCH entries:
+  // 0.25x for one verified wallet, 0.5x for >=2 wallets in distinct evidence.
+  const count = Math.max(0, Math.floor(Number(walletSignalCount) || 0));
+  const walletMultiplier = walletMode ? (count >= 2 ? 0.5 : 0.25) : 1;
+  const base = equity * 0.05 * scoreMultiplier * walletMultiplier;
   return Math.max(0, Math.min(base, liquidity * 0.003, cash));
 }
 
