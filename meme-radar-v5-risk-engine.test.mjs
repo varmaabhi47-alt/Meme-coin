@@ -8,7 +8,7 @@ test('V6 hard stop-loss triggers at -15% net PnL',()=>{
  assert.equal(evaluatePositionRisk(p,{markPrice:0.86,liquidityUsd:100000,netPnlPctOverride:-14}).action,'HOLD');
 });
 test('V6 trailing take-profit arms at +25% and exits on 10% drawdown from peak',()=>{
- const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1.3,maxNetPnlPct:30};
+ const p={buyPrice:1,tokens:10,remainingTokens:5,costUsd:10,remainingCostUsd:5,partialTpDone:true,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1.3,maxNetPnlPct:30};
  const hold=evaluatePositionRisk(p,{markPrice:1.18,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:18});
  assert.equal(hold.action,'HOLD');
  const exit=evaluatePositionRisk(p,{markPrice:1.169,liquidityUsd:100000,now:Date.now(),netPnlPctOverride:16.9});
@@ -76,4 +76,17 @@ test('wallet-signal entries use a lower score threshold and conservative wallet-
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:1}),12.5);
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WALLET_SIGNAL',smartMoneyConfluence:true,walletSignalCount:2}),25);
  assert.equal(calculatePositionSize({equityUsd:1000,poolLiquidityUsd:100000,score:70,cashUsd:100,tier:'WATCH',smartMoneyConfluence:true}),0);
+});
+
+test('V6 staged take-profit triggers one partial exit at +40% net only before it is done',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:10,costUsd:10,remainingCostUsd:10,partialTpDone:false,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1};
+ const tp=evaluatePositionRisk(p,{markPrice:1.4,liquidityUsd:100000,netPnlPctOverride:40});
+ assert.equal(tp.action,'PARTIAL_EXIT');assert.equal(tp.reason,'PARTIAL_TP_40');assert.equal(tp.sellFraction,0.5);
+ const alreadyDone=evaluatePositionRisk({...p,partialTpDone:true,remainingTokens:5,remainingCostUsd:5},{markPrice:1.4,liquidityUsd:100000,netPnlPctOverride:40});
+ assert.notEqual(alreadyDone.action,'PARTIAL_EXIT');
+});
+test('V6 runner exits at +2% net protection after partial take-profit',()=>{
+ const p={buyPrice:1,tokens:10,remainingTokens:5,costUsd:10,remainingCostUsd:5,partialTpDone:true,entryLiquidityUsd:100000,lastLiquidityUsd:100000,entryTime:Date.now(),peakPrice:1.4};
+ const exit=evaluatePositionRisk(p,{markPrice:1.02,liquidityUsd:100000,netPnlPctOverride:2});
+ assert.equal(exit.action,'EXIT_ALL');assert.equal(exit.reason,'RUNNER_PROTECT');
 });
