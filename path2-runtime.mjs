@@ -92,11 +92,14 @@ export function createSmartMoneyConfluence({ windowMs = 15 * 60_000 } = {}) {
   const buys = new Map();
   return (wallet, mint, at = now()) => {
     if (!wallet || !mint) return null;
-    for(const [oldMint,oldRows] of buys){const fresh=oldRows.filter(x=>at-x.at<=windowMs);if(fresh.length)buys.set(oldMint,fresh);else buys.delete(oldMint);}
-    const key = String(mint); const rows = (buys.get(key) || []).filter(x => at - x.at <= windowMs && x.wallet !== wallet);
-    rows.push({ wallet: String(wallet), at }); buys.set(key, rows);
-    const distinct = [...new Set(rows.map(x => x.wallet))];
-    return distinct.length >= 2 ? { signal: 'SMART_MONEY_CONFLUENCE', mint: key, wallets: distinct.length, walletAddresses: distinct, windowMinutes: 15, at } : null;
+    for(const [oldMint,oldRows] of buys){const fresh=oldRows.filter(x=>at-x.at>=0&&at-x.at<=windowMs);if(fresh.length)buys.set(oldMint,fresh);else buys.delete(oldMint);}
+    const key = String(mint);
+    const rows = (buys.get(key) || []).filter(x => at-x.at>=0&&at-x.at<=windowMs);
+    const prior = rows.find(x => x.wallet === String(wallet));
+    if(!prior)rows.push({wallet:String(wallet),at});else if(at>prior.at)prior.at=at;
+    buys.set(key,rows);
+    const distinct=[...new Set(rows.map(x=>x.wallet))];
+    return distinct.length?{signal:'TRACKED_WALLET_BUY',mint:key,wallets:distinct.length,walletAddresses:distinct,windowMinutes:15,at}:null;
   };
 }
 
