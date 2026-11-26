@@ -68,11 +68,30 @@ jobs:
         run: echo "Candidate discovery ran. Helius webhook/D1 sync skipped because webhook credentials are not all configured."
       - name: Persist wallet queue and RPC credit ledger
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add smart_wallets.json rpc-curator-usage.json
           if [ -f candidate_wallets.json ]; then git add candidate_wallets.json; fi
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: persist live smart-wallet discovery [skip ci]"
-            git push
+          if git diff --cached --quiet; then
+            echo "No curator state changes to persist."
+            exit 0
           fi
+          git commit -m "chore: persist live smart-wallet discovery [skip ci]"
+
+          # Never force-push over main. Rebase the generated commit onto the
+          # newest main and retry a normal push if main advances during the push.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main || {
+              echo "::error::Curator output conflicts with newer main changes; stopped without force-pushing."
+              exit 1
+            }
+            if git push origin HEAD:main; then
+              echo "Curator state persisted to main."
+              exit 0
+            fi
+            echo "Push raced with a newer main commit; will fetch/rebase and retry (attempt $attempt/3)."
+          done
+          echo "::error::Could not push curator state after 3 safe retries."
+          exit 1
