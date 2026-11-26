@@ -1,1 +1,1 @@
-Trigger live smart-wallet discovery after the curator persistence push was made race-safe. This file contains no wallet data or credentials.
+Trigger live smart-wallet discovery with adaptive Helius throttling and persisted candidate vetting outcomes. Contains no wallet data or credentials.
