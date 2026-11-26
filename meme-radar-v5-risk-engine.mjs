@@ -4,6 +4,9 @@
  */
 export const EXIT_RULES = Object.freeze({
   stopLossNetPct: -15,
+  partialTakeProfitNetPct: 40,
+  partialTakeProfitFraction: 0.5,
+  runnerProtectNetPct: 2,
   trailingActivateNetPct: 25,
   trailingDropPct: 10,
   timeStopMinutes: 45,
@@ -22,7 +25,7 @@ export function netReturnPct(position, markPrice, friction = 0) {
   return ((qty * mark * (1 - Math.max(0, Number(friction))) - cost) / cost) * 100;
 }
 
-/** Return actions for one position mark. Mutates position state only after caller confirms simulated fill. */
+/** Return actions for one position mark. Returns an action; caller mutates position state only after execution/fill handling. */
 export function evaluatePositionRisk(position, options = {}) {
   const { markPrice, liquidityUsd, now = Date.now(), frictionRate = 0, netPnlPctOverride } = options;
   const price = Number(markPrice), liq = Number(liquidityUsd);
@@ -42,8 +45,24 @@ export function evaluatePositionRisk(position, options = {}) {
   if (netPct !== null && netPct <= EXIT_RULES.stopLossNetPct) {
     return { action: 'EXIT_ALL', reason: 'STOP_LOSS', netPct, peakPrice: peak };
   }
+
+  // Once the first 50% profit-taking fill is recorded, protect the remaining
+  // runner at +2% net. This check uses the caller's live exit-quote net PnL
+  // override when supplied, so fees/impact are included by the execution layer.
+  if (position.partialTpDone && netPct !== null && netPct <= EXIT_RULES.runnerProtectNetPct) {
+    return { action: 'EXIT_ALL', reason: 'RUNNER_PROTECT', netPct, peakPrice: peak, protectNetPct: EXIT_RULES.runnerProtectNetPct };
+  }
+
+  // Trigger the existing bot's PARTIAL_EXIT handler exactly once at +40% net.
+  // The caller records partialTpDone only after it confirms the sell fill.
+  if (!position.partialTpDone && netPct !== null && netPct >= EXIT_RULES.partialTakeProfitNetPct) {
+    return { action: 'PARTIAL_EXIT', reason: 'PARTIAL_TP_40', netPct, peakPrice: peak, sellFraction: EXIT_RULES.partialTakeProfitFraction };
+  }
+
   const peakGainPct = entry > 0 ? (peak / entry - 1) * 100 : 0;
-  if (peakGainPct >= EXIT_RULES.trailingActivateNetPct && dropPeak >= EXIT_RULES.trailingDropPct) {
+  // The trailing exit is a runner management rule; do not full-exit before
+  // the first staged take-profit has been completed.
+  if (position.partialTpDone && peakGainPct >= EXIT_RULES.trailingActivateNetPct && dropPeak >= EXIT_RULES.trailingDropPct) {
     return { action: 'EXIT_ALL', reason: 'TRAILING_TP', netPct, peakPrice: peak, trailDropPct: EXIT_RULES.trailingDropPct };
   }
   const holdMs = now - Number(position.entryTime || now);
