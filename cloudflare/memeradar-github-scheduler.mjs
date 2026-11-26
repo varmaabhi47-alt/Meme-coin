@@ -3,7 +3,7 @@
  *
  * Cloudflare Cron Trigger dispatches the repository's paper-bot workflow.
  * Required secret: GITHUB_TOKEN (fine-grained PAT, repository Actions: write).
- * Cron: */5 * * * *
+ * Cron: every five minutes (UTC).
  */
 const OWNER = "varmaabhi47-alt";
 const REPO = "Meme-coin";
