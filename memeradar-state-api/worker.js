@@ -60,9 +60,11 @@ export default {
       const raw=await request.text();let events;try{events=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,request);}if(!Array.isArray(events))events=[events];
       const active=await env.DB.prepare("SELECT address,median_buy_sol,correlation_group FROM curated_smart_wallets WHERE status='ACTIVE'").all();
       const meta=new Map((active.results||[]).map(w=>[w.address,w]));if(!meta.size)return json({error:"curated_active_wallets_empty"},409,request);
-      let stored=0,underSize=0,ambiguousNative=0;
+      let stored=0,underSize=0,ambiguousNative=0,invalidTimestamp=0;
       for(const event of events){
         if(String(event?.type||"").toUpperCase()!=="SWAP"||event?.transactionError)continue;
+        const eventSeconds=Number(event?.timestamp),eventSlot=Number(event?.slot);
+        if(!Number.isFinite(eventSeconds)||eventSeconds<=0||eventSeconds*1000>Date.now()+60000||!Number.isSafeInteger(eventSlot)||eventSlot<=0){invalidTimestamp++;continue;}
         const transfers=Array.isArray(event.tokenTransfers)?event.tokenTransfers:[],walletBuyMap=new Map();
         for(const t of transfers){const wallet=String(t.toUserAccount||""),mint=String(t.mint||""),amount=Number(t.tokenAmount||0);if(!meta.has(wallet)||!mint||!Number.isFinite(amount)||amount<=0)continue;const key=wallet+"|"+mint,prior=walletBuyMap.get(key);if(prior)prior.tokenAmount=Number(prior.tokenAmount||0)+amount;else walletBuyMap.set(key,{...t,toUserAccount:wallet,mint,tokenAmount:amount});}
         const walletBuy=[...walletBuyMap.values()];
@@ -76,15 +78,15 @@ export default {
           if(outgoing.length!==1){ambiguousNative++;continue;}
           const solAmount=Number(outgoing[0].amount)/1e9;
           if(!Number.isFinite(solAmount)||solAmount<Number(w.median_buy_sol)*0.5){underSize++;continue;}
-          const group=String(w.correlation_group||wallet),timestamp=Number(event.timestamp||Date.now()/1000)*1000;
+          const group=String(w.correlation_group||wallet),timestamp=eventSeconds*1000;
           const write=await env.DB.prepare("INSERT OR IGNORE INTO smart_wallet_buys(wallet,mint,signature,slot,occurred_at,sol_amount,correlation_group) VALUES(?,?,?,?,?,?,?)")
-            .bind(wallet,mint,signature,Number(event.slot||0),Math.floor(timestamp),solAmount,group).run();stored+=Number(write.meta?.changes||0);
+            .bind(wallet,mint,signature,eventSlot,Math.floor(timestamp),solAmount,group).run();stored+=Number(write.meta?.changes||0);
         }
       }
       await env.DB.prepare("DELETE FROM smart_wallet_buys WHERE occurred_at<?").bind(Date.now()-30*24*60*60*1000).run();
       const recent=await env.DB.prepare("SELECT DISTINCT mint FROM smart_wallet_buys WHERE occurred_at>=?").bind(Date.now()-15*60*1000).all();
       const confluence=[];for(const row of recent.results||[]){const result=await getConfluence(env,row.mint);if(result.signal)confluence.push({signal:result.signal,...result});}
-      return json({ok:true,stored,underSize,ambiguousNative,confluence,gateRequired:true},200,request);
+      return json({ok:true,stored,underSize,ambiguousNative,invalidTimestamp,confluence,gateRequired:true},200,request);
     }
     if(url.pathname==="/smart-wallet-buys"&&request.method==="GET"){
       if(!authorized(request,env))return json({error:"unauthorized"},401,request);
