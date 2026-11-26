@@ -88,7 +88,7 @@ export class RpcCreditGuard {
     const all=[]; for(let i=0;i<requests.length;i+=this.maxRps){const chunk=requests.slice(i,i+this.maxRps);all.push(...await this.batchChunk(endpoint,chunk,{credits:chunk.length}));} return all.sort((a,b)=>Number(a?.slot||0)-Number(b?.slot||0));
   }
   async batchChunk(endpoint, requests, { credits = requests.length } = {}) {
-    if (!endpoint) throw new Error('SOLANA_RPC_HTTP is not configured');
+    if (!endpoint) throw new Error('SOLANA_RPC_URL is not configured');
     const projected=this.usage.estimatedCredits+Number(credits||0);
     if(projected*30/Math.max(1,new Date().getDate())>this.monthlyLimit){this.usage.budgetThrottled=true;await this.save();throw Object.assign(new Error('RPC_CREDIT_THROTTLE: projected monthly usage exceeds budget'),{code:'RPC_BUDGET'});}
     let attempt=0;
