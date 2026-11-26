@@ -646,9 +646,10 @@ async function monitorPositions({ discover = false } = {}) {
       }
       intelligence.smartMoneyConfluence=freshTrackedBuy;
       const legacyDiscoveryQualified=intelligence.tier==='RESEARCH'&&sec.pass&&hardGate.pass&&bundleGate.pass;
-      // Wallet-originated selection is a separate, smaller-risk route. It may
-      // accept WATCH/soft-REJECT scores, but never hard rejects or failed gates.
-      const walletSignalQualified=freshTrackedBuy&&sec.pass&&intelligence.hardReject!==true&&intelligence.score>=65&&hardGate.pass&&bundleGate.pass;
+      // Wallet-originated selection is a separate, smaller-risk route.
+      // It may qualify a clean WATCH-tier score, but never a REJECT/WEAK score,
+      // any score reason, failed security/creator/bundle gate, or stale signal.
+      const walletSignalQualified=freshTrackedBuy&&sec.pass&&['WATCH','RESEARCH'].includes(intelligence.tier)&&intelligence.reasons.length===0&&intelligence.score>=65&&hardGate.pass&&bundleGate.pass;
       const walletOnlyQualified=walletSignalQualified&&!legacyDiscoveryQualified;
       await recordResearch(p,sec,intelligence,walletOnlyQualified?'WALLET_SIGNAL':intelligence.tier,holders);
       if(!legacyDiscoveryQualified&&!walletSignalQualified){
