@@ -246,6 +246,78 @@
         "fundingLinkReasons": []
       },
       "last_vetted_at": "2026-11-27T15:11:52.098Z"
+    },
+    {
+      "address": "CgziwHNteU5SPvQT3HSr2CsCUXg8qa4xDpbDkDZ4Hvgk",
+      "label": "recent-passing-research-mint",
+      "source": "research-mint:3Tg6YnNrfPdFfsY14MaNsDMWLseAyrUDS3myJtbaJN6f",
+      "firstSeen": 1795875059,
+      "queued_at": "2026-11-28T14:12:27.871Z",
+      "status": "REJECTED",
+      "last_vetting": {
+        "pass": false,
+        "reasons": [
+          "median-buy-under-0.25-sol",
+          "win-rate-under-45pct",
+          "profit-factor-under-1.8",
+          "non-positive-realized-pnl"
+        ],
+        "metrics": {
+          "closedTrades": 72,
+          "profitableTokens": 6,
+          "realizedWinRate30d": 18.055555555555554,
+          "realizedWinRate7d": 18.055555555555554,
+          "profitFactor30d": 0.17142341100500996,
+          "medianHoldMins": 249.80833333333334,
+          "medianBuySol": 0,
+          "largestTokenPnlShare": 0.3845058281472641,
+          "realizedPnlSol": -0.3199795289656908,
+          "realizedPnl7dSol": -0.3199795289656908,
+          "confidenceScore": 23,
+          "swaps30d": 168,
+          "swaps7d": 168
+        },
+        "fundingLinkReasons": []
+      },
+      "last_vetted_at": "2026-11-28T14:13:26.013Z"
+    },
+    {
+      "address": "CtPQQFSBVab4rzooTFVs7nTBKF4a2S4tpzYnFZwjf2tq",
+      "label": "recent-passing-research-mint",
+      "source": "research-mint:3Tg6YnNrfPdFfsY14MaNsDMWLseAyrUDS3myJtbaJN6f",
+      "firstSeen": 1795875045,
+      "queued_at": "2026-11-28T14:12:27.871Z",
+      "status": "REJECTED",
+      "last_vetting": {
+        "pass": false,
+        "reasons": [
+          "less-than-5-net-profitable-tokens",
+          "single-token-pnl-concentration",
+          "median-hold-under-10m",
+          "less-than-10-closed-trades",
+          "median-buy-under-0.25-sol",
+          "win-rate-under-45pct",
+          "profit-factor-under-1.8",
+          "non-positive-realized-pnl"
+        ],
+        "metrics": {
+          "closedTrades": 0,
+          "profitableTokens": 0,
+          "realizedWinRate30d": null,
+          "realizedWinRate7d": null,
+          "profitFactor30d": null,
+          "medianHoldMins": null,
+          "medianBuySol": null,
+          "largestTokenPnlShare": 1,
+          "realizedPnlSol": 0,
+          "realizedPnl7dSol": 0,
+          "confidenceScore": 8,
+          "swaps30d": 14,
+          "swaps7d": 11
+        },
+        "fundingLinkReasons": []
+      },
+      "last_vetted_at": "2026-11-28T14:18:38.552Z"
     }
   ]
 }
